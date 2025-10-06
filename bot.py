@@ -6,17 +6,15 @@ from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
-import os
 
+# Initialize Flask app first
+app = Flask(__name__)
+
+# Get BOT_TOKEN after Flask app is created
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
 if not BOT_TOKEN:
     print("❌ BOT_TOKEN environment variable is not set!")
     print("Please set it in Railway dashboard → Variables")
-    # Don't start the bot if token is missing
-    # But still start Flask for the web app
-
-# Initialize Flask app
-app = Flask(__name__)
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 # Your existing command functions
 async def start_command(update: Update, context: CallbackContext):
@@ -269,15 +267,21 @@ if __name__ == '__main__':
     # Railway uses PORT environment variable
     port = int(os.environ.get('PORT', 8080))
     
-    # Only start the bot if token is available (but don't actually start it)
+    # Check if bot token exists
     if BOT_TOKEN:
-        print("✅ Bot token found (bot will start when token is properly configured)")
+        print("✅ Bot token found")
+        # Don't start the bot in thread - it causes issues
+        print("⚠️  Bot disabled in web environment")
     else:
-        print("⚠️  Telegram bot not started - missing BOT_TOKEN")
+        print("⚠️  Bot token not set")
     
-    # Start Flask app - THIS IS WHAT RAILWAY NEEDS
-    print(f"🌐 Starting Flask server on port {port}...")
+    # Start Flask app with Waitress production server
+    print(f"🌐 Starting production server on port {port}...")
     
-    # Use this for production
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=port)
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        # Use Waitress in production (Railway)
+        from waitress import serve
+        serve(app, host='0.0.0.0', port=port)
+    else:
+        # Use Flask dev server locally
+        app.run(host='0.0.0.0', port=port, debug=False)
