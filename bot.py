@@ -236,6 +236,10 @@ def health_check():
 def test_api():
     return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
 
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "service": "finnbot", "timestamp": "2024-01-01T00:00:00Z"})
+
 # ========== TELEGRAM BOT SETUP ==========
 
 async def setup_bot():
@@ -268,7 +272,8 @@ def start_bot():
 import os
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
+    # Railway uses PORT environment variable
+    port = int(os.environ.get('PORT', 8080))
     
     # Only start the bot if token is available
     if BOT_TOKEN:
@@ -280,6 +285,6 @@ if __name__ == '__main__':
     else:
         print("⚠️  Telegram bot not started - missing BOT_TOKEN")
     
-    # Start Flask app (this is what Railway needs)
+    # Start Flask app
     print(f"🌐 Starting Flask server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
