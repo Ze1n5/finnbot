@@ -14,7 +14,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 # Your existing command functions
 async def start_command(update: Update, context: CallbackContext):
     # This will be your Railway URL - we'll get it after deployment
-    web_app_url = "https://YOUR-APP.railway.app/mini-app"
+    web_app_url = "finnbot-production.up.railway.app"
     
     keyboard = [
         [InlineKeyboardButton("📊 Open Financial Dashboard", web_app=WebAppInfo(url=web_app_url))]
