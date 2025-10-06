@@ -1,344 +1,268 @@
 import os
 import json
-import re
 import asyncio
+import threading
 from datetime import datetime
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from dotenv import load_dotenv
+from flask import Flask, jsonify, request, send_from_directory
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
 
-# Load environment variables
-load_dotenv()
+# Initialize Flask app
+app = Flask(__name__)
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
-# Configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATA_DIR = "."
-
-# File paths
-CATEGORIES_FILE = os.path.join(DATA_DIR, "categories.json")
-PATTERNS_FILE = os.path.join(DATA_DIR, "learned_patterns.json")
-TRANSACTIONS_FILE = os.path.join(DATA_DIR, "transactions.json")
-
-class FinnBot:
-    def __init__(self):
-        self.categories = self.load_categories()
-        self.learned_patterns = self.load_learned_patterns()
-        self.transactions = self.load_transactions()
-
-    def load_categories(self):
-        try:
-            if os.path.exists(CATEGORIES_FILE):
-                with open(CATEGORIES_FILE, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return {
-            "Food": ["meat", "vegetables", "fruit", "bread", "milk", "eggs", "cheese", "lunch", "dinner", "groceries"],
-            "Sweets": ["chocolate", "candy", "cake", "cookie", "ice cream", "dessert"],
-            "Transport": ["gas", "bus", "train", "taxi", "fuel", "parking", "uber"],
-            "Shopping": ["clothes", "electronics", "furniture", "accessories"],
-            "Bills": ["electricity", "water", "internet", "rent", "phone"],
-            "Entertainment": ["movie", "game", "concert", "streaming"],
-            "Health": ["medicine", "doctor", "pharmacy", "vitamins"],
-            "Other": []
-        }
-
-    def load_learned_patterns(self):
-        try:
-            if os.path.exists(PATTERNS_FILE):
-                with open(PATTERNS_FILE, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return {}
-
-    def load_transactions(self):
-        try:
-            if os.path.exists(TRANSACTIONS_FILE):
-                with open(TRANSACTIONS_FILE, 'r') as f:
-                    return json.load(f)
-        except:
-            pass
-        return []
-
-    def save_categories(self):
-        try:
-            with open(CATEGORIES_FILE, 'w') as f:
-                json.dump(self.categories, f, indent=2)
-        except:
-            pass
-
-    def save_learned_patterns(self):
-        try:
-            with open(PATTERNS_FILE, 'w') as f:
-                json.dump(self.learned_patterns, f, indent=2)
-        except:
-            pass
-
-    def save_transactions(self):
-        try:
-            with open(TRANSACTIONS_FILE, 'w') as f:
-                json.dump(self.transactions, f, indent=2)
-        except:
-            pass
-
-    def extract_amount_from_text(self, text):
-        # Find amounts like $10.50, 10.50, 10,50
-        amounts = re.findall(r'[\$€£]?\s*(\d+[.,]\d{2})|\b(\d+[.,]\d{2})\b', text)
-        if amounts:
-            flat_amounts = [amt for group in amounts for amt in group if amt]
-            if flat_amounts:
-                amounts_float = []
-                for amt in flat_amounts:
-                    try:
-                        clean_amt = amt.replace(',', '.')
-                        amounts_float.append(float(clean_amt))
-                    except ValueError:
-                        continue
-                if amounts_float:
-                    return max(amounts_float)
-        
-        # Try simple numbers
-        try:
-            numbers = re.findall(r'\b\d+\b', text)
-            if numbers:
-                return float(numbers[0])
-        except:
-            pass
-            
-        return None
-
-    def guess_category(self, text):
-        text_lower = text.lower()
-        
-        # Check learned patterns first
-        for pattern, category in self.learned_patterns.items():
-            if pattern.lower() in text_lower:
-                return category
-        
-        # Check category keywords
-        for category, keywords in self.categories.items():
-            if category == "Other":
-                continue
-            for keyword in keywords:
-                if keyword.lower() in text_lower:
-                    return category
-        
-        return "Other"
-
-    def learn_pattern(self, text, correct_category):
-        # Extract words and learn them
-        words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
-        for word in words:
-            self.learned_patterns[word] = correct_category
-        self.save_learned_patterns()
-
-    def add_transaction(self, amount, category, description):
-        transaction = {
-            "id": len(self.transactions) + 1,
-            "amount": amount,
-            "category": category,
-            "description": description[:100],
-            "date": datetime.now().isoformat()
-        }
-        self.transactions.append(transaction)
-        self.save_transactions()
-
-    def get_category_buttons(self):
-        keyboard = []
-        categories = list(self.categories.keys())
-        
-        # Create 2 buttons per row
-        for i in range(0, len(categories), 2):
-            row = []
-            row.append(InlineKeyboardButton(categories[i], callback_data=f"cat_{categories[i]}"))
-            if i + 1 < len(categories):
-                row.append(InlineKeyboardButton(categories[i + 1], callback_data=f"cat_{categories[i + 1]}"))
-            keyboard.append(row)
-        
-        return InlineKeyboardMarkup(keyboard)
-
-# Initialize the bot
-finn_bot = FinnBot()
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = """
-💸 *Hey! I'm Finn, and I'll help you manage your cashflow* 💸
-
-Here's how I can help you:
-
-💬 *Track expenses* - Send me receipts or type "15.50 lunch"
-🏷️ *Auto-categorize* - I'll learn your spending patterns  
-📊 *See insights* - Get spending summaries and trends
-🎯 *Stay on budget* - I'll help you manage your cashflow
-
-*Quick start:* Just send me an expense like "15.50 lunch" and I'll handle the rest!
-
-I learn from your corrections and get smarter over time! 🧠
-    """
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+# Your existing command functions
+async def start_command(update: Update, context: CallbackContext):
+    # This will be your Railway URL - we'll get it after deployment
+    web_app_url = "https://YOUR-APP.railway.app/mini-app"
     
-
-async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    keyboard = [
+        [InlineKeyboardButton("📊 Open Financial Dashboard", web_app=WebAppInfo(url=web_app_url))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Skip command messages
-    if text.startswith('/'):
+    await update.message.reply_text(
+        "Welcome to FinnBot! Your personal finance assistant. 📈\n\n"
+        "Use /addcategory to create spending categories\n"
+        "Use /summary to see your financial overview\n"
+        "Or tap below to open your dashboard:",
+        reply_markup=reply_markup
+    )
+
+async def help_command(update: Update, context: CallbackContext):
+    help_text = """
+🤖 **FinnBot Commands:**
+
+/start - Start the bot and see dashboard
+/help - Show this help message
+/summary - Get financial summary
+/categories - View spending categories
+/addcategory - Add new spending category
+
+**How to use:**
+1. First, use /addcategory to create spending categories
+2. Then just send messages like:
+   - "Lunch 150₴" 
+   - "Salary 5000₴"
+   - "Groceries 300₴ Food"
+3. Use /summary to see your finances
+"""
+    await update.message.reply_text(help_text)
+
+async def summary_command(update: Update, context: CallbackContext):
+    try:
+        with open('incomes.json', 'r') as f:
+            incomes = json.load(f)
+    except:
+        incomes = []
+    
+    try:
+        with open('transactions.json', 'r') as f:
+            transactions = json.load(f)
+    except:
+        transactions = []
+    
+    total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
+    total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
+    balance = total_income + total_expenses
+    
+    summary_text = f"""
+💼 **Financial Summary**
+
+💰 Total Income: {total_income}₴
+💸 Total Expenses: {abs(total_expenses)}₴
+🏦 Current Balance: {balance}₴
+📊 Total Transactions: {len(transactions)}
+"""
+    await update.message.reply_text(summary_text)
+
+async def categories_command(update: Update, context: CallbackContext):
+    try:
+        with open('user_categories.json', 'r') as f:
+            categories = json.load(f)
+    except:
+        categories = []
+    
+    if not categories:
+        await update.message.reply_text("No categories yet. Use /addcategory to create some!")
+        return
+    
+    categories_text = "📁 **Your Categories:**\n" + "\n".join([f"• {cat}" for cat in categories])
+    await update.message.reply_text(categories_text)
+
+async def add_category_command(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Usage: /addcategory <category_name>")
+        return
+    
+    category = ' '.join(context.args)
+    
+    try:
+        with open('user_categories.json', 'r') as f:
+            categories = json.load(f)
+    except:
+        categories = []
+    
+    if category not in categories:
+        categories.append(category)
+        with open('user_categories.json', 'w') as f:
+            json.dump(categories, f)
+        await update.message.reply_text(f"✅ Category '{category}' added!")
+    else:
+        await update.message.reply_text(f"ℹ️ Category '{category}' already exists!")
+
+async def handle_text_message(update: Update, context: CallbackContext):
+    user_message = update.message.text
+    
+    parts = user_message.split()
+    if len(parts) < 2:
+        await update.message.reply_text("Please send in format: <amount> <description>")
         return
     
     try:
-        # Extract amount from text
-        amount = finn_bot.extract_amount_from_text(text)
-        if not amount:
-            await update.message.reply_text("❌ Please include an amount in your message (e.g., '15.50 lunch' or just '15.50')")
-            return
+        amount = float(parts[0])
+        description = ' '.join(parts[1:])
         
-        # Guess category
-        category = finn_bot.guess_category(text)
-        
-        # Store pending transaction
-        context.user_data['pending_transaction'] = {
+        transaction = {
             'amount': amount,
-            'description': text
+            'description': description,
+            'timestamp': datetime.now().isoformat()
         }
         
-        # Create response
-        response = f"""
-💰 Amount: ${amount:.2f}
-🏷️ Category: {category}
-📝 Description: {text}
-
-{'🤔 I\'m not sure about this category.' if category == 'Other' else ''} Is this correct?
-        """
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = []
         
-        # Show category buttons
-        keyboard = finn_bot.get_category_buttons()
-        await update.message.reply_text(response, reply_markup=keyboard)
+        transactions.append(transaction)
+        
+        with open('transactions.json', 'w') as f:
+            json.dump(transactions, f)
+        
+        await update.message.reply_text(f"✅ Recorded: {description} - {amount}₴")
+        
+    except ValueError:
+        await update.message.reply_text("Please provide a valid amount number!")
+
+# ========== WEB ENDPOINTS ==========
+
+# Serve mini app main page
+@app.route('/mini-app')
+def serve_mini_app():
+    return send_from_directory('finnbot-mini-app-fixed', 'index.html')
+
+# Serve mini app static files (JS, CSS, etc.)
+@app.route('/mini-app/<path:filename>')
+def serve_mini_app_files(filename):
+    return send_from_directory('finnbot-mini-app-fixed', filename)
+
+# API Endpoint for Mini App
+@app.route('/api/financial-data')
+def api_financial_data():
+    try:
+        user_id = request.args.get('user_id')
+        print(f"📊 Fetching financial data for user: {user_id}")
+        
+        # Read your actual data files
+        try:
+            with open('incomes.json', 'r') as f:
+                incomes = json.load(f)
+        except:
+            incomes = []
+            
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = []
+        
+        # Calculate real totals from your data
+        total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
+        total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
+        total_balance = total_income + total_expenses
+        savings = max(total_balance, 0)
+        
+        # Calculate expenses by category
+        expenses_by_category = []
+        category_totals = {}
+        
+        for transaction in transactions:
+            if isinstance(transaction, dict) and transaction.get('amount', 0) < 0:
+                category = transaction.get('category', 'Other')
+                amount = abs(transaction.get('amount', 0))
+                category_totals[category] = category_totals.get(category, 0) + amount
+        
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F']
+        for i, (category, amount) in enumerate(category_totals.items()):
+            expenses_by_category.append({
+                'category': category,
+                'amount': amount,
+                'color': colors[i % len(colors)]
+            })
+        
+        recent_transactions = transactions[-10:] if transactions else []
+        
+        return jsonify({
+            'total_balance': total_balance,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'savings': savings,
+            'net_debt': min(total_balance, 0),
+            'expenses_by_category': expenses_by_category,
+            'recent_transactions': recent_transactions,
+            'transaction_count': len(transactions),
+            'income_count': len(incomes)
+        })
         
     except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        print(f"❌ Error in API: {e}")
+        return jsonify({'error': 'Failed to fetch data'}), 500
 
-async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    selected_category = query.data.replace('cat_', '')
-    user_data = context.user_data.get('pending_transaction')
-    
-    if not user_data:
-        await query.edit_message_text("❌ Transaction data missing. Please start over.")
-        return
-    
-    amount = user_data['amount']
-    description = user_data['description']
-    
-    # Learn if category was corrected
-    original_category = finn_bot.guess_category(description)
-    if original_category != selected_category:
-        finn_bot.learn_pattern(description, selected_category)
-    
-    # Save transaction
-    finn_bot.add_transaction(amount, selected_category, description)
-    
-    # Clear pending transaction
-    context.user_data.pop('pending_transaction', None)
-    
-    response = f"""
-✅ Transaction saved!
-💰 Amount: ${amount:.2f}
-🏷️ Category: {selected_category}
-📝 Description: {description[:80]}...
+# Health check endpoint
+@app.route('/')
+def health_check():
+    return jsonify({'status': 'OK', 'message': 'FinnBot is running!'})
 
-I've learned from this for next time! 📚
-    """
-    
-    await query.edit_message_text(response)
+@app.route('/api/test')
+def test_api():
+    return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
 
-async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not finn_bot.transactions:
-        await update.message.reply_text("No transactions recorded yet.")
-        return
-    
-    # Calculate summary
-    summary = {}
-    total = 0
-    
-    for transaction in finn_bot.transactions:
-        category = transaction['category']
-        amount = transaction['amount']
-        
-        if category not in summary:
-            summary[category] = 0
-        summary[category] += amount
-        total += amount
-    
-    # Create summary text
-    summary_text = "📊 *Spending Summary*\n\n"
-    for category, amount in sorted(summary.items(), key=lambda x: x[1], reverse=True):
-        percentage = (amount / total) * 100 if total > 0 else 0
-        summary_text += f"• {category}: ${amount:.2f} ({percentage:.1f}%)\n"
-    
-    summary_text += f"\n💰 Total: ${total:.2f}"
-    summary_text += f"\n📈 Transactions: {len(finn_bot.transactions)}"
-    
-    await update.message.reply_text(summary_text, parse_mode='Markdown')
+# ========== TELEGRAM BOT SETUP ==========
 
-async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    categories_text = "🏷️ *Available Categories*\n\n"
-    for category, keywords in finn_bot.categories.items():
-        categories_text += f"• {category}"
-        if keywords:
-            categories_text += f" - {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
-        categories_text += "\n"
+async def setup_bot():
+    application = Application.builder().token(BOT_TOKEN).build()
     
-    categories_text += f"\n💡 Learned patterns: {len(finn_bot.learned_patterns)}"
+    # Add handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("summary", summary_command))
+    application.add_handler(CommandHandler("categories", categories_command))
+    application.add_handler(CommandHandler("addcategory", add_category_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
-    await update.message.reply_text(categories_text, parse_mode='Markdown')
+    print("🤖 Bot setup complete - ready to start polling...")
+    return application
 
-async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /addcategory <CategoryName>")
-        return
-    
-    new_category = ' '.join(context.args)
-    
-    if new_category in finn_bot.categories:
-        await update.message.reply_text(f"Category '{new_category}' already exists!")
-        return
-    
-    finn_bot.categories[new_category] = []
-    finn_bot.save_categories()
-    
-    await update.message.reply_text(f"✅ New category '{new_category}' added!")
-
-def main():
-    if not BOT_TOKEN:
-        print("❌ Error: BOT_TOKEN not found in .env file")
-        print("Please add your bot token to the .env file:")
-        print("BOT_TOKEN=your_bot_token_here")
-        return
-    
+def start_bot():
     try:
-        # Create application
-        application = Application.builder().token(BOT_TOKEN).build()
+        print("🚀 Starting Telegram bot...")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        # Add handlers
-        application.add_handler(CommandHandler("start", start_command))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("summary", summary_command))
-        application.add_handler(CommandHandler("categories", categories_command))
-        application.add_handler(CommandHandler("addcategory", add_category_command))
-        
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-        application.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^cat_"))
-        
-        print("🤖 FinnBot is running...")
+        application = loop.run_until_complete(setup_bot())
         application.run_polling()
-        
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
-        print("This might be a Python 3.13 compatibility issue.")
-        print("Try using Python 3.11 or 3.12 instead.")
+
+# ========== MAIN EXECUTION ==========
 
 if __name__ == '__main__':
-    main()
+    # Start bot in a separate thread
+    bot_thread = threading.Thread(target=start_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # Start Flask app
+    print("🌐 Starting Flask server on port 8000...")
+    app.run(host='0.0.0.0', port=8000, debug=False)

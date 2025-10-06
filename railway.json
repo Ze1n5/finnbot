@@ -1,10 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "RAILPACK",
-    "buildCommand": "rm -rf /app/venv39 && python -m venv /app/venv39 && /app/venv39/bin/pip install -r requirements.txt"
+    "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "/app/venv39/bin/python bot.py"
+    "startCommand": "python bot.py",
+    "restartPolicyType": "ON_FAILURE"
   }
 }
