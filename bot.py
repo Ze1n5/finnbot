@@ -236,9 +236,6 @@ def health_check():
 def test_api():
     return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
 
-@app.route('/health')
-def health_check():
-    return jsonify({"status": "healthy", "service": "finnbot", "timestamp": "2024-01-01T00:00:00Z"})
 
 # ========== TELEGRAM BOT SETUP ==========
 
