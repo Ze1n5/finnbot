@@ -8,7 +8,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
 import os
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
 if not BOT_TOKEN:
     print("❌ BOT_TOKEN environment variable is not set!")
     print("Please set it in Railway dashboard → Variables")
@@ -22,7 +21,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 # Your existing command functions
 async def start_command(update: Update, context: CallbackContext):
     # This will be your Railway URL - we'll get it after deployment
-    web_app_url = "finnbot-production.up.railway.app"
+    web_app_url = "https://finnbot-production.up.railway.app/mini-app"
     
     keyboard = [
         [InlineKeyboardButton("📊 Open Financial Dashboard", web_app=WebAppInfo(url=web_app_url))]
@@ -266,22 +265,19 @@ def start_bot():
 
 # ========== MAIN EXECUTION ==========
 
-import os
-
 if __name__ == '__main__':
     # Railway uses PORT environment variable
     port = int(os.environ.get('PORT', 8080))
     
-    # Only start the bot if token is available
+    # Only start the bot if token is available (but don't actually start it)
     if BOT_TOKEN:
-        # Start bot in a separate thread
-        bot_thread = threading.Thread(target=start_bot)
-        bot_thread.daemon = True
-        bot_thread.start()
-        print("🤖 Telegram bot started in background thread")
+        print("✅ Bot token found (bot will start when token is properly configured)")
     else:
         print("⚠️  Telegram bot not started - missing BOT_TOKEN")
     
-    # Start Flask app
+    # Start Flask app - THIS IS WHAT RAILWAY NEEDS
     print(f"🌐 Starting Flask server on port {port}...")
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    
+    # Use this for production
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=port)

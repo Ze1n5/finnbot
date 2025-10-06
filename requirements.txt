@@ -3,3 +3,5 @@ python-dotenv==1.0.0
 flask
 requests
 python-dotenv
+python-telegram-bot==20.7
+waitress
