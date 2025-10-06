@@ -6,6 +6,14 @@ from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
+import os
+
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+if not BOT_TOKEN:
+    print("❌ BOT_TOKEN environment variable is not set!")
+    print("Please set it in Railway dashboard → Variables")
+    # Don't start the bot if token is missing
+    # But still start Flask for the web app
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -257,12 +265,21 @@ def start_bot():
 
 # ========== MAIN EXECUTION ==========
 
+import os
+
 if __name__ == '__main__':
-    # Start bot in a separate thread
-    bot_thread = threading.Thread(target=start_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
+    port = int(os.environ.get('PORT', 8000))
     
-    # Start Flask app
-    print("🌐 Starting Flask server on port 8000...")
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    # Only start the bot if token is available
+    if BOT_TOKEN:
+        # Start bot in a separate thread
+        bot_thread = threading.Thread(target=start_bot)
+        bot_thread.daemon = True
+        bot_thread.start()
+        print("🤖 Telegram bot started in background thread")
+    else:
+        print("⚠️  Telegram bot not started - missing BOT_TOKEN")
+    
+    # Start Flask app (this is what Railway needs)
+    print(f"🌐 Starting Flask server on port {port}...")
+    app.run(host='0.0.0.0', port=port, debug=False)
