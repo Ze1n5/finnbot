@@ -9,25 +9,48 @@ def home():
     return jsonify({"status": "OK", "message": "FinnBot API is running!"})
 
 @app.route('/api/financial-data')
-def financial_data():
+def api_financial_data():
     try:
-        # Read your data files
+        # Read incomes
         try:
             with open('incomes.json', 'r') as f:
                 incomes = json.load(f)
         except:
             incomes = []
             
+        # Read transactions  
         try:
             with open('transactions.json', 'r') as f:
                 transactions = json.load(f)
         except:
             transactions = []
         
-        # Calculate totals
-        total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
-        total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-        total_balance = total_income + total_expenses
+        # Calculate totals - handle both formats
+        total_income = 0
+        total_expenses = 0
+        
+        # Process incomes (could be array or object)
+        if isinstance(incomes, list):
+            for item in incomes:
+                if isinstance(item, dict):
+                    if item.get('type') == 'income':
+                        total_income += item.get('amount', 0)
+                    elif 'amount' in item and item.get('type') != 'expense':
+                        total_income += item.get('amount', 0)
+        elif isinstance(incomes, dict):
+            # Handle old format: {"user_id": amount}
+            total_income = sum(incomes.values())
+        
+        # Process transactions
+        for transaction in transactions:
+            if isinstance(transaction, dict):
+                amount = transaction.get('amount', 0)
+                if amount < 0 or transaction.get('type') == 'expense':
+                    total_expenses += abs(amount)
+                elif amount > 0 and transaction.get('type') != 'expense':
+                    total_income += amount
+        
+        total_balance = total_income - total_expenses
         
         return jsonify({
             'total_balance': total_balance,
@@ -35,10 +58,33 @@ def financial_data():
             'total_expenses': total_expenses,
             'savings': max(total_balance, 0),
             'transaction_count': len(transactions),
-            'income_count': len(incomes)
+            'income_count': len(incomes) if isinstance(incomes, list) else 1
         })
+        
     except Exception as e:
+        print(f"❌ Error in API: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/debug-data')
+def debug_data():
+    try:
+        with open('incomes.json', 'r') as f:
+            incomes = json.load(f)
+    except:
+        incomes = []
+        
+    try:
+        with open('transactions.json', 'r') as f:
+            transactions = json.load(f)
+    except:
+        transactions = []
+    
+    return jsonify({
+        'incomes': incomes,
+        'transactions': transactions,
+        'income_count': len(incomes),
+        'transaction_count': len(transactions)
+    })
 
 @app.route('/mini-app')
 def mini_app():
