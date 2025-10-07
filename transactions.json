@@ -1,4 +1,20 @@
 {
-  "659184170": []
-
+  "659184170": [
+    {
+      "id": 1,
+      "amount": 100.0,
+      "category": "Salary",
+      "description": "+100",
+      "type": "income",
+      "date": "2025-10-07T01:24:49.815927"
+    },
+    {
+      "id": 2,
+      "amount": 15.0,
+      "category": "Savings",
+      "description": "++15",
+      "type": "savings",
+      "date": "2025-10-07T01:24:59.872571"
+    }
+  ]
 }
