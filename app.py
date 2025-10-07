@@ -14,8 +14,7 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 # Your existing command functions
 async def start_command(update: Update, context: CallbackContext):
     # This will be your Railway URL - we'll get it after deployment
-    web_app_url = "finnbot-production.up.railway.app"
-    
+    web_app_url = "https://finnbot-production.up.railway.app/mini-app"    
     keyboard = [
         [InlineKeyboardButton("📊 Open Financial Dashboard", web_app=WebAppInfo(url=web_app_url))]
     ]
@@ -148,85 +147,95 @@ async def handle_text_message(update: Update, context: CallbackContext):
 # ========== WEB ENDPOINTS ==========
 
 # Serve mini app main page
+# Simple mini app
 @app.route('/mini-app')
 def serve_mini_app():
-    return send_from_directory('finnbot-mini-app-fixed', 'index.html')
-
-# Serve mini app static files (JS, CSS, etc.)
-@app.route('/mini-app/<path:filename>')
-def serve_mini_app_files(filename):
-    return send_from_directory('finnbot-mini-app-fixed', filename)
-
-# API Endpoint for Mini App
-@app.route('/api/financial-data')
-def api_financial_data():
-    try:
-        user_id = request.args.get('user_id')
-        print(f"📊 Fetching financial data for user: {user_id}")
-        
-        # Read your actual data files
-        try:
-            with open('incomes.json', 'r') as f:
-                incomes = json.load(f)
-        except:
-            incomes = []
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Financial Dashboard</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: #1a1a1a; 
+                color: white; 
+            }
+            .container { max-width: 400px; margin: 0 auto; }
+            .card { 
+                background: #2d2d2d; 
+                padding: 20px; 
+                margin: 10px 0; 
+                border-radius: 10px; 
+            }
+            .loading { color: #888; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>💰 Financial Dashboard</h2>
             
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = []
+            <div class="card">
+                <h3>Total Balance</h3>
+                <h1 id="balance" class="loading">Loading...</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Income vs Expenses</h3>
+                <p>Income: <span id="income" class="loading">0</span>₴</p>
+                <p>Expenses: <span id="expenses" class="loading">0</span>₴</p>
+            </div>
+            
+            <div class="card">
+                <h3>Recent Activity</h3>
+                <p>Transactions: <span id="transactionCount" class="loading">0</span></p>
+                <p>Incomes: <span id="incomeCount" class="loading">0</span></p>
+            </div>
+        </div>
         
-        # Calculate real totals from your data
-        total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
-        total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-        total_balance = total_income + total_expenses
-        savings = max(total_balance, 0)
-        
-        # Calculate expenses by category
-        expenses_by_category = []
-        category_totals = {}
-        
-        for transaction in transactions:
-            if isinstance(transaction, dict) and transaction.get('amount', 0) < 0:
-                category = transaction.get('category', 'Other')
-                amount = abs(transaction.get('amount', 0))
-                category_totals[category] = category_totals.get(category, 0) + amount
-        
-        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F']
-        for i, (category, amount) in enumerate(category_totals.items()):
-            expenses_by_category.append({
-                'category': category,
-                'amount': amount,
-                'color': colors[i % len(colors)]
-            })
-        
-        recent_transactions = transactions[-10:] if transactions else []
-        
-        return jsonify({
-            'total_balance': total_balance,
-            'total_income': total_income,
-            'total_expenses': total_expenses,
-            'savings': savings,
-            'net_debt': min(total_balance, 0),
-            'expenses_by_category': expenses_by_category,
-            'recent_transactions': recent_transactions,
-            'transaction_count': len(transactions),
-            'income_count': len(incomes)
-        })
-        
-    except Exception as e:
-        print(f"❌ Error in API: {e}")
-        return jsonify({'error': 'Failed to fetch data'}), 500
-
-# Health check endpoint
-@app.route('/')
-def health_check():
-    return jsonify({'status': 'OK', 'message': 'FinnBot is running!'})
-
-@app.route('/api/test')
-def test_api():
-    return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
+        <script>
+            // Load real data from API
+            async function loadData() {
+                try {
+                    console.log('Loading financial data...');
+                    const response = await fetch('/api/financial-data');
+                    const data = await response.json();
+                    
+                    console.log('Real data received:', data);
+                    
+                    // Update UI with real data
+                    document.getElementById('balance').textContent = data.total_balance + '₴';
+                    document.getElementById('balance').className = '';
+                    
+                    document.getElementById('income').textContent = data.total_income;
+                    document.getElementById('income').className = '';
+                    
+                    document.getElementById('expenses').textContent = Math.abs(data.total_expenses);
+                    document.getElementById('expenses').className = '';
+                    
+                    document.getElementById('transactionCount').textContent = data.transaction_count;
+                    document.getElementById('transactionCount').className = '';
+                    
+                    document.getElementById('incomeCount').textContent = data.income_count;
+                    document.getElementById('incomeCount').className = '';
+                    
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    document.getElementById('balance').textContent = 'Error loading data';
+                }
+            }
+            
+            // Load data when page opens
+            document.addEventListener('DOMContentLoaded', loadData);
+        </script>
+    </body>
+    </html>
+    """
 
 # ========== TELEGRAM BOT SETUP ==========
 
@@ -258,11 +267,16 @@ def start_bot():
 # ========== MAIN EXECUTION ==========
 
 if __name__ == '__main__':
-    # Start bot in a separate thread
-    bot_thread = threading.Thread(target=start_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
+    # Railway uses PORT environment variable
+    port = int(os.environ.get('PORT', 8080))
     
-    # Start Flask app
-    print("🌐 Starting Flask server on port 8000...")
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    # Don't start the bot in web environment - it causes issues
+    if BOT_TOKEN:
+        print("✅ Bot token found (bot disabled in web environment)")
+    else:
+        print("⚠️  Bot token not set")
+    
+    # Start Flask app with production server
+    print(f"🌐 Starting production server on port {port}...")
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=port)
