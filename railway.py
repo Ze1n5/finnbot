@@ -127,6 +127,75 @@ def mini_app():
     </html>
     """
 
+# ========== EXISTING ENDPOINTS (KEEP THESE) ==========
+
+@app.route('/api/financial-data')
+def api_financial_data():
+    # Your existing code here - KEEP THIS
+    pass
+
+@app.route('/')
+def health_check():
+    # Your existing code here - KEEP THIS  
+    pass
+
+@app.route('/mini-app')
+def serve_mini_app():
+    # Your existing code here - KEEP THIS
+    pass
+
+# ========== NEW REAL-TIME SYNC ENDPOINTS (ADD THESE) ==========
+
+@app.route('/api/add-transaction', methods=['POST'])
+def add_transaction():
+    try:
+        transaction_data = request.json
+        
+        # Read current transactions
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = []
+        
+        # Add new transaction
+        transactions.append(transaction_data)
+        
+        # Save back to file
+        with open('transactions.json', 'w') as f:
+            json.dump(transactions, f)
+        
+        return jsonify({'status': 'success', 'message': 'Transaction added'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/add-income', methods=['POST']) 
+def add_income():
+    try:
+        income_data = request.json
+        
+        # Read current incomes
+        try:
+            with open('incomes.json', 'r') as f:
+                incomes = json.load(f)
+        except:
+            incomes = {}
+        
+        # Update income
+        user_id = income_data.get('user_id')
+        amount = income_data.get('amount')
+        incomes[user_id] = amount
+        
+        # Save back to file
+        with open('incomes.json', 'w') as f:
+            json.dump(incomes, f)
+        
+        return jsonify({'status': 'success', 'message': 'Income updated'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting server on port {port}")
