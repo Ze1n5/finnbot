@@ -13,6 +13,20 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+def sync_to_railway(transaction_data):
+        """Send transaction data to Railway web app"""
+        try:
+            railway_url = "https://finnbot-production.up.railway.app"
+            response = requests.post(f"{railway_url}/api/add-transaction", 
+                                json=transaction_data,
+                                timeout=5)
+            if response.status_code == 200:
+                print("✅ Synced to Railway")
+            else:
+                print(f"⚠️ Failed to sync to Railway: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Railway sync failed: {e}")
+
 class SimpleFinnBot:
     def __init__(self):
         # Income categories (shared for all users)
@@ -55,6 +69,17 @@ class SimpleFinnBot:
             with open("incomes.json", "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
             print(f"💾 Saved incomes for {len(self.user_incomes)} users")
+            
+            # ✅ ADD THIS - SYNC INCOMES TO RAILWAY
+            for user_id, amount in self.user_incomes.items():
+                sync_to_railway({
+                    'amount': amount,
+                    'description': 'Monthly Income',
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'income',
+                    'user_id': user_id
+                })
+                
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
 
@@ -100,19 +125,22 @@ class SimpleFinnBot:
             print(f"❌ Error loading transactions: {e}")
             self.transactions = {}
 
-    def get_user_transactions(self, user_id):
-        """Get transactions for a specific user"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-        return self.transactions[user_id]
-
     def save_user_transaction(self, user_id, transaction):
         """Add transaction for a specific user and save to file"""
         if user_id not in self.transactions:
             self.transactions[user_id] = []
+            
+            self.transactions[user_id].append(transaction)
+            self.save_transactions()
         
-        self.transactions[user_id].append(transaction)
-        self.save_transactions()
+            # ✅ ADD THIS - SYNC TO RAILWAY
+            sync_to_railway({
+                'amount': transaction['amount'],
+                'description': transaction['description'],
+                'category': transaction['category'],
+                'timestamp': transaction['date'],
+                'type': transaction['type']
+    })
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -448,7 +476,8 @@ def main():
             # Replace with your actual deployed URL or use local tunnel for testing
             # For testing, you can use: https://your-app-url.vercel.app
             # Or use local tunnel: npx localtunnel --port 5001
-            mini_app_url = "https://starlit-kashata-1aa1ec.netlify.app/"
+            mini_app_url = "https://finnbot-production.up.railway.app/mini-app"
+
             
             response = requests.post(f"{BASE_URL}/setChatMenuButton", json={
                 "menu_button": {
@@ -658,8 +687,14 @@ This will help me provide better financial recommendations!"""
                                     if income <= 0:
                                         bot.send_message(chat_id, "❌ Please enter a positive amount for your income.")
                                     else:
-                                        # Save the income
-                                        bot.user_incomes[str(chat_id)] = income
+                                        # Save the income - FIXED LINE
+                                        # Convert from dictionary access to list append
+                                        bot.user_incomes.append({
+                                            'user_id': str(chat_id),
+                                            'amount': income,
+                                            'type': 'income',
+                                            'timestamp': datetime.now().isoformat()
+                                        })
                                         bot.save_incomes()
                                         bot.pending_income.remove(chat_id)
                                         
@@ -679,10 +714,10 @@ Track your first transaction:
 
 Use the menu below or just start tracking!"""
                                         bot.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-                                        
+            
                                 except ValueError:
                                     bot.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                            
+                                                        
                             elif text == "🗑️ Delete Transaction":
                                 user_transactions = bot.get_user_transactions(chat_id)
                                 if not user_transactions:
@@ -957,6 +992,16 @@ Use the menu below or just start tracking!"""
                                         user_transactions.append(transaction)
                                         bot.save_transactions()
                                         print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
+                                        
+                                        # ✅ ADD THIS RIGHT HERE - SYNC TO RAILWAY
+                                        sync_to_railway({ # type: ignore
+                                            'amount': amount,
+                                            'description': text,
+                                            'category': category,
+                                            'timestamp': datetime.now().isoformat(),
+                                            'type': transaction_type
+                                        })
+                                        
                                     except Exception as e:
                                         print(f"❌ Error saving transaction: {e}")
                                         import traceback
