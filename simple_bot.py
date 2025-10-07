@@ -51,6 +51,12 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
 
+    def get_user_transactions(self, user_id):
+        """Get transactions for a specific user"""
+        if user_id not in self.transactions:
+            self.transactions[user_id] = []
+        return self.transactions[user_id]
+
     def load_incomes(self):
         """Load user incomes from JSON file"""
         try:
@@ -86,6 +92,12 @@ class SimpleFinnBot:
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
+    
+    def get_user_transactions(self, user_id):
+        """Get transactions for a specific user"""
+        if user_id not in self.transactions:
+            self.transactions[user_id] = []
+        return self.transactions[user_id]
 
     def save_transactions(self):
         """Save transactions to JSON file (separated by user)"""
