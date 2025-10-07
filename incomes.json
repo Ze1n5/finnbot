@@ -1,1 +1,14 @@
-[{"amount": 30000.0, "description": "Salary", "timestamp": "2024-01-07T12:00:00", "type": "income"}]
+[
+  {
+    "amount": 30000.0,
+    "description": "Salary",
+    "timestamp": "2024-01-07T12:00:00",
+    "type": "income"
+  },
+  {
+    "user_id": "659184170",
+    "amount": 3000.0,
+    "type": "income",
+    "timestamp": "2025-10-07T23:39:00.143935"
+  }
+]

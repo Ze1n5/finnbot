@@ -1,1 +1,28 @@
-[{"amount": -150.0, "description": "Lunch", "timestamp": "2024-01-07T13:00:00", "type": "expense"}]
+{
+  "659184170": [
+    {
+      "id": 1,
+      "amount": 1000.0,
+      "category": "Other",
+      "description": "1000",
+      "type": "expense",
+      "date": "2025-10-07T18:08:08.155208"
+    },
+    {
+      "id": 2,
+      "amount": 3000000.0,
+      "category": "Salary",
+      "description": "+3000000",
+      "type": "income",
+      "date": "2025-10-07T18:08:31.978408"
+    },
+    {
+      "id": 3,
+      "amount": 30000.0,
+      "category": "Salary",
+      "description": "+30000",
+      "type": "income",
+      "date": "2025-10-07T23:39:12.433216"
+    }
+  ]
+}
