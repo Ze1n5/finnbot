@@ -153,14 +153,95 @@ async def handle_text_message(update: Update, context: CallbackContext):
 # ========== WEB ENDPOINTS ==========
 
 # Serve mini app main page
+# Simple mini app
 @app.route('/mini-app')
 def serve_mini_app():
-    return send_from_directory('finnbot-mini-app-fixed', 'index.html')
-
-# Serve mini app static files (JS, CSS, etc.)
-@app.route('/mini-app/<path:filename>')
-def serve_mini_app_files(filename):
-    return send_from_directory('finnbot-mini-app-fixed', filename)
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Financial Dashboard</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: #1a1a1a; 
+                color: white; 
+            }
+            .container { max-width: 400px; margin: 0 auto; }
+            .card { 
+                background: #2d2d2d; 
+                padding: 20px; 
+                margin: 10px 0; 
+                border-radius: 10px; 
+            }
+            .loading { color: #888; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>💰 Financial Dashboard</h2>
+            
+            <div class="card">
+                <h3>Total Balance</h3>
+                <h1 id="balance" class="loading">Loading...</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Income vs Expenses</h3>
+                <p>Income: <span id="income" class="loading">0</span>₴</p>
+                <p>Expenses: <span id="expenses" class="loading">0</span>₴</p>
+            </div>
+            
+            <div class="card">
+                <h3>Recent Activity</h3>
+                <p>Transactions: <span id="transactionCount" class="loading">0</span></p>
+                <p>Incomes: <span id="incomeCount" class="loading">0</span></p>
+            </div>
+        </div>
+        
+        <script>
+            // Load real data from API
+            async function loadData() {
+                try {
+                    console.log('Loading financial data...');
+                    const response = await fetch('/api/financial-data');
+                    const data = await response.json();
+                    
+                    console.log('Real data received:', data);
+                    
+                    // Update UI with real data
+                    document.getElementById('balance').textContent = data.total_balance + '₴';
+                    document.getElementById('balance').className = '';
+                    
+                    document.getElementById('income').textContent = data.total_income;
+                    document.getElementById('income').className = '';
+                    
+                    document.getElementById('expenses').textContent = Math.abs(data.total_expenses);
+                    document.getElementById('expenses').className = '';
+                    
+                    document.getElementById('transactionCount').textContent = data.transaction_count;
+                    document.getElementById('transactionCount').className = '';
+                    
+                    document.getElementById('incomeCount').textContent = data.income_count;
+                    document.getElementById('incomeCount').className = '';
+                    
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    document.getElementById('balance').textContent = 'Error loading data';
+                }
+            }
+            
+            // Load data when page opens
+            document.addEventListener('DOMContentLoaded', loadData);
+        </script>
+    </body>
+    </html>
+    """
 
 # API Endpoint for Mini App
 @app.route('/api/financial-data')
