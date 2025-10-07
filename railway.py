@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import json
 
 app = Flask(__name__)
@@ -127,24 +127,7 @@ def mini_app():
     </html>
     """
 
-# ========== EXISTING ENDPOINTS (KEEP THESE) ==========
-
-@app.route('/api/financial-data')
-def api_financial_data():
-    # Your existing code here - KEEP THIS
-    pass
-
-@app.route('/')
-def health_check():
-    # Your existing code here - KEEP THIS  
-    pass
-
-@app.route('/mini-app')
-def serve_mini_app():
-    # Your existing code here - KEEP THIS
-    pass
-
-# ========== NEW REAL-TIME SYNC ENDPOINTS (ADD THESE) ==========
+# ========== NEW REAL-TIME SYNC ENDPOINTS ==========
 
 @app.route('/api/add-transaction', methods=['POST'])
 def add_transaction():
