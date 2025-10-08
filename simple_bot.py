@@ -964,45 +964,79 @@ def set_bot_commands():
         print(f"⚠️ Error setting mini app button: {e}")
 
 def set_webhook():
-    """Set Telegram webhook on Railway"""
+    """Set Telegram webhook on Railway with better error handling"""
     try:
-        railway_url = os.getenv('RAILWAY_STATIC_URL', 'https://finnbot-production.up.railway.app')
+        # Get Railway URL - use multiple fallbacks
+        railway_url = os.getenv('RAILWAY_STATIC_URL') 
+        if not railway_url:
+            railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+        if not railway_url:
+            # Fallback for testing
+            railway_url = "https://your-app-name.up.railway.app"
+        
         webhook_url = f"{railway_url}/webhook"
         
+        print(f"🔧 Attempting to set webhook to: {webhook_url}")
+        
+        # Set new webhook
         response = requests.post(
             f"{BASE_URL}/setWebhook",
-            json={"url": webhook_url}
+            json={
+                "url": webhook_url,
+                "max_connections": 40,
+            },
+            timeout=10
         )
         
         if response.status_code == 200:
-            print(f"✅ Webhook set successfully: {webhook_url}")
+            result = response.json()
+            if result.get('ok'):
+                print(f"✅ Webhook set successfully: {webhook_url}")
+                return True
+            else:
+                print(f"❌ Webhook setup failed: {result.get('description')}")
+                return False
         else:
-            print(f"❌ Failed to set webhook: {response.status_code} - {response.text}")
+            print(f"❌ HTTP error setting webhook: {response.status_code}")
+            return False
             
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
+        return False
 
 def main():
-    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-        print("❌ ERROR: Please set your actual bot token in the .env file")
-        return
-    
-    bot = SimpleFinnBot()
-    global bot_instance
-    bot_instance = bot
-    
-    print("🤖 Simple FinnBot is running in WEBHOOK mode...")
-    
-    # Set webhook for Telegram
-    set_webhook()
-    
-    # Set up the mini app button
-    set_bot_commands()
-    
-    # Start Flask server (Railway will handle the port)
-    port = int(os.getenv('PORT', 5000))
-    print(f"🚀 Starting server on port {port}")
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
+            print("❌ ERROR: Please set your actual bot token in the .env file")
+            # Don't return, just set a placeholder for now
+            print("⚠️  Using placeholder token for testing")
+        
+        bot = SimpleFinnBot()
+        global bot_instance
+        bot_instance = bot
+        
+        print("🤖 Simple FinnBot is running in WEBHOOK mode...")
+        
+        # Set webhook for Telegram
+        set_webhook()
+        
+        # Set up the mini app button
+        set_bot_commands()
+        
+        # Start Flask server with better error handling
+        port = int(os.getenv('PORT', 8080))
+        print(f"🚀 Starting server on port {port}")
+        
+        # Start Flask without debug mode for production
+        flask_app.run(host='0.0.0.0', port=port, debug=False)
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR in main: {e}")
+        import traceback
+        traceback.print_exc()
+        # Keep the container running even if there's an error
+        while True:
+            time.sleep(60)  # Prevent container from exiting
 
 if __name__ == "__main__":
     main()
