@@ -5,11 +5,27 @@ import requests
 import time
 from dotenv import load_dotenv
 from datetime import datetime
+from flask import Flask, jsonify
+import threading
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+def sync_to_railway(transaction_data):
+        """Send transaction data to Railway web app"""
+        try:
+            railway_url = "https://finnbot-production.up.railway.app"
+            response = requests.post(f"{railway_url}/api/add-transaction", 
+                                json=transaction_data,
+                                timeout=5)
+            if response.status_code == 200:
+                print("✅ Synced to Railway")
+            else:
+                print(f"⚠️ Failed to sync to Railway: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Railway sync failed: {e}")
 
 class SimpleFinnBot:
     def __init__(self):
@@ -35,6 +51,12 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
 
+    def get_user_transactions(self, user_id):
+        """Get transactions for a specific user"""
+        if user_id not in self.transactions:
+            self.transactions[user_id] = []
+        return self.transactions[user_id]
+
     def load_incomes(self):
         """Load user incomes from JSON file"""
         try:
@@ -53,12 +75,29 @@ class SimpleFinnBot:
             with open("incomes.json", "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
             print(f"💾 Saved incomes for {len(self.user_incomes)} users")
+            
+            # ✅ ADD THIS - SYNC INCOMES TO RAILWAY
+            for user_id, amount in self.user_incomes.items():
+                sync_to_railway({
+                    'amount': amount,
+                    'description': 'Monthly Income',
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'income',
+                    'user_id': user_id
+                })
+                
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
 
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
+    
+    def get_user_transactions(self, user_id):
+        """Get transactions for a specific user"""
+        if user_id not in self.transactions:
+            self.transactions[user_id] = []
+        return self.transactions[user_id]
 
     def save_transactions(self):
         """Save transactions to JSON file (separated by user)"""
@@ -98,19 +137,22 @@ class SimpleFinnBot:
             print(f"❌ Error loading transactions: {e}")
             self.transactions = {}
 
-    def get_user_transactions(self, user_id):
-        """Get transactions for a specific user"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-        return self.transactions[user_id]
-
     def save_user_transaction(self, user_id, transaction):
         """Add transaction for a specific user and save to file"""
         if user_id not in self.transactions:
             self.transactions[user_id] = []
+            
+            self.transactions[user_id].append(transaction)
+            self.save_transactions()
         
-        self.transactions[user_id].append(transaction)
-        self.save_transactions()
+            # ✅ ADD THIS - SYNC TO RAILWAY
+            sync_to_railway({
+                'amount': transaction['amount'],
+                'description': transaction['description'],
+                'category': transaction['category'],
+                'timestamp': transaction['date'],
+                'type': transaction['type']
+    })
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -328,6 +370,100 @@ _Wealth grows one transaction at a time_
         except Exception as e:
             print(f"Error answering callback: {e}")
 
+flask_app = Flask(__name__)
+bot_instance = None  # This will be set when the bot starts
+
+def get_category_color(category):
+    """Assign colors to categories for the mini app"""
+    color_map = {
+        'Food': '#ff6b6b',
+        'Transport': '#4dabf7', 
+        'Shopping': '#ffd43b',
+        'Bills': '#69db7c',
+        'Entertainment': '#cc5de8',
+        'Health': '#ff8787',
+        'Salary': '#00d26a',
+        'Business': '#20c997',
+        'Savings': '#4dabf7',
+        'Debt': '#ff8787',
+        'Other': '#adb5bd'
+    }
+    return color_map.get(category, '#adb5bd')
+
+@flask_app.route('/api/user-data/<user_id>')
+def get_user_data(user_id):
+    try:
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+            
+        # Get user transactions from your existing data structure
+        user_transactions = bot_instance.get_user_transactions(int(user_id))
+        
+        # Calculate statistics (similar to your Financial Summary)
+        income = 0
+        expenses = 0
+        savings_deposits = 0
+        savings_withdrawn = 0
+        debt_incurred = 0
+        debt_returned = 0
+        expense_by_category = {}
+        
+        for transaction in user_transactions:
+            if transaction['type'] == 'income':
+                income += transaction['amount']
+            elif transaction['type'] == 'savings':
+                savings_deposits += transaction['amount']
+            elif transaction['type'] == 'savings_withdraw':
+                savings_withdrawn += transaction['amount']
+            elif transaction['type'] == 'debt':
+                debt_incurred += abs(transaction['amount'])
+            elif transaction['type'] == 'debt_return':
+                debt_returned += abs(transaction['amount'])
+            elif transaction['type'] == 'expense':
+                expenses += transaction['amount']
+                category = transaction['category']
+                if category not in expense_by_category:
+                    expense_by_category[category] = 0
+                expense_by_category[category] += transaction['amount']
+        
+        net_savings = savings_deposits - savings_withdrawn
+        net_debt = debt_incurred - debt_returned
+        net_flow = income - expenses - net_savings
+        
+        # Prepare data for the mini app
+        user_data = {
+            'totalIncome': income,
+            'totalExpenses': expenses,
+            'totalSavings': net_savings,
+            'netFlow': net_flow,
+            'netDebt': net_debt,
+            'expensesByCategory': [
+                {'category': cat, 'amount': amount, 'color': get_category_color(cat)}
+                for cat, amount in expense_by_category.items()
+            ],
+            'recentTransactions': [
+                {
+                    'description': t['description'][:30],  # Limit description length
+                    'category': t['category'],
+                    'amount': t['amount'] if t['type'] in ['income', 'savings'] else -t['amount'],
+                    'type': t['type'],
+                    'date': t['date'][:10] if 'date' in t else 'Unknown'
+                }
+                for t in user_transactions[-10:]  # Last 10 transactions
+            ]
+        }
+        
+        return jsonify(user_data)
+        
+    except Exception as e:
+        print(f"❌ Error in mini app API: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def start_flask_server():
+    """Start the Flask server in a separate thread"""
+    print("🚀 Starting Mini App API server on http://localhost:5001")
+    flask_app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
+
 def main():
     if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
         print("❌ ERROR: Please set your actual bot token in the .env file")
@@ -338,6 +474,41 @@ def main():
     
     print("🤖 Simple FinnBot is running...")
     print("Send a message to your bot on Telegram!")
+
+    global bot_instance
+    bot_instance = bot
+    
+    # Start Flask server in a separate thread
+    flask_thread = threading.Thread(target=start_flask_server, daemon=True)
+    flask_thread.start()
+    
+    # Set up the mini app button in Telegram
+    def set_bot_commands():
+        try:
+            # Replace with your actual deployed URL or use local tunnel for testing
+            # For testing, you can use: https://your-app-url.vercel.app
+            # Or use local tunnel: npx localtunnel --port 5001
+            mini_app_url = "https://finnbot-production.up.railway.app/mini-app"
+
+            
+            response = requests.post(f"{BASE_URL}/setChatMenuButton", json={
+                "menu_button": {
+                    "type": "web_app",
+                    "text": "App",
+                    "web_app": {"url": mini_app_url}
+                }
+            })
+            
+            if response.status_code == 200:
+                print("✅ Mini App button set successfully!")
+            else:
+                print(f"⚠️ Failed to set mini app button: {response.status_code}")
+                
+        except Exception as e:
+            print(f"⚠️ Error setting mini app button: {e}")
+    
+    # Set the mini app button
+    set_bot_commands()
     
     while True:
         try:
@@ -528,7 +699,8 @@ This will help me provide better financial recommendations!"""
                                     if income <= 0:
                                         bot.send_message(chat_id, "❌ Please enter a positive amount for your income.")
                                     else:
-                                        # Save the income
+                                        # Save the income - FIXED LINE
+                                        # Convert from dictionary access to list append
                                         bot.user_incomes[str(chat_id)] = income
                                         bot.save_incomes()
                                         bot.pending_income.remove(chat_id)
@@ -549,10 +721,10 @@ Track your first transaction:
 
 Use the menu below or just start tracking!"""
                                         bot.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-                                        
+            
                                 except ValueError:
                                     bot.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                            
+                                                        
                             elif text == "🗑️ Delete Transaction":
                                 user_transactions = bot.get_user_transactions(chat_id)
                                 if not user_transactions:
@@ -827,6 +999,16 @@ Use the menu below or just start tracking!"""
                                         user_transactions.append(transaction)
                                         bot.save_transactions()
                                         print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
+                                        
+                                        # ✅ ADD THIS RIGHT HERE - SYNC TO RAILWAY
+                                        sync_to_railway({ # type: ignore
+                                            'amount': amount,
+                                            'description': text,
+                                            'category': category,
+                                            'timestamp': datetime.now().isoformat(),
+                                            'type': transaction_type
+                                        })
+                                        
                                     except Exception as e:
                                         print(f"❌ Error saving transaction: {e}")
                                         import traceback
