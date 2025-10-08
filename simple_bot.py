@@ -983,7 +983,7 @@ def set_webhook():
         print(f"❌ Error setting webhook: {e}")
 
 def main():
-    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
         print("❌ ERROR: Please set your actual bot token in the .env file")
         return
     
