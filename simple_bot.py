@@ -1137,74 +1137,85 @@ def serve_mini_app():
 @flask_app.route('/api/financial-data')
 def api_financial_data():
     try:
-        print("📊 Fetching financial data for mini-app...")
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
         
-        # Read transactions only - ignore incomes.json for balance calculation
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions_data = json.load(f)
-            print(f"📂 Transactions data loaded")
-        except Exception as e:
-            print(f"❌ Error reading transactions: {e}")
-            transactions_data = {}
-
-        # Start with ZERO balance - calculate everything from transactions only
+        # Use the SAME data structure as your bot - don't read from file directly!
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions from the bot instance (same data the bot uses)
+        all_transactions = bot_instance.transactions
+        print(f"📊 Transactions from bot instance: {all_transactions}")
+        
+        # Start with ZERO balance - calculate everything fresh
         balance = 0
         total_income = 0
         total_expenses = 0
         transaction_count = 0
 
-        # Process all transactions to calculate current balance
-        if isinstance(transactions_data, dict):
-            for user_id, user_transactions in transactions_data.items():
+        # Process all transactions for ALL users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
                 if isinstance(user_transactions, list):
+                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    
                     for transaction in user_transactions:
                         if isinstance(transaction, dict):
-                            amount = transaction.get('amount', 0)
+                            amount = float(transaction.get('amount', 0))
                             trans_type = transaction.get('type', 'expense')
                             
-                            if isinstance(amount, (int, float)):
-                                transaction_count += 1
-                                
-                                # Update balance based on transaction type
-                                if trans_type == 'income':
-                                    balance += amount
-                                    total_income += amount
-                                    print(f"💰 Income: +{amount} → Balance: {balance}")
-                                elif trans_type == 'expense':
-                                    balance -= amount
-                                    total_expenses += amount
-                                    print(f"🛒 Expense: -{amount} → Balance: {balance}")
-                                elif trans_type == 'savings':
-                                    balance -= amount  # Money moved to savings
-                                    print(f"🏦 Savings: -{amount} → Balance: {balance}")
-                                elif trans_type == 'debt':
-                                    balance += amount  # You receive money as debt
-                                    print(f"💳 Debt: +{amount} → Balance: {balance}")
-                                elif trans_type == 'debt_return':
-                                    balance -= amount  # You pay back debt
-                                    print(f"🔙 Debt Return: -{amount} → Balance: {balance}")
-                                elif trans_type == 'savings_withdraw':
-                                    balance += amount  # You take money from savings
-                                    print(f"📥 Savings Withdraw: +{amount} → Balance: {balance}")
+                            # LOG EVERY TRANSACTION FOR VERIFICATION
+                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            
+                            # UNAMBIGUOUS BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                                print(f"      → Income: +{amount} | Balance: {balance}")
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                                print(f"      → Expense: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings':
+                                balance -= amount
+                                print(f"      → Savings: -{amount} | Balance: {balance}")
+                            elif trans_type == 'debt':
+                                balance += amount
+                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                            elif trans_type == 'debt_return':
+                                balance -= amount
+                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount
+                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
+                            
+                            transaction_count += 1
+
+        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        print("=" * 50)
+        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Transaction Count: {transaction_count}")
+        print("=" * 50)
         
         response_data = {
-            'total_balance': balance,  # Current available cash (from transactions only)
-            'total_income': total_income,  # Only income from + transactions
-            'total_expenses': total_expenses,  # Only expenses from regular spending
+            'total_balance': balance,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
             'savings': max(balance, 0),
             'transaction_count': transaction_count,
-            'income_count': 0  # We're not using incomes.json anymore
+            'income_count': 0
         }
         
-        print(f"💰 Final: Balance={balance}, Income={total_income}, Expenses={total_expenses}")
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error in financial data API: {e}")
+        print(f"❌ CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Calculation error'}), 500
 
 @flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
 def add_transaction():
