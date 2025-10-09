@@ -1035,10 +1035,9 @@ if __name__ == "__main__":
     # Set webhook when starting
     set_webhook()
     
-    # Start Flask app (Railway will handle this)
+    # Start Flask app - Railway will handle the production server
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting webhook server on port {port}...")
     
-    # Use Waitress for production
-    from waitress import serve
-    serve(flask_app, host='0.0.0.0', port=port)
+    # Use Flask's built-in server (Railway handles production serving)
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
