@@ -923,6 +923,30 @@ def webhook():
         threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
         
         return jsonify({"status": "success"}), 200
+    
+@flask_app.route('/debug-webhook')
+def debug_webhook():
+    """Debug webhook setup"""
+    try:
+        # Get current webhook info
+        response = requests.get(f"{BASE_URL}/getWebhookInfo")
+        webhook_info = response.json()
+        
+        # Set webhook to your correct URL
+        webhook_url = "https://finnbot-production.up.railway.app/webhook"
+        set_response = requests.post(
+            f"{BASE_URL}/setWebhook",
+            json={"url": webhook_url}
+        )
+        
+        return jsonify({
+            "current_webhook": webhook_info,
+            "set_webhook_result": set_response.json(),
+            "webhook_url": webhook_url,
+            "bot_token_exists": bool(BOT_TOKEN and BOT_TOKEN != "your_bot_token_here")
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Health check route
 @flask_app.route('/', methods=['GET', 'POST'])
