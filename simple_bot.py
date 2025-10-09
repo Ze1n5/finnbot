@@ -1105,62 +1105,90 @@ def serve_mini_app():
 @flask_app.route('/api/financial-data')
 def api_financial_data():
     try:
+        print("📊 Fetching financial data for mini-app...")
+        
         # Read incomes
         try:
             with open('incomes.json', 'r') as f:
-                incomes = json.load(f)
-        except:
-            incomes = []
-            
+                incomes_data = json.load(f)
+            print(f"💰 Incomes data type: {type(incomes_data)}, data: {incomes_data}")
+        except Exception as e:
+            print(f"❌ Error reading incomes: {e}")
+            incomes_data = {}
+
         # Read transactions  
         try:
             with open('transactions.json', 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = []
-        
+                transactions_data = json.load(f)
+            print(f"📂 Transactions data type: {type(transactions_data)}, keys: {list(transactions_data.keys()) if isinstance(transactions_data, dict) else 'list'}")
+        except Exception as e:
+            print(f"❌ Error reading transactions: {e}")
+            transactions_data = {}
+
         # Calculate totals
         total_income = 0
         total_expenses = 0
-        
-        # Process incomes
-        if isinstance(incomes, list):
-            for item in incomes:
-                if isinstance(item, dict):
-                    if item.get('type') == 'income':
-                        total_income += item.get('amount', 0)
-                    elif 'amount' in item and item.get('type') != 'expense':
-                        total_income += item.get('amount', 0)
-        elif isinstance(incomes, dict):
-            # Handle old format: {"user_id": amount}
-            total_income = sum(incomes.values())
-        
-        # Process transactions
-        for transaction in transactions:
-            if isinstance(transaction, dict):
-                amount = transaction.get('amount', 0)
-                if amount < 0 or transaction.get('type') == 'expense':
-                    total_expenses += abs(amount)
-                elif amount > 0 and transaction.get('type') != 'expense':
+        all_transactions = []
+
+        # Process incomes (your data is in dict format: {"user_id": amount})
+        if isinstance(incomes_data, dict):
+            for user_id, amount in incomes_data.items():
+                if isinstance(amount, (int, float)) and amount > 0:
                     total_income += amount
-        
+                    all_transactions.append({
+                        'amount': amount,
+                        'type': 'income',
+                        'description': 'Monthly Income'
+                    })
+        elif isinstance(incomes_data, list):
+            for item in incomes_data:
+                if isinstance(item, dict):
+                    amount = item.get('amount', 0)
+                    if isinstance(amount, (int, float)) and amount > 0:
+                        total_income += amount
+
+        # Process transactions (your data is in dict format: {"user_id": [transactions]})
+        if isinstance(transactions_data, dict):
+            for user_id, user_transactions in transactions_data.items():
+                if isinstance(user_transactions, list):
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = transaction.get('amount', 0)
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            if isinstance(amount, (int, float)):
+                                if trans_type == 'income' or amount > 0:
+                                    total_income += amount
+                                elif trans_type == 'expense' or amount < 0:
+                                    total_expenses += abs(amount)
+                                
+                                all_transactions.append(transaction)
+
         total_balance = total_income - total_expenses
         
-        return jsonify({
+        response_data = {
             'total_balance': total_balance,
             'total_income': total_income,
             'total_expenses': total_expenses,
             'savings': max(total_balance, 0),
-            'transaction_count': len(transactions),
-            'income_count': len(incomes) if isinstance(incomes, list) else 1
-        })
+            'transaction_count': len(all_transactions),
+            'income_count': len(incomes_data) if isinstance(incomes_data, dict) else 0
+        }
+        
+        print(f"📈 Financial data calculated: {response_data}")
+        return jsonify(response_data)
         
     except Exception as e:
         print(f"❌ Error in financial data API: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@flask_app.route('/api/add-transaction', methods=['POST'])
+@flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
 def add_transaction():
+    if request.method == 'GET':
+        return jsonify({"status": "active", "message": "Add transaction endpoint ready"})
+    
     try:
         transaction_data = request.json
         print(f"📥 Received transaction: {transaction_data}")
@@ -1170,10 +1198,20 @@ def add_transaction():
             with open('transactions.json', 'r') as f:
                 transactions = json.load(f)
         except:
-            transactions = []
+            transactions = {}
         
-        # Add new transaction
-        transactions.append(transaction_data)
+        # Add new transaction (your data structure is {user_id: [transactions]})
+        user_id = str(transaction_data.get('user_id', 'default_user'))
+        if user_id not in transactions:
+            transactions[user_id] = []
+        
+        transactions[user_id].append({
+            'amount': transaction_data.get('amount', 0),
+            'description': transaction_data.get('description', ''),
+            'category': transaction_data.get('category', 'Other'),
+            'type': transaction_data.get('type', 'expense'),
+            'timestamp': transaction_data.get('timestamp', '')
+        })
         
         # Save back to file
         with open('transactions.json', 'w') as f:
