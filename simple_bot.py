@@ -360,6 +360,22 @@ _Wealth grows one transaction at a time_
         
         print(f"❌ Failed to send message after {max_retries} attempts")
         return None
+    
+    @flask_app.route('/webhook', methods=['POST'])
+    def webhook():
+        """Handle Telegram webhook updates"""
+        try:
+            print("📨 Webhook received")
+            data = request.get_json()
+            print(f"Data: {data}")
+            return jsonify({"status": "ok"})
+        except Exception as e:
+            print(f"Webhook error: {e}")
+            return jsonify({"status": "error"})
+
+    @flask_app.route('/')
+    def home():
+        return "🤖 FinnBot is running!"
 
     def answer_callback(self, callback_id):
         """Answer callback query to remove loading state"""
