@@ -1291,7 +1291,7 @@ def test_api():
 def set_webhook():
     """Set Telegram webhook URL"""
     try:
-        webhook_url = "https://finnbot-production.up.railway.app/"
+        webhook_url = "https://finnbot-production.up.railway.app/webhook"
         response = requests.post(
             f"{BASE_URL}/setWebhook",
             json={"url": webhook_url}
