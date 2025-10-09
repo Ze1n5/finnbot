@@ -12,6 +12,10 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# Flask App Setup - PUT THIS AT THE TOP
+flask_app = Flask(__name__)
+bot_instance = None
+
 def sync_to_railway(transaction_data):
     """Send transaction data to Railway web app"""
     try:
@@ -354,9 +358,10 @@ _Wealth grows one transaction at a time_
         except Exception as e:
             print(f"Error answering callback: {e}")
 
-# Flask App Setup
-flask_app = Flask(__name__)
-bot_instance = None
+# Flask Routes - NO DUPLICATES!
+@flask_app.route('/')
+def home():
+    return "🤖 FinnBot is running!"
 
 def get_category_color(category):
     """Assign colors to categories for the mini app"""
@@ -447,500 +452,28 @@ def get_user_data(user_id):
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Handle Telegram webhook updates"""
-    if request.method == 'POST':
-        update = request.get_json()
-        process_update(update)
-    return jsonify({'status': 'ok'})
-
-def process_update(update):
-    """Process a single update from Telegram"""
     try:
-        if "message" in update:
-            msg = update["message"]
-            chat_id = msg["chat"]["id"]
-            text = msg.get("text", "")
-            process_message(chat_id, text, msg)
+        if request.method == 'POST':
+            update = request.get_json()
+            print("📨 Received webhook request")
             
-        elif "callback_query" in update:
-            query = update["callback_query"]
-            chat_id = query["message"]["chat"]["id"]
-            message_id = query["message"]["message_id"]
-            data = query["data"]
-            process_callback(chat_id, message_id, data, query)
-            
-    except Exception as e:
-        print(f"Error processing update: {e}")
-        import traceback
-        traceback.print_exc()
-
-def process_message(chat_id, text, msg):
-    """Process incoming messages"""
-    bot = bot_instance
-    
-    # Handle delete mode first if active
-    if bot.delete_mode.get(chat_id):
-        if text.isdigit():
-            user_transactions = bot.get_user_transactions(chat_id)
-            transaction_map = bot.delete_mode[chat_id]
-            
-            if text == "0":
-                bot.delete_mode[chat_id] = False
-                bot.send_message(chat_id, "✅ Exit delete mode. Back to normal operation.", reply_markup=bot.get_main_menu())
-            else:
-                selected_number = int(text)
-                if selected_number in transaction_map:
-                    actual_index = transaction_map[selected_number]
-                    if 0 <= actual_index < len(user_transactions):
-                        deleted = user_transactions.pop(actual_index)
-                        
-                        # Get proper symbol for confirmation
-                        if deleted['type'] == 'income':
-                            symbol = "💰"
-                            amount_display = f"+{deleted['amount']:,.0f}₴"
-                        elif deleted['type'] == 'savings':
-                            symbol = "🏦" 
-                            amount_display = f"++{deleted['amount']:,.0f}₴"
-                        elif deleted['type'] == 'debt':
-                            symbol = "💳"
-                            amount_display = f"-{deleted['amount']:,.0f}₴"
-                        elif deleted['type'] == 'debt_return':
-                            symbol = "🔙"
-                            amount_display = f"+-{deleted['amount']:,.0f}₴"
-                        elif deleted['type'] == 'savings_withdraw':
-                            symbol = "📥"
-                            amount_display = f"-+{deleted['amount']:,.0f}₴"
-                        else:  # expense
-                            symbol = "🛒"
-                            amount_display = f"-{deleted['amount']:,.0f}₴"
-                        
-                        bot.send_message(chat_id, f"🗑️ {symbol} Deleted: {amount_display} - {deleted['category']}", reply_markup=bot.get_main_menu())
-                        
-                        # Update IDs for remaining transactions
-                        for i, transaction in enumerate(user_transactions):
-                            transaction['id'] = i + 1
-                        
-                        bot.save_transactions()
-                        bot.delete_mode[chat_id] = False
-                    else:
-                        bot.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=bot.get_main_menu())
+            if "message" in update:
+                msg = update["message"]
+                chat_id = msg["chat"]["id"]
+                text = msg.get("text", "")
+                
+                # Simple echo for testing
+                response_text = f"Echo: {text}"
+                
+                if bot_instance:
+                    bot_instance.send_message(chat_id, response_text)
                 else:
-                    bot.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=bot.get_main_menu())
-        else:
-            # Any non-digit text cancels delete mode
-            bot.delete_mode[chat_id] = False
-            bot.send_message(chat_id, "❌ Delete mode cancelled.", reply_markup=bot.get_main_menu())
-        return
-    
-    # NORMAL MESSAGE PROCESSING
-    if text == "/start":
-        user_name = msg["chat"].get("first_name", "there")
-        welcome_text = f"""👋 Hi {user_name}, I'm *Finn* - your AI finance companion 💰
-
-Let's start our journey building your wealth by understanding your current situation.
-
-💼 *Please send me your current average income:*
-
-Just send me the amount, for example:  
-`30000`"""
-        
-        bot.pending_income.add(chat_id)
-        bot.send_message(chat_id, welcome_text, parse_mode='Markdown')
-
-    elif text == "/income":
-        update_text = """💼 *Update Your Monthly Income*
-
-Enter your new monthly income in UAH:
-
-*Example:*
-`20000` - for 20,000₴ per month
-`35000` - for 35,000₴ per month
-
-This will help me provide better financial recommendations!"""
-        bot.pending_income.add(chat_id)
-        bot.send_message(chat_id, update_text, parse_mode='Markdown')
-    
-    elif text == "/help":
-        help_text = """💡 *Available Commands:*
-• `15.50 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `-100 debt` - Add debt
-• `++200 savings` - Add savings
-• Use menu below for more options!"""
-        bot.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-    
-    elif text == "📊 Financial Summary":
-        user_transactions = bot.get_user_transactions(chat_id)
-        if not user_transactions:
-            bot.send_message(chat_id, "No transactions recorded yet.", reply_markup=bot.get_main_menu())
-        else:
-            income = 0
-            expenses = 0
-            savings_deposits = 0
-            savings_withdrawn = 0
-            debt_incurred = 0
-            debt_returned = 0
-            expense_by_category = {}
+                    print("❌ Bot instance not initialized")
             
-            for transaction in user_transactions:
-                if transaction['type'] == 'income':
-                    income += transaction['amount']
-                elif transaction['type'] == 'savings':
-                    savings_deposits += transaction['amount']
-                elif transaction['type'] == 'debt':
-                    debt_incurred += abs(transaction['amount'])
-                elif transaction['type'] == 'debt_return':
-                    debt_returned += abs(transaction['amount'])
-                elif transaction['type'] == 'savings_withdraw':
-                    savings_withdrawn += transaction['amount']
-                else:  # Regular expenses
-                    expenses += transaction['amount']
-                    category = transaction['category']
-                    if category not in expense_by_category:
-                        expense_by_category[category] = 0
-                    expense_by_category[category] += transaction['amount']
-            
-            # CALCULATE NET AMOUNTS
-            net_savings = savings_deposits - savings_withdrawn
-            net_debt = debt_incurred - debt_returned
-            net_flow = income - expenses - net_savings
-            
-            summary_text = "📊 *Financial Summary*\n\n"
-            
-            # CASH FLOW SECTION
-            summary_text += "💸 *Cash Flow Analysis:*\n"
-            summary_text += f"   Income: {income:,.0f}₴\n"
-            summary_text += f"   Expenses: {expenses:,.0f}₴\n"
-            summary_text += f"   Savings: {net_savings:,.0f}₴\n"
-            summary_text += f"   ─────────────────\n"
-            summary_text += f"   Net Cash Flow: {net_flow:,.0f}₴\n\n"
-            
-            # SAVINGS SECTION
-            summary_text += "🏦 *Savings Account:*\n"
-            summary_text += f"   Deposited: {savings_deposits:,.0f}₴\n"
-            summary_text += f"   Net Savings: {net_savings:,.0f}₴\n\n"
-            
-            # DEBT SECTION
-            if debt_incurred > 0 or debt_returned > 0:
-                summary_text += "💳 *Debt Account:*\n"
-                summary_text += f"   Incurred: {debt_incurred:,.0f}₴\n"
-                if debt_returned > 0:
-                    summary_text += f"   Returned: {debt_returned:,.0f}₴\n"
-                summary_text += f"   Net Debt: {net_debt:,.0f}₴\n\n"
-            
-            # EXPENSES BY CATEGORY
-            if expense_by_category:
-                summary_text += "📋 *Expenses by Category:*\n"
-                for category, amount in sorted(expense_by_category.items(), key=lambda x: x[1], reverse=True):
-                    percentage = (amount / expenses) * 100 if expenses > 0 else 0
-                    summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
-            
-            bot.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-
-    elif chat_id in bot.pending_income:
-        try:
-            income = float(text)
-            if income <= 0:
-                bot.send_message(chat_id, "❌ Please enter a positive amount for your income.")
-            else:
-                bot.user_incomes[str(chat_id)] = income
-                bot.save_incomes()
-                bot.pending_income.remove(chat_id)
-                
-                success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
-
-🎉 Now we can start enhancing your financial health together!
-
-📱 *Get started:*
-Track your first transaction:
-
-1 = Spending | +1 = Income | ++1 = Savings
--10 = Debt | +- 1 = Debt returned | -+1 = Savings withdrawal
-+food - Add category | -food - Delete category
-
-Use the menu below or just start tracking!"""
-                bot.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-
-        except ValueError:
-            bot.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                                    
-    elif text == "🗑️ Delete Transaction":
-        user_transactions = bot.get_user_transactions(chat_id)
-        if not user_transactions:
-            bot.send_message(chat_id, "📭 No transactions to delete.", reply_markup=bot.get_main_menu())
-        else:
-            transactions_by_type = {
-                'income': [],
-                'expense': [],
-                'savings': [],
-                'debt': [],
-                'debt_return': [],
-                'savings_withdraw': []
-            }
-            
-            for i, transaction in enumerate(user_transactions):
-                transactions_by_type[transaction['type']].append((i, transaction))
-            
-            delete_text = "🗑️ *Select Transaction to Delete*\n\n"
-            delete_text += "⏹️  `0` - Cancel & Exit\n\n"
-            
-            current_number = 1
-            transaction_map = {}
-            
-            for trans_type, trans_list in transactions_by_type.items():
-                if trans_list:
-                    if trans_type == 'income':
-                        delete_text += "💰 *INCOME*\n"
-                    elif trans_type == 'expense':
-                        delete_text += "🛒 *EXPENSES*\n"
-                    elif trans_type == 'savings':
-                        delete_text += "🏦 *SAVINGS*\n"
-                    elif trans_type == 'debt':
-                        delete_text += "💳 *DEBT*\n"
-                    elif trans_type == 'debt_return':
-                        delete_text += "🔙 *RETURNED DEBT*\n"
-                    elif trans_type == 'savings_withdraw':
-                        delete_text += "📥 *SAVINGS WITHDRAWAL*\n"
-                    
-                    for orig_index, transaction in trans_list:
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                        description = transaction['description']
-                        if len(description) > 25:
-                            description = description[:22] + "..."
-                        
-                        delete_text += f"`{current_number:2d}` {amount_display} • {transaction['category']}\n"
-                        
-                        transaction_map[current_number] = orig_index
-                        current_number += 1
-                    
-                    delete_text += "\n"
-            delete_text += "💡 *Type a number to delete, or 0 to cancel*"
-            
-            bot.delete_mode[chat_id] = transaction_map
-            
-            if len(delete_text) > 4000:
-                delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
-            
-            bot.send_message(chat_id, delete_text, parse_mode='Markdown')
-    
-    elif text == "🏷️ Manage Categories":
-        user_categories = bot.get_user_categories(chat_id)
-        categories_text = "🏷️ *Your Spending Categories*\n\n"
-        for category, keywords in user_categories.items():
-            categories_text += f"• *{category}*"
-            if keywords:
-                categories_text += f" - {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
-            categories_text += "\n"
-        
-        categories_text += "\n*Quick Commands:*\n"
-        categories_text += "• `+Food` - Add new category\n"
-        categories_text += "• `-Shopping` - Remove category\n"
-        categories_text += "• Categories are used to auto-categorize your expenses"
-        
-        bot.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=bot.get_main_menu())
-
-    elif text.startswith("+") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
-        try:
-            new_category = text[1:].strip()
-            if bot.add_user_category(chat_id, new_category):
-                bot.send_message(chat_id, f"✅ Added new spending category: *{new_category}*", parse_mode='Markdown', reply_markup=bot.get_main_menu())
-            else:
-                bot.send_message(chat_id, f"❌ Spending category *{new_category}* already exists!", parse_mode='Markdown', reply_markup=bot.get_main_menu())
-        except Exception as e:
-            bot.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=bot.get_main_menu())
-
-    elif text.startswith("-") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
-        try:
-            category_to_remove = text[1:].strip()
-            if bot.remove_user_category(chat_id, category_to_remove):
-                bot.send_message(chat_id, f"✅ Removed spending category: *{category_to_remove}*", parse_mode='Markdown', reply_markup=bot.get_main_menu())
-            else:
-                bot.send_message(chat_id, f"❌ Cannot remove *{category_to_remove}* - category not found or is essential", parse_mode='Markdown', reply_markup=bot.get_main_menu())
-        except Exception as e:
-            bot.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=bot.get_main_menu())
-    
-    else:
-        # Regular transaction processing
-        print(f"🔍 Processing transaction - text: '{text}'")
-        amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = bot.extract_amount(text)
-    
-        if amount is not None:
-            if is_debt_return:
-                category = "Debt Return"
-                transaction_type = "debt_return"
-            elif is_savings_withdraw:
-                category = "Savings Withdrawal" 
-                transaction_type = "savings_withdraw"
-            elif is_debt:
-                category = "Debt"
-                transaction_type = "debt"
-            elif is_savings:
-                category = "Savings"
-                transaction_type = "savings"
-            elif is_income:
-                category = "Salary"
-                transaction_type = "income"
-            else:
-                category = bot.guess_category(text, chat_id)
-                transaction_type = "expense"
-            
-            bot.pending[chat_id] = {
-                'amount': amount, 
-                'text': text, 
-                'category': category,
-                'type': transaction_type
-            }
-            
-            if is_debt_return:
-                message = f"✅ Debt Return: +-{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                keyboard = {"inline_keyboard": [[
-                    {"text": "✅ Confirm Debt Return", "callback_data": "cat_Debt Return"}
-                ]]}
-            elif is_savings_withdraw:
-                message = f"🏦 Savings Withdrawal: -+{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                keyboard = {"inline_keyboard": [[
-                    {"text": "✅ Confirm Savings Withdrawal", "callback_data": "cat_Savings Withdrawal"}
-                ]]}
-            elif is_debt:
-                message = f"💳 Debt: -{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                keyboard = {"inline_keyboard": [[
-                    {"text": "✅ Confirm Debt", "callback_data": "cat_Debt"}
-                ]]}
-            elif is_income:
-                message = f"💰 Income: +{amount:,.0f}₴\n📝 Description: {text}\n\nSelect category:"
-                income_cats = list(bot.income_categories.keys())
-                keyboard_rows = []
-                for i in range(0, len(income_cats), 2):
-                    row = []
-                    for cat in income_cats[i:i+2]:
-                        row.append({"text": cat, "callback_data": f"cat_{cat}"})
-                    keyboard_rows.append(row)
-                keyboard = {"inline_keyboard": keyboard_rows}
-            elif is_savings:
-                message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                keyboard = {"inline_keyboard": [[
-                    {"text": "✅ Confirm Savings", "callback_data": "cat_Savings"}
-                ]]}
-            else:
-                message = f"💰 Expense: -{amount:,.0f}₴\n🏷️ Category: {category}\n📝 Description: {text}\n\nSelect correct category:"
-                user_categories = bot.get_user_categories(chat_id)
-                category_list = list(user_categories.keys())
-                keyboard_rows = []
-                for i in range(0, len(category_list), 2):
-                    row = []
-                    for cat in category_list[i:i+2]:
-                        row.append({"text": cat, "callback_data": f"cat_{cat}"})
-                    keyboard_rows.append(row)
-                keyboard = {"inline_keyboard": keyboard_rows}
-            
-            bot.send_message(chat_id, message, keyboard)
-        
-        else:
-            bot.send_message(chat_id, """🤔 Oops! Let me help you format that correctly:
-                                 
-🛒 10 - Expense (lunch, shopping, etc.)
-                                 
-💰 +100 - Income (salary, business, etc.) 
-                                  
-🏦 ++100 - Savings (put money aside)
-                                 
-💳 -100 - Debt (borrowed money)
-                                 
-🔙 +-100 - Returned debt (paying back)
-                                 
-📥 -+100 - Savings withdrawal (taking from savings)
-""")
-
-def process_callback(chat_id, message_id, data, query):
-    """Process callback queries"""
-    bot = bot_instance
-    
-    # Answer the callback query first
-    bot.answer_callback(query["id"])
-    
-    if data.startswith("cat_"):
-        category = data[4:]
-        print(f"🔍 Processing category selection - category: '{category}'")
-        
-        if chat_id in bot.pending:
-            pending = bot.pending[chat_id]
-            amount = pending["amount"]
-            text = pending["text"]
-            transaction_type = pending["type"]
-            
-            # Learn if corrected (only for expenses)
-            if pending["category"] != category and transaction_type == "expense":
-                words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
-                for word in words:
-                    bot.learned_patterns[word] = category
-            
-            # Add transaction
-            try:
-                user_transactions = bot.get_user_transactions(chat_id)
-                transaction = {
-                    "id": len(user_transactions) + 1,
-                    "amount": amount,
-                    "category": category,
-                    "description": text,
-                    "type": transaction_type,
-                    "date": datetime.now().isoformat()
-                }
-                user_transactions.append(transaction)
-                bot.save_transactions()
-                print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
-                
-                # Sync to Railway
-                sync_to_railway({
-                    'amount': amount,
-                    'description': text,
-                    'category': category,
-                    'timestamp': datetime.now().isoformat(),
-                    'type': transaction_type
-                })
-                
-            except Exception as e:
-                print(f"❌ Error saving transaction: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            # Send confirmation message
-            if transaction_type == 'income':
-                savings_msg = bot.calculate_savings_recommendation(chat_id, amount, text)
-                bot.send_message(chat_id, savings_msg, parse_mode='Markdown')
-                confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
-                bot.send_message(chat_id, confirmation_msg)
-            elif transaction_type == 'savings':
-                message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
-                bot.send_message(chat_id, message)
-            elif transaction_type == 'debt':        
-                message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
-                bot.send_message(chat_id, message)
-            elif transaction_type == 'debt_return':
-                message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
-                bot.send_message(chat_id, message)
-            elif transaction_type == 'savings_withdraw':
-                message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
-                bot.send_message(chat_id, message)
-            else:
-                message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
-                bot.send_message(chat_id, message)
-            
-            # Clean up pending
-            del bot.pending[chat_id]
-            
-            # Delete the original message with buttons
-            try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
-                if delete_response.status_code == 200:
-                    print(f"🔍 Successfully deleted message {message_id}")
-            except Exception as e:
-                print(f"⚠️ Error deleting message: {e}")
-        
-        else:
-            print(f"❌ No pending transaction found for user {chat_id}")
-            bot.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=bot.get_main_menu())
+            return jsonify({'status': 'ok'})
+    except Exception as e:
+        print(f"❌ Webhook error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
 
 def set_bot_commands():
     """Set up the mini app button in Telegram"""
@@ -964,21 +497,13 @@ def set_bot_commands():
         print(f"⚠️ Error setting mini app button: {e}")
 
 def set_webhook():
-    """Set Telegram webhook on Railway with better error handling"""
+    """Set Telegram webhook on Railway"""
     try:
-        # Get Railway URL - use multiple fallbacks
-        railway_url = os.getenv('RAILWAY_STATIC_URL') 
-        if not railway_url:
-            railway_url = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-        if not railway_url:
-            # Fallback for testing
-            railway_url = "https://your-app-name.up.railway.app"
-        
+        railway_url = "https://finnbot-production.up.railway.app"
         webhook_url = f"{railway_url}/webhook"
         
-        print(f"🔧 Attempting to set webhook to: {webhook_url}")
+        print(f"🔧 Setting webhook to: {webhook_url}")
         
-        # Set new webhook
         response = requests.post(
             f"{BASE_URL}/setWebhook",
             json={
@@ -995,10 +520,10 @@ def set_webhook():
                 return True
             else:
                 print(f"❌ Webhook setup failed: {result.get('description')}")
-                return False
         else:
             print(f"❌ HTTP error setting webhook: {response.status_code}")
-            return False
+            
+        return False
             
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
@@ -1006,10 +531,11 @@ def set_webhook():
 
 def main():
     try:
-        if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-            print("❌ ERROR: Please set your actual bot token in the .env file")
-            # Don't return, just set a placeholder for now
-            print("⚠️  Using placeholder token for testing")
+        print("🔧 Starting bot initialization...")
+        
+        if not BOT_TOKEN:
+            print("❌ BOT_TOKEN is not set")
+            return
         
         bot = SimpleFinnBot()
         global bot_instance
@@ -1023,20 +549,15 @@ def main():
         # Set up the mini app button
         set_bot_commands()
         
-        # Start Flask server with better error handling
+        # Start Flask server
         port = int(os.getenv('PORT', 8080))
         print(f"🚀 Starting server on port {port}")
-        
-        # Start Flask without debug mode for production
         flask_app.run(host='0.0.0.0', port=port, debug=False)
         
     except Exception as e:
         print(f"❌ CRITICAL ERROR in main: {e}")
         import traceback
         traceback.print_exc()
-        # Keep the container running even if there's an error
-        while True:
-            time.sleep(60)  # Prevent container from exiting
 
 if __name__ == "__main__":
     main()
