@@ -16,6 +16,10 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 # Initialize Flask app FIRST
 flask_app = Flask(__name__)
 
+@flask_app.before_request
+def log_request_info():
+    print(f"🌐 Incoming: {request.method} {request.path} - From: {request.remote_addr}")
+
 def sync_to_railway(transaction_data):
     """Send transaction data to Railway web app"""
     try:
@@ -921,8 +925,12 @@ def webhook():
         return jsonify({"status": "success"}), 200
 
 # Health check route
-@flask_app.route('/')
+@flask_app.route('/', methods=['GET', 'POST'])
 def health_check():
+    if request.method == 'POST':
+        # Handle POST requests gracefully
+        return jsonify({"status": "OK", "message": "FinnBot is running!", "method": "POST"})
+    
     return jsonify({"status": "OK", "message": "FinnBot is running with webhooks!"})
 
 # Your existing API routes
