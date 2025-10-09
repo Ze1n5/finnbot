@@ -181,7 +181,7 @@ def serve_mini_app():
             <h2>💰 Financial Dashboard</h2>
             
             <div class="card">
-                <h3>Total Balance</h3>
+                <h3>Balance</h3>
                 <h1 id="balance" class="loading">Loading...</h1>
             </div>
             
