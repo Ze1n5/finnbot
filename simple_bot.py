@@ -1013,7 +1013,7 @@ def get_user_data(user_id):
     
 # ========== MINI-APP ROUTES ==========
 
-@app.route('/mini-app')
+@flask_app.route('/mini-app')
 def serve_mini_app():
     return """
     <!DOCTYPE html>
@@ -1221,7 +1221,7 @@ def test_api():
 def set_webhook():
     """Set Telegram webhook URL"""
     try:
-        webhook_url = "https://finnbot-production.up.railway.app/webhook"
+        webhook_url = "https://finnbot-production.up.railway.app/"
         response = requests.post(
             f"{BASE_URL}/setWebhook",
             json={"url": webhook_url}
