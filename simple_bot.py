@@ -1157,17 +1157,19 @@ def api_financial_data():
             print(f"❌ Error reading transactions: {e}")
             transactions_data = {}
 
-        # Calculate totals - FOCUS ON CASH FLOW ONLY
+        # Start with balance from incomes
+        balance = 0
         total_income = 0
         total_expenses = 0
-
-        # Process incomes (your data is in dict format: {"user_id": amount})
+        
+        # Process initial incomes
         if isinstance(incomes_data, dict):
             for user_id, amount in incomes_data.items():
                 if isinstance(amount, (int, float)) and amount > 0:
+                    balance += amount
                     total_income += amount
 
-        # Process transactions - ONLY COUNT INCOME AND EXPENSE TRANSACTIONS
+        # Process all transactions to calculate current balance
         if isinstance(transactions_data, dict):
             for user_id, user_transactions in transactions_data.items():
                 if isinstance(user_transactions, list):
@@ -1177,25 +1179,34 @@ def api_financial_data():
                             trans_type = transaction.get('type', 'expense')
                             
                             if isinstance(amount, (int, float)):
-                                # ONLY count regular income and expense for cash flow
+                                # Update balance based on transaction type
                                 if trans_type == 'income':
+                                    balance += amount
                                     total_income += amount
                                 elif trans_type == 'expense':
+                                    balance -= amount
                                     total_expenses += amount
-
-        # CALCULATE NET CASH FLOW (Income - Expenses)
-        net_cash_flow = total_income - total_expenses
+                                elif trans_type == 'savings':
+                                    balance -= amount  # Money moved to savings
+                                elif trans_type == 'debt':
+                                    balance += amount  # You receive money as debt
+                                elif trans_type == 'debt_return':
+                                    balance -= amount  # You pay back debt
+                                elif trans_type == 'savings_withdraw':
+                                    balance += amount  # You take money from savings
+                                
+                                print(f"💳 Transaction: {trans_type} {amount} → Balance: {balance}")
         
         response_data = {
-            'total_balance': net_cash_flow,  # This is now NET CASH FLOW
+            'total_balance': balance,  # Current available cash
             'total_income': total_income,
             'total_expenses': total_expenses,
-            'savings': max(net_cash_flow, 0),  # Positive cash flow can be considered savings
+            'savings': max(balance, 0),  # Only show positive as savings
             'transaction_count': sum(len(txns) for txns in transactions_data.values()) if isinstance(transactions_data, dict) else 0,
             'income_count': len(incomes_data) if isinstance(incomes_data, dict) else 0
         }
         
-        print(f"💰 Cash Flow: Income={total_income}, Expenses={total_expenses}, Balance (Net Cash Flow)={net_cash_flow}")
+        print(f"💰 Final: Balance={balance}, Income={total_income}, Expenses={total_expenses}")
         return jsonify(response_data)
         
     except Exception as e:
