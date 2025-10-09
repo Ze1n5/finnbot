@@ -1139,11 +1139,11 @@ def api_financial_data():
     try:
         print("📊 Fetching financial data for mini-app...")
         
-        # Read incomes
+        # Read incomes (just for display, not for balance calculation)
         try:
             with open('incomes.json', 'r') as f:
                 incomes_data = json.load(f)
-            print(f"💰 Incomes data: {incomes_data}")
+            print(f"💰 Initial incomes: {incomes_data}")
         except Exception as e:
             print(f"❌ Error reading incomes: {e}")
             incomes_data = {}
@@ -1157,17 +1157,10 @@ def api_financial_data():
             print(f"❌ Error reading transactions: {e}")
             transactions_data = {}
 
-        # Start with balance from incomes
+        # Start with ZERO balance - calculate everything from transactions
         balance = 0
         total_income = 0
         total_expenses = 0
-        
-        # Process initial incomes
-        if isinstance(incomes_data, dict):
-            for user_id, amount in incomes_data.items():
-                if isinstance(amount, (int, float)) and amount > 0:
-                    balance += amount
-                    total_income += amount
 
         # Process all transactions to calculate current balance
         if isinstance(transactions_data, dict):
@@ -1197,16 +1190,28 @@ def api_financial_data():
                                 
                                 print(f"💳 Transaction: {trans_type} {amount} → Balance: {balance}")
         
+        # Add initial income from incomes.json as starting point
+        initial_income = 0
+        if isinstance(incomes_data, dict):
+            for user_id, amount in incomes_data.items():
+                if isinstance(amount, (int, float)) and amount > 0:
+                    initial_income += amount
+        
+        # If no transactions yet, use initial income as balance
+        if total_income == 0 and total_expenses == 0:
+            balance = initial_income
+            total_income = initial_income
+        
         response_data = {
             'total_balance': balance,  # Current available cash
-            'total_income': total_income,
+            'total_income': total_income + initial_income,  # Show both initial and transaction income
             'total_expenses': total_expenses,
-            'savings': max(balance, 0),  # Only show positive as savings
+            'savings': max(balance, 0),
             'transaction_count': sum(len(txns) for txns in transactions_data.values()) if isinstance(transactions_data, dict) else 0,
             'income_count': len(incomes_data) if isinstance(incomes_data, dict) else 0
         }
         
-        print(f"💰 Final: Balance={balance}, Income={total_income}, Expenses={total_expenses}")
+        print(f"💰 Final: Balance={balance}, Income={total_income + initial_income}, Expenses={total_expenses}")
         return jsonify(response_data)
         
     except Exception as e:
