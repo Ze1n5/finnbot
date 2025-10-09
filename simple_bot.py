@@ -5,7 +5,7 @@ import requests
 import time
 from dotenv import load_dotenv
 from datetime import datetime
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
 import threading
 
 load_dotenv()
@@ -361,22 +361,6 @@ _Wealth grows one transaction at a time_
         print(f"❌ Failed to send message after {max_retries} attempts")
         return None
     
-    @flask_app.route('/webhook', methods=['POST'])
-    def webhook():
-        """Handle Telegram webhook updates"""
-        try:
-            print("📨 Webhook received")
-            data = request.get_json()
-            print(f"Data: {data}")
-            return jsonify({"status": "ok"})
-        except Exception as e:
-            print(f"Webhook error: {e}")
-            return jsonify({"status": "error"})
-
-    @flask_app.route('/')
-    def home():
-        return "🤖 FinnBot is running!"
-
     def answer_callback(self, callback_id):
         """Answer callback query to remove loading state"""
         try:
@@ -474,6 +458,22 @@ def get_user_data(user_id):
     except Exception as e:
         print(f"❌ Error in mini app API: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    """Handle Telegram webhook updates"""
+    try:
+        print("📨 Webhook received")
+        data = request.get_json()
+        print(f"Data: {data}")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return jsonify({"status": "error"})
+
+@flask_app.route('/')
+def home():
+    return "🤖 FinnBot is running!"
 
 def start_flask_server():
     """Start the Flask server in a separate thread"""
