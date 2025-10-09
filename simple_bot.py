@@ -12,7 +12,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# Flask App Setup - PUT THIS AT THE TOP
+# Flask App Setup
 flask_app = Flask(__name__)
 bot_instance = None
 
@@ -358,7 +358,7 @@ _Wealth grows one transaction at a time_
         except Exception as e:
             print(f"Error answering callback: {e}")
 
-# Flask Routes - NO DUPLICATES!
+# Flask Routes
 @flask_app.route('/')
 def home():
     return "🤖 FinnBot is running!"
@@ -457,13 +457,12 @@ def webhook():
         
         # Log the request details
         print(f"📝 Method: {request.method}")
-        print(f"📝 Headers: {dict(request.headers)}")
         print(f"📝 Content-Type: {request.content_type}")
         
         if request.method == 'POST':
             if request.content_type == 'application/json':
                 update = request.get_json()
-                print(f"📝 Update data: {update}")
+                print(f"📝 Update data received")
                 
                 if update:
                     if "message" in update:
@@ -496,6 +495,39 @@ def webhook():
         import traceback
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@flask_app.route('/set_webhook')
+def set_webhook_route():
+    """Manual webhook setup endpoint"""
+    try:
+        webhook_url = "https://finnbot-production.up.railway.app/webhook"
+        print(f"🔧 Setting webhook to: {webhook_url}")
+        
+        response = requests.post(
+            f"{BASE_URL}/setWebhook",
+            json={"url": webhook_url}
+        )
+        
+        result = response.json()
+        print(f"🔧 Telegram response: {result}")
+        
+        return jsonify({
+            "status": "success" if result.get('ok') else "failed",
+            "webhook_url": webhook_url,
+            "telegram_response": result
+        })
+    except Exception as e:
+        print(f"❌ Error setting webhook: {e}")
+        return jsonify({"status": "error", "error": str(e)})
+
+@flask_app.route('/get_webhook')
+def get_webhook_route():
+    """Check webhook status"""
+    try:
+        response = requests.get(f"{BASE_URL}/getWebhookInfo")
+        return jsonify(response.json())
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
 
 def set_bot_commands():
     """Set up the mini app button in Telegram"""
