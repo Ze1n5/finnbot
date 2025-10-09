@@ -137,7 +137,7 @@ class SimpleFinnBot:
             self.transactions = {}
 
     def save_user_transaction(self, user_id, transaction):
-        """Add transaction for a specific user and save to file"""
+        #Add transaction for a specific user and save to file
         if user_id not in self.transactions:
             self.transactions[user_id] = []
             
@@ -145,13 +145,13 @@ class SimpleFinnBot:
         self.save_transactions()
     
         # Sync to Railway
-        sync_to_railway({
+        """sync_to_railway({
             'amount': transaction['amount'],
             'description': transaction['description'],
             'category': transaction['category'],
             'timestamp': transaction['date'],
             'type': transaction['type']
-        })
+        })"""
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -219,10 +219,14 @@ class SimpleFinnBot:
     def extract_amount(self, text):
         # Check transaction type - order matters!
         is_savings = '++' in text  # Check for savings FIRST
-        is_income = '+' in text and not is_savings  # Single + but not ++
-        is_debt = text.strip().startswith('-')  # - for debt
         is_debt_return = '+-' in text  # +- for returning debt
         is_savings_withdraw = '-+' in text  # -+ for withdrawing from savings
+        is_income = '+' in text and not is_savings and not is_debt_return and not is_savings_withdraw  # Single + but not others
+        is_debt = text.strip().startswith('-') and not is_savings_withdraw  # - for debt, but not -+
+        
+        print(f"🔍 DEBUG extract_amount: text='{text}'")
+        print(f"   is_income: {is_income}, is_debt: {is_debt}, is_savings: {is_savings}")
+        print(f"   is_debt_return: {is_debt_return}, is_savings_withdraw: {is_savings_withdraw}")
         
         # Find amounts (including those with +, ++, +-, -+ or - signs)
         amounts = re.findall(r'[+-]+\s*(\d+[.,]\d{1,2})|\b(\d+[.,]\d{1,2})\b', text)
@@ -237,12 +241,15 @@ class SimpleFinnBot:
                     except ValueError:
                         continue
                 if amounts_float:
-                    return max(amounts_float), is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                    amount = max(amounts_float)
+                    print(f"   Extracted amount: {amount}")
+                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
         
         # If no amount found with pattern, check if the entire text is a number
         try:
-            clean_text = text.strip()
+            clean_text = text.strip().replace('+', '').replace('-', '')
             amount = float(clean_text)
+            print(f"   Extracted amount (clean): {amount}")
             return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
         except ValueError:
             pass
@@ -252,10 +259,12 @@ class SimpleFinnBot:
         if whole_numbers:
             try:
                 amount = float(max(whole_numbers, key=lambda x: float(x)))
+                print(f"   Extracted amount (whole): {amount}")
                 return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
             except ValueError:
                 pass
         
+        print(f"   No amount found")
         return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
 
     def guess_category(self, text, user_id):
