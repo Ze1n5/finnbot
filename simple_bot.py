@@ -453,27 +453,49 @@ def get_user_data(user_id):
 def webhook():
     """Handle Telegram webhook updates"""
     try:
+        print("📨 Webhook received - checking request...")
+        
+        # Log the request details
+        print(f"📝 Method: {request.method}")
+        print(f"📝 Headers: {dict(request.headers)}")
+        print(f"📝 Content-Type: {request.content_type}")
+        
         if request.method == 'POST':
-            update = request.get_json()
-            print("📨 Received webhook request")
-            
-            if "message" in update:
-                msg = update["message"]
-                chat_id = msg["chat"]["id"]
-                text = msg.get("text", "")
+            if request.content_type == 'application/json':
+                update = request.get_json()
+                print(f"📝 Update data: {update}")
                 
-                # Simple echo for testing
-                response_text = f"Echo: {text}"
-                
-                if bot_instance:
-                    bot_instance.send_message(chat_id, response_text)
+                if update:
+                    if "message" in update:
+                        msg = update["message"]
+                        chat_id = msg["chat"]["id"]
+                        text = msg.get("text", "")
+                        print(f"📝 Message from {chat_id}: {text}")
+                        
+                        # Simple echo response for testing
+                        if bot_instance:
+                            response_text = f"Echo: {text}"
+                            bot_instance.send_message(chat_id, response_text)
+                            print(f"✅ Sent response to {chat_id}")
+                        else:
+                            print("❌ Bot instance not initialized")
+                    
+                    return jsonify({'status': 'ok'})
                 else:
-                    print("❌ Bot instance not initialized")
+                    print("❌ No JSON data in request")
+                    return jsonify({'status': 'error', 'message': 'No JSON data'})
+            else:
+                print(f"❌ Wrong content type: {request.content_type}")
+                return jsonify({'status': 'error', 'message': 'Wrong content type'})
+        else:
+            print("❌ Wrong method")
+            return jsonify({'status': 'error', 'message': 'Method not allowed'})
             
-            return jsonify({'status': 'ok'})
     except Exception as e:
         print(f"❌ Webhook error: {e}")
-        return jsonify({'status': 'error', 'message': str(e)})
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 def set_bot_commands():
     """Set up the mini app button in Telegram"""
