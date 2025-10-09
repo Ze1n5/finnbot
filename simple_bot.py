@@ -459,9 +459,12 @@ def get_user_data(user_id):
         print(f"❌ Error in mini app API: {e}")
         return jsonify({'error': str(e)}), 500
     
-@flask_app.route('/webhook', methods=['POST'])
+@flask_app.route('/webhook', methods=['POST', 'GET'])  # ADD 'GET'
 def webhook():
-    """Handle Telegram webhook updates"""
+    """Handle Telegram webhook updates AND health checks"""
+    if request.method == 'GET':
+        return jsonify({"status": "healthy", "message": "Webhook endpoint active"})
+    
     try:
         print("📨 Webhook received")
         data = request.get_json()
