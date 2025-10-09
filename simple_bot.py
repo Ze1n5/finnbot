@@ -1143,7 +1143,7 @@ def api_financial_data():
         try:
             with open('incomes.json', 'r') as f:
                 incomes_data = json.load(f)
-            print(f"💰 Incomes data type: {type(incomes_data)}, data: {incomes_data}")
+            print(f"💰 Incomes data: {incomes_data}")
         except Exception as e:
             print(f"❌ Error reading incomes: {e}")
             incomes_data = {}
@@ -1152,7 +1152,7 @@ def api_financial_data():
         try:
             with open('transactions.json', 'r') as f:
                 transactions_data = json.load(f)
-            print(f"📂 Transactions data type: {type(transactions_data)}, keys: {list(transactions_data.keys()) if isinstance(transactions_data, dict) else 'list'}")
+            print(f"📂 Transactions data: {transactions_data}")
         except Exception as e:
             print(f"❌ Error reading transactions: {e}")
             transactions_data = {}
@@ -1167,17 +1167,6 @@ def api_financial_data():
             for user_id, amount in incomes_data.items():
                 if isinstance(amount, (int, float)) and amount > 0:
                     total_income += amount
-                    all_transactions.append({
-                        'amount': amount,
-                        'type': 'income',
-                        'description': 'Monthly Income'
-                    })
-        elif isinstance(incomes_data, list):
-            for item in incomes_data:
-                if isinstance(item, dict):
-                    amount = item.get('amount', 0)
-                    if isinstance(amount, (int, float)) and amount > 0:
-                        total_income += amount
 
         # Process transactions (your data is in dict format: {"user_id": [transactions]})
         if isinstance(transactions_data, dict):
@@ -1189,10 +1178,19 @@ def api_financial_data():
                             trans_type = transaction.get('type', 'expense')
                             
                             if isinstance(amount, (int, float)):
-                                if trans_type == 'income' or amount > 0:
+                                # CORRECTED: Check transaction type properly
+                                if trans_type == 'income':
                                     total_income += amount
-                                elif trans_type == 'expense' or amount < 0:
-                                    total_expenses += abs(amount)
+                                elif trans_type == 'expense':
+                                    total_expenses += amount  # Expenses are already positive in your data
+                                elif trans_type == 'savings':
+                                    total_income += amount  # Savings count as income for balance
+                                elif trans_type == 'debt':
+                                    total_expenses += amount  # Debt counts as expense
+                                elif trans_type == 'debt_return':
+                                    total_income += amount  # Returning debt counts as income
+                                elif trans_type == 'savings_withdraw':
+                                    total_expenses += amount  # Withdrawing savings counts as expense
                                 
                                 all_transactions.append(transaction)
 
@@ -1207,7 +1205,7 @@ def api_financial_data():
             'income_count': len(incomes_data) if isinstance(incomes_data, dict) else 0
         }
         
-        print(f"📈 Financial data calculated: {response_data}")
+        print(f"📈 Financial data calculated: Income={total_income}, Expenses={total_expenses}, Balance={total_balance}")
         return jsonify(response_data)
         
     except Exception as e:
