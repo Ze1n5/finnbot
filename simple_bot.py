@@ -1010,6 +1010,212 @@ def get_user_data(user_id):
     except Exception as e:
         print(f"❌ Error in mini app API: {e}")
         return jsonify({'error': str(e)}), 500
+    
+# ========== MINI-APP ROUTES ==========
+
+@app.route('/mini-app')
+def serve_mini_app():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Financial Dashboard</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                background: #1a1a1a; 
+                color: white; 
+            }
+            .container { max-width: 400px; margin: 0 auto; }
+            .card { 
+                background: #2d2d2d; 
+                padding: 20px; 
+                margin: 10px 0; 
+                border-radius: 10px; 
+            }
+            .loading { color: #888; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>💰 Financial Dashboard</h2>
+            
+            <div class="card">
+                <h3>Total Balance</h3>
+                <h1 id="balance" class="loading">Loading...</h1>
+            </div>
+            
+            <div class="card">
+                <h3>Income vs Expenses</h3>
+                <p>Income: <span id="income" class="loading">0</span>₴</p>
+                <p>Expenses: <span id="expenses" class="loading">0</span>₴</p>
+            </div>
+            
+            <div class="card">
+                <h3>Recent Activity</h3>
+                <p>Transactions: <span id="transactionCount" class="loading">0</span></p>
+                <p>Incomes: <span id="incomeCount" class="loading">0</span></p>
+            </div>
+        </div>
+        
+        <script>
+            // Load real data from API
+            async function loadData() {
+                try {
+                    console.log('Loading financial data...');
+                    const response = await fetch('/api/financial-data');
+                    const data = await response.json();
+                    
+                    console.log('Real data received:', data);
+                    
+                    // Update UI with real data
+                    document.getElementById('balance').textContent = data.total_balance + '₴';
+                    document.getElementById('balance').className = '';
+                    
+                    document.getElementById('income').textContent = data.total_income;
+                    document.getElementById('income').className = '';
+                    
+                    document.getElementById('expenses').textContent = Math.abs(data.total_expenses);
+                    document.getElementById('expenses').className = '';
+                    
+                    document.getElementById('transactionCount').textContent = data.transaction_count;
+                    document.getElementById('transactionCount').className = '';
+                    
+                    document.getElementById('incomeCount').textContent = data.income_count;
+                    document.getElementById('incomeCount').className = '';
+                    
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    document.getElementById('balance').textContent = 'Error loading data';
+                }
+            }
+            
+            // Load data when page opens
+            document.addEventListener('DOMContentLoaded', loadData);
+        </script>
+    </body>
+    </html>
+    """
+
+@flask_app.route('/api/financial-data')
+def api_financial_data():
+    try:
+        # Read incomes
+        try:
+            with open('incomes.json', 'r') as f:
+                incomes = json.load(f)
+        except:
+            incomes = []
+            
+        # Read transactions  
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = []
+        
+        # Calculate totals
+        total_income = 0
+        total_expenses = 0
+        
+        # Process incomes
+        if isinstance(incomes, list):
+            for item in incomes:
+                if isinstance(item, dict):
+                    if item.get('type') == 'income':
+                        total_income += item.get('amount', 0)
+                    elif 'amount' in item and item.get('type') != 'expense':
+                        total_income += item.get('amount', 0)
+        elif isinstance(incomes, dict):
+            # Handle old format: {"user_id": amount}
+            total_income = sum(incomes.values())
+        
+        # Process transactions
+        for transaction in transactions:
+            if isinstance(transaction, dict):
+                amount = transaction.get('amount', 0)
+                if amount < 0 or transaction.get('type') == 'expense':
+                    total_expenses += abs(amount)
+                elif amount > 0 and transaction.get('type') != 'expense':
+                    total_income += amount
+        
+        total_balance = total_income - total_expenses
+        
+        return jsonify({
+            'total_balance': total_balance,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'savings': max(total_balance, 0),
+            'transaction_count': len(transactions),
+            'income_count': len(incomes) if isinstance(incomes, list) else 1
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in financial data API: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@flask_app.route('/api/add-transaction', methods=['POST'])
+def add_transaction():
+    try:
+        transaction_data = request.json
+        print(f"📥 Received transaction: {transaction_data}")
+        
+        # Read current transactions
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = []
+        
+        # Add new transaction
+        transactions.append(transaction_data)
+        
+        # Save back to file
+        with open('transactions.json', 'w') as f:
+            json.dump(transactions, f)
+        
+        print("✅ Transaction added successfully")
+        return jsonify({'status': 'success', 'message': 'Transaction added'})
+        
+    except Exception as e:
+        print(f"❌ Error adding transaction: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@flask_app.route('/api/add-income', methods=['POST']) 
+def add_income():
+    try:
+        income_data = request.json
+        
+        # Read current incomes
+        try:
+            with open('incomes.json', 'r') as f:
+                incomes = json.load(f)
+        except:
+            incomes = {}
+        
+        # Update income
+        user_id = income_data.get('user_id')
+        amount = income_data.get('amount')
+        incomes[user_id] = amount
+        
+        # Save back to file
+        with open('incomes.json', 'w') as f:
+            json.dump(incomes, f)
+        
+        return jsonify({'status': 'success', 'message': 'Income updated'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Test route
+@flask_app.route('/api/test')
+def test_api():
+    return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
 
 # Set webhook on startup
 def set_webhook():
