@@ -207,7 +207,8 @@ class SimpleFinnBot:
         """Returns the persistent menu keyboard"""
         keyboard = [
             ["📊 Financial Summary", "📋 Commands"],
-            ["🗑️ Delete Transaction", "🏷️ Manage Categories"]
+            ["🗑️ Delete Transaction", "🏷️ Manage Categories"],
+            ["🌍 Language"]  # Add language option
         ]
         return {
             "keyboard": keyboard,
@@ -464,6 +465,19 @@ Just send me the amount, for example:
             
             self.pending_income.add(chat_id)
             self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+
+        elif text == "🌍 Language":
+            # Show language selection keyboard
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🇺🇸 English", "callback_data": "lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "lang_uk"}]
+                ]
+            }
+            current_lang = self.get_user_language(chat_id)
+            current_lang_text = "English" if current_lang == 'en' else "Українська"
+            message = f"🌍 Current language: {current_lang_text}\n\nChoose your language / Оберіть мову:"
+            self.send_message(chat_id, message, keyboard)
 
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
@@ -913,6 +927,25 @@ Use the menu below or just start tracking!"""
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu())
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+            
+            # Delete the language selection message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting language message: {e}")
 
 # Initialize bot instance
 bot_instance = SimpleFinnBot()
