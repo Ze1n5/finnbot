@@ -92,6 +92,51 @@ class SimpleFinnBot:
         }
     }
         
+    def calculate_expression(self, text):
+        """Calculate mathematical expressions with percentages"""
+        try:
+            # Remove spaces and convert to lowercase
+            expression = text.replace(' ', '').lower()
+            
+            # Handle percentages: convert 1.5% to *0.015
+            expression = re.sub(r'(\d+(?:\.\d+)?)%', r'*(\1/100)', expression)
+            
+            # Replace multiple operators with proper format
+            expression = expression.replace('++', '+').replace('--', '+').replace('+-', '-').replace('-+', '-')
+            
+            # Basic safety check - only allow numbers, basic operators, and parentheses
+            if not re.match(r'^[\d+\-*/().\s]+$', expression):
+                return None, "❌ Invalid characters in expression"
+            
+            # Calculate the result
+            result = eval(expression)
+            
+            # Determine transaction type based on result and original text
+            if '++' in text:
+                trans_type = 'savings'
+                symbol = '++'
+            elif '+-' in text:
+                trans_type = 'debt_return' 
+                symbol = '+-'
+            elif '-+' in text:
+                trans_type = 'savings_withdraw'
+                symbol = '-+'
+            elif text.strip().startswith('-') and not '-+' in text:
+                trans_type = 'debt'
+                symbol = '-'
+            elif '+' in text and not any(x in text for x in ['++', '+-', '-+']):
+                trans_type = 'income'
+                symbol = '+'
+            else:
+                trans_type = 'expense'
+                symbol = '-'
+            
+            return result, trans_type, symbol
+            
+        except Exception as e:
+            print(f"❌ Calculation error: {e}")
+            return None, f"❌ Calculation error: {str(e)}"
+        
     def get_user_transactions(self, user_id):
         """Get transactions for a specific user"""
         if user_id not in self.transactions:
@@ -483,6 +528,8 @@ _Wealth grows one transaction at a time_
                 if text == "0":
                     self.delete_mode[chat_id] = False
                     self.send_message(chat_id, "✅ Exit delete mode. Back to normal operation.", reply_markup=self.get_main_menu())
+
+                
                 else:
                     selected_number = int(text)
                     if selected_number in transaction_map:
@@ -836,6 +883,80 @@ Use the menu below or just start tracking!"""
         else:
             # Regular transaction processing
             print(f"🔍 DEBUG: Processing transaction - text: '{text}'")
+            
+            # Check if it's a calculation expression (ADD THIS PART)
+            if any(op in text for op in ['+', '-', '*', '/', '%']) and any(char.isdigit() for char in text):
+                # Try to calculate the expression
+                result = self.calculate_expression(text)
+                
+                if result is not None and result[0] is not None:
+                    amount, trans_type, symbol = result
+                    
+                    # Store pending transaction
+                    self.pending[chat_id] = {
+                        'amount': amount, 
+                        'text': f"{text} = {symbol}{amount:,.0f}₴",
+                        'category': "Salary" if trans_type == 'income' else "Other",
+                        'type': trans_type
+                    }
+                    
+                    # Show calculation result and ask for category
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    if trans_type == 'income':
+                        if user_lang == 'uk':
+                            message = f"🧮 Розрахунок: {text}\n💰 Результат: +{amount:,.0f}₴\n📝 Оберіть категорію:"
+                        else:
+                            message = f"🧮 Calculation: {text}\n💰 Result: +{amount:,.0f}₴\n📝 Select category:"
+                            
+                        # Create category keyboard
+                        if user_lang == 'uk':
+                            income_cats = ["Зарплата", "Бізнес"]
+                        else:
+                            income_cats = list(self.income_categories.keys())
+                        
+                        keyboard_rows = []
+                        for i in range(0, len(income_cats), 2):
+                            row = []
+                            for cat in income_cats[i:i+2]:
+                                row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                            keyboard_rows.append(row)
+                        
+                        keyboard = {"inline_keyboard": keyboard_rows}
+                        
+                    else:
+                        # For other transaction types, just confirm
+                        if user_lang == 'uk':
+                            type_names = {
+                                'expense': 'Витрата',
+                                'savings': 'Заощадження', 
+                                'debt': 'Борг',
+                                'debt_return': 'Повернення боргу',
+                                'savings_withdraw': 'Зняття заощаджень'
+                            }
+                            message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
+                        else:
+                            type_names = {
+                                'expense': 'Expense',
+                                'savings': 'Savings',
+                                'debt': 'Debt',
+                                'debt_return': 'Debt Return', 
+                                'savings_withdraw': 'Savings Withdraw'
+                            }
+                            message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+                        
+                        keyboard = {"inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
+                        ]]}
+                    
+                    self.send_message(chat_id, message, keyboard)
+                    return
+                elif result is not None and result[0] is None:
+                    # Calculation error
+                    self.send_message(chat_id, result[1])
+                    return
+            
+            # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
         
             if amount is not None:
