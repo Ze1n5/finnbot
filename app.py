@@ -152,90 +152,217 @@ async def handle_text_message(update: Update, context: CallbackContext):
 def serve_mini_app():
     return """
     <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Financial Dashboard</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                margin: 0; 
-                padding: 20px; 
-                background: #1a1a1a; 
-                color: white; 
-            }
-            .container { max-width: 400px; margin: 0 auto; }
-            .card { 
-                background: #2d2d2d; 
-                padding: 20px; 
-                margin: 10px 0; 
-                border-radius: 10px; 
-            }
-            .loading { color: #888; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>💰 Financial Dashboard</h2>
-            
-            <div class="card">
-                <h3>Balance</h3>
-                <h1 id="balance" class="loading">Loading...</h1>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            padding: 24px 20px 16px;
+            text-align: center;
+            border-bottom: 1px solid #e5e5e7;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        
+        .balance-section {
+            padding: 24px 20px;
+            text-align: center;
+            border-bottom: 1px solid #e5e5e7;
+        }
+        
+        .balance-label {
+            font-size: 16px;
+            color: #86868b;
+            margin-bottom: 8px;
+        }
+        
+        .balance-amount {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1d1d1f;
+        }
+        
+        .summary-section {
+            display: flex;
+            padding: 20px;
+            border-bottom: 1px solid #e5e5e7;
+        }
+        
+        .summary-item {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: #86868b;
+            margin-bottom: 4px;
+        }
+        
+        .summary-amount {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .income-amount {
+            color: #34c759;
+        }
+        
+        .spending-amount {
+            color: #ff3b30;
+        }
+        
+        .savings-amount {
+            color: #007aff;
+        }
+        
+        .transactions-section {
+            padding: 20px;
+        }
+        
+        .transactions-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1d1d1f;
+        }
+        
+        .transaction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f2f2f7;
+        }
+        
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+        
+        .transaction-info {
+            display: flex;
+            align-items: center;
+        }
+        
+        .transaction-emoji {
+            font-size: 20px;
+            margin-right: 12px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .transaction-name {
+            font-size: 16px;
+            color: #1d1d1f;
+        }
+        
+        .transaction-amount {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        
+        .rent-amount {
+            color: #ff3b30;
+        }
+        
+        .food-amount {
+            color: #ff3b30;
+        }
+        
+        .other-amount {
+            color: #007aff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Balance</h1>
+        </div>
+        
+        <div class="balance-section">
+            <div class="balance-label">Balance</div>
+            <div class="balance-amount">20,000</div>
+        </div>
+        
+        <div class="summary-section">
+            <div class="summary-item">
+                <div class="summary-label">Income</div>
+                <div class="summary-amount income-amount">20,000</div>
             </div>
-            
-            <div class="card">
-                <h3>Income vs Expenses</h3>
-                <p>Income: <span id="income" class="loading">0</span>₴</p>
-                <p>Expenses: <span id="expenses" class="loading">0</span>₴</p>
+            <div class="summary-item">
+                <div class="summary-label">Spending</div>
+                <div class="summary-amount spending-amount">1,000</div>
             </div>
-            
-            <div class="card">
-                <h3>Recent Activity</h3>
-                <p>Transactions: <span id="transactionCount" class="loading">0</span></p>
-                <p>Incomes: <span id="incomeCount" class="loading">0</span></p>
+            <div class="summary-item">
+                <div class="summary-label">Savings</div>
+                <div class="summary-amount savings-amount">12,000</div>
             </div>
         </div>
         
-        <script>
-            // Load real data from API
-            async function loadData() {
-                try {
-                    console.log('Loading financial data...');
-                    const response = await fetch('/api/financial-data');
-                    const data = await response.json();
-                    
-                    console.log('Real data received:', data);
-                    
-                    // Update UI with real data
-                    document.getElementById('balance').textContent = data.total_balance + '₴';
-                    document.getElementById('balance').className = '';
-                    
-                    document.getElementById('income').textContent = data.total_income;
-                    document.getElementById('income').className = '';
-                    
-                    document.getElementById('expenses').textContent = Math.abs(data.total_expenses);
-                    document.getElementById('expenses').className = '';
-                    
-                    document.getElementById('transactionCount').textContent = data.transaction_count;
-                    document.getElementById('transactionCount').className = '';
-                    
-                    document.getElementById('incomeCount').textContent = data.income_count;
-                    document.getElementById('incomeCount').className = '';
-                    
-                } catch (error) {
-                    console.error('Failed to load data:', error);
-                    document.getElementById('balance').textContent = 'Error loading data';
-                }
-            }
+        <div class="transactions-section">
+            <div class="transactions-header">Transactions</div>
             
-            // Load data when page opens
-            document.addEventListener('DOMContentLoaded', loadData);
-        </script>
-    </body>
-    </html>
-    """
+            <div class="transaction-item">
+                <div class="transaction-info">
+                    <div class="transaction-emoji">🏠</div>
+                    <div class="transaction-name">Rent</div>
+                </div>
+                <div class="transaction-amount rent-amount">12,000</div>
+            </div>
+            
+            <div class="transaction-item">
+                <div class="transaction-info">
+                    <div class="transaction-emoji">🍕</div>
+                    <div class="transaction-name">Food</div>
+                </div>
+                <div class="transaction-amount food-amount">1,000</div>
+            </div>
+            
+            <div class="transaction-item">
+                <div class="transaction-info">
+                    <div class="transaction-emoji">🍽️</div>
+                    <div class="transaction-name">food</div>
+                </div>
+                <div class="transaction-amount other-amount">11,000</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
 
 # ========== TELEGRAM BOT SETUP ==========
 
