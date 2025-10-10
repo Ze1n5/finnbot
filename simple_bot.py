@@ -1433,6 +1433,102 @@ def api_financial_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
+    
+
+@flask_app.route('/api/transactions')
+def api_transactions():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        all_transactions = bot_instance.transactions
+        all_transactions_list = []
+        
+        # Collect all transactions from all users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            # Add user_id to transaction for uniqueness
+                            transaction_with_user = transaction.copy()
+                            transaction_with_user['user_id'] = user_id
+                            all_transactions_list.append(transaction_with_user)
+        
+        # Sort by date (newest first)
+        all_transactions_list.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_transactions = all_transactions_list[start_idx:end_idx]
+        
+        # Format transactions for display
+        formatted_transactions = []
+        for transaction in paginated_transactions:
+            amount = float(transaction.get('amount', 0))
+            trans_type = transaction.get('type', 'expense')
+            description = transaction.get('description', 'Unknown')
+            category = transaction.get('category', 'Other')
+            timestamp = transaction.get('date', '')
+            
+            # Determine emoji and display name
+            emoji = "💰"
+            display_name = description
+            
+            if trans_type == 'income':
+                emoji = "💵"
+                display_name = category
+            elif trans_type == 'expense':
+                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                    emoji = "🏠"
+                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                    emoji = "🍕"
+                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                    emoji = "🚗"
+                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                    emoji = "🛍️"
+                else:
+                    emoji = "🛒"
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = "Savings"
+            elif trans_type == 'debt':
+                emoji = "💳"
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+            
+            # Truncate long descriptions
+            if len(display_name) > 25:
+                display_name = display_name[:22] + "..."
+            
+            formatted_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "amount": amount,
+                "timestamp": timestamp
+            })
+        
+        has_more = len(all_transactions_list) > end_idx
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'has_more': has_more,
+            'current_page': page,
+            'total_transactions': len(all_transactions_list)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in transactions API: {e}")
+        return jsonify({'error': 'Failed to load transactions'}), 500
 
 # Serve mini app main page
 # ========== MINI-APP ROUTES ==========
@@ -1471,23 +1567,12 @@ def serve_mini_app():
             box-shadow: none;
             overflow: hidden;
             min-height: 100vh;
-        }
-        
-        .header {
-            padding: 60px 20px 24px;
-            text-align: center;
-            border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
-        }
-        
-        .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-            color: #ffffff;
+            display: flex;
+            flex-direction: column;
         }
         
         .balance-section {
-            padding: 24px 20px;
+            padding: 40px 20px 24px;
             text-align: center;
             border-bottom: 1px solid #2c2c2e;
             background-color: #1c1c1e;
@@ -1544,6 +1629,7 @@ def serve_mini_app():
             padding: 20px;
             background-color: #1c1c1e;
             flex-grow: 1;
+            overflow-y: auto;
         }
         
         .transactions-header {
@@ -1556,7 +1642,7 @@ def serve_mini_app():
         .transaction-item {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             padding: 12px 0;
             border-bottom: 1px solid #2c2c2e;
         }
@@ -1567,7 +1653,8 @@ def serve_mini_app():
         
         .transaction-info {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
+            flex: 1;
         }
         
         .transaction-emoji {
@@ -1575,64 +1662,80 @@ def serve_mini_app():
             margin-right: 12px;
             width: 24px;
             text-align: center;
+            margin-top: 2px;
+        }
+        
+        .transaction-details {
+            flex: 1;
         }
         
         .transaction-name {
             font-size: 16px;
             color: #ffffff;
+            margin-bottom: 4px;
+        }
+        
+        .transaction-date {
+            font-size: 12px;
+            color: #8e8e93;
         }
         
         .transaction-amount {
             font-size: 16px;
             font-weight: 600;
+            text-align: right;
+            min-width: 80px;
         }
         
-        .rent-amount {
-            color: #ff453a;
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #8e8e93;
         }
         
-        .food-amount {
-            color: #ff453a;
-        }
-        
-        .other-amount {
-            color: #0a84ff;
+        .no-transactions {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8e8e93;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Balance</h1>
-        </div>
-        
         <div class="balance-section">
             <div class="balance-label">Balance</div>
-            <div class="balance-amount" id="balance-amount">Loading...</div>
+            <div class="balance-amount" id="balance-amount">0</div>
         </div>
         
         <div class="summary-section">
             <div class="summary-item">
                 <div class="summary-label">Income</div>
-                <div class="summary-amount income-amount" id="income-amount">Loading...</div>
+                <div class="summary-amount income-amount" id="income-amount">0</div>
             </div>
             <div class="summary-item">
                 <div class="summary-label">Spending</div>
-                <div class="summary-amount spending-amount" id="spending-amount">Loading...</div>
+                <div class="summary-amount spending-amount" id="spending-amount">0</div>
             </div>
             <div class="summary-item">
                 <div class="summary-label">Savings</div>
-                <div class="summary-amount savings-amount" id="savings-amount">Loading...</div>
+                <div class="summary-amount savings-amount" id="savings-amount">0</div>
             </div>
         </div>
         
         <div class="transactions-section" id="transactions-section">
             <div class="transactions-header">Transactions</div>
-            <div id="transactions-list">Loading transactions...</div>
+            <div id="transactions-list">
+                <div class="loading">Loading transactions...</div>
+            </div>
         </div>
     </div>
 
-        <script>
+    <script>
+        let currentPage = 1;
+        let isLoading = false;
+        let hasMoreTransactions = true;
+        const transactionsPerPage = 10;
+
         // Fetch real data from your API
         async function loadFinancialData() {
             try {
@@ -1644,60 +1747,166 @@ def serve_mini_app():
                 
                 console.log('📊 API Response:', data);
                 
-                // Update the UI with real data - FIXED FIELD NAMES
+                // Update the UI with real data
                 document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
                 document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
                 document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
                 document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
                 
-                // Update transactions
-                const transactionsList = document.getElementById('transactions-list');
-                if (data.transactions && data.transactions.length > 0) {
-                    transactionsList.innerHTML = '';
-                    data.transactions.forEach(transaction => {
-                        const transactionElement = document.createElement('div');
-                        transactionElement.className = 'transaction-item';
-                        
-                        // Determine if it's income or expense based on transaction type logic
-                        // For expenses, we show negative amounts
-                        const isIncome = transaction.amount > 0 && transaction.name !== "Savings";
-                        const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-                        const amountDisplay = isIncome ? 
-                            `+${formatCurrency(transaction.amount)}` : 
-                            `-${formatCurrency(transaction.amount)}`;
-                        
-                        transactionElement.innerHTML = `
-                            <div class="transaction-info">
-                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                                <div class="transaction-name">${transaction.name || 'Transaction'}</div>
-                            </div>
-                            <div class="transaction-amount ${amountClass}">
-                                ${amountDisplay}₴
-                            </div>
-                        `;
-                        transactionsList.appendChild(transactionElement);
-                    });
-                } else {
-                    transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">No transactions yet</div></div></div>';
-                }
-                
             } catch (error) {
                 console.error('Error loading financial data:', error);
-                // Show fallback data
                 document.getElementById('balance-amount').textContent = '0';
                 document.getElementById('income-amount').textContent = '0';
                 document.getElementById('spending-amount').textContent = '0';
                 document.getElementById('savings-amount').textContent = '0';
-                document.getElementById('transactions-list').innerHTML = '<div class="transaction-item">Failed to load data</div>';
             }
         }
-        
+
+        // Load transactions with pagination
+        async function loadTransactions(page = 1) {
+            if (isLoading) return;
+            
+            isLoading = true;
+            
+            try {
+                const response = await fetch(`/api/transactions?page=${page}&limit=${transactionsPerPage}`);
+                if (!response.ok) {
+                    throw new Error('API response not ok');
+                }
+                const data = await response.json();
+                
+                const transactionsList = document.getElementById('transactions-list');
+                
+                // Remove loading message on first load
+                if (page === 1) {
+                    transactionsList.innerHTML = '';
+                }
+                
+                if (data.transactions && data.transactions.length > 0) {
+                    data.transactions.forEach(transaction => {
+                        const transactionElement = createTransactionElement(transaction);
+                        transactionsList.appendChild(transactionElement);
+                    });
+                    
+                    // Check if there are more transactions
+                    hasMoreTransactions = data.has_more || false;
+                    
+                    // Remove loading indicator if it exists
+                    const existingLoader = document.getElementById('loading-indicator');
+                    if (existingLoader) {
+                        existingLoader.remove();
+                    }
+                    
+                    // Add loading indicator if there are more transactions
+                    if (hasMoreTransactions) {
+                        const loadingIndicator = document.createElement('div');
+                        loadingIndicator.className = 'loading';
+                        loadingIndicator.id = 'loading-indicator';
+                        loadingIndicator.textContent = 'Loading more transactions...';
+                        transactionsList.appendChild(loadingIndicator);
+                    }
+                } else if (page === 1) {
+                    // No transactions at all
+                    transactionsList.innerHTML = `
+                        <div class="no-transactions">
+                            <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
+                            <div>No transactions yet</div>
+                            <div style="font-size: 12px; margin-top: 8px;">Start adding transactions in the bot</div>
+                        </div>
+                    `;
+                }
+                
+                currentPage = page;
+                
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+                if (page === 1) {
+                    document.getElementById('transactions-list').innerHTML = 
+                        '<div class="loading">Failed to load transactions</div>';
+                }
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // Create transaction element with date
+        function createTransactionElement(transaction) {
+            const transactionElement = document.createElement('div');
+            transactionElement.className = 'transaction-item';
+            
+            const isIncome = transaction.amount > 0 && transaction.name !== "Savings";
+            const amountClass = isIncome ? 'income-amount' : 'spending-amount';
+            const amountDisplay = isIncome ? 
+                `+${formatCurrency(transaction.amount)}` : 
+                `-${formatCurrency(transaction.amount)}`;
+            
+            // Format date
+            const transactionDate = new Date(transaction.timestamp || transaction.date);
+            const formattedDate = formatDate(transactionDate);
+            
+            transactionElement.innerHTML = `
+                <div class="transaction-info">
+                    <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                    <div class="transaction-details">
+                        <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                        <div class="transaction-date">${formattedDate}</div>
+                    </div>
+                </div>
+                <div class="transaction-amount ${amountClass}">
+                    ${amountDisplay}₴
+                </div>
+            `;
+            
+            return transactionElement;
+        }
+
+        // Format date as "Oct 11, 2:50 PM"
+        function formatDate(date) {
+            if (isNaN(date.getTime())) {
+                return 'Recent';
+            }
+            
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[date.getMonth()];
+            const day = date.getDate();
+            
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            
+            hours = hours % 12;
+            hours = hours ? hours : 12; // the hour '0' should be '12'
+            
+            return `${month} ${day}, ${hours}:${minutes} ${ampm}`;
+        }
+
         function formatCurrency(amount) {
             return new Intl.NumberFormat('en-US').format(amount);
         }
-        
-        // Load data when page loads
-        document.addEventListener('DOMContentLoaded', loadFinancialData);
+
+        // Infinite scroll handler
+        function handleScroll() {
+            const transactionsSection = document.getElementById('transactions-section');
+            const scrollTop = transactionsSection.scrollTop;
+            const scrollHeight = transactionsSection.scrollHeight;
+            const clientHeight = transactionsSection.clientHeight;
+            
+            // Load more when 100px from bottom
+            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreTransactions && !isLoading) {
+                loadTransactions(currentPage + 1);
+            }
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load financial data and first page of transactions
+            loadFinancialData();
+            loadTransactions(1);
+            
+            // Add scroll event listener for infinite scroll
+            const transactionsSection = document.getElementById('transactions-section');
+            transactionsSection.addEventListener('scroll', handleScroll);
+        });
     </script>
 </body>
 </html>
