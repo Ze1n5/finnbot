@@ -419,46 +419,75 @@ class SimpleFinnBot:
         user_transactions = self.get_user_transactions(user_id)
         current_savings = sum(t['amount'] for t in user_transactions if t['type'] == 'savings')
         
+        # Get user language
+        user_lang = self.get_user_language(user_id)
+        
         # UAH-specific savings rules
         if income_amount > 100000:
             # Large income (>100,000 UAH) - recommend 10% savings
             min_save = income_amount * 0.10
             max_save = income_amount * 0.15
-            min_percent = 10
-            max_percent = 15
-            urgency = "🏦 Conservative Savings"
-            reason = "Large income detected! 10% savings will build significant wealth over time."
+            if user_lang == 'uk':
+                urgency = "🏦 Консервативні заощадження"
+                reason = "Великий дохід виявлено! 10% заощаджень створять значне багатство з часом."
+            else:
+                urgency = "🏦 Conservative Savings"
+                reason = "Large income detected! 10% savings will build significant wealth over time."
             
         else:
             # Smaller income (≤100,000 UAH) - recommend 15-20% savings
             min_save = income_amount * 0.15
             max_save = income_amount * 0.20
-            min_percent = 15
-            max_percent = 20
-            urgency = "💪 Balanced Approach"
-            reason = "Perfect income range for building savings! 15-20% is the sweet spot."
+            if user_lang == 'uk':
+                urgency = "💪 Збалансований підхід"
+                reason = "Ідеальний діапазон доходу для накопичення заощаджень! 15-20% - це ідеальний баланс."
+            else:
+                urgency = "💪 Balanced Approach"
+                reason = "Perfect income range for building savings! 15-20% is the sweet spot."
         
         # Adjust based on current savings in UAH context
-        if current_savings < 50000:
-            reason += " You're building your initial emergency fund - every UAH counts! 💰"
-        elif current_savings < 200000:
-            reason += " Good progress! You're building a solid financial cushion. 🎯"
+        if user_lang == 'uk':
+            if current_savings < 50000:
+                reason += " Ви будуєте свій початковий резервний фонд - кожна гривня має значення! 💰"
+            elif current_savings < 200000:
+                reason += " Хороший прогрес! Ви будуєте солідну фінансову подушку. 🎯"
+            else:
+                reason += " Відмінна дисципліна заощаджень! Ви будуєте реальну фінансову безпеку. 🚀"
         else:
-            reason += " Excellent savings discipline! You're building real financial security. 🚀"
+            if current_savings < 50000:
+                reason += " You're building your initial emergency fund - every UAH counts! 💰"
+            elif current_savings < 200000:
+                reason += " Good progress! You're building a solid financial cushion. 🎯"
+            else:
+                reason += " Excellent savings discipline! You're building real financial security. 🚀"
         
-        # Format amounts in UAH (English only)
-        message = f"""
-{urgency}
+        # Format amounts in UAH
+        if user_lang == 'uk':
+            message = f"""
+    {urgency}
 
-*New income* and it's time for savings 🏦
+    *Новий дохід* і час для заощаджень 🏦
 
-I recommend saving: {min_save:,.0f}₴ - {max_save:,.0f}₴
+    Рекомендую заощадити: {min_save:,.0f}₴ - {max_save:,.0f}₴
 
-💸 *Quick Save Commands:*
-`++{min_save:.0f}` - Save {min_save:,.0f}₴ | `++{max_save:.0f}` - Save {max_save:,.0f}₴
+    💸 *Швидкі команди для збереження:*
+    `++{min_save:.0f}` - Зберегти {min_save:,.0f}₴ | `++{max_save:.0f}` - Зберегти {max_save:,.0f}₴
 
-_Wealth grows one transaction at a time_
-"""
+    _Багатство зростає з кожною транзакцією_
+    """
+        else:
+            message = f"""
+    {urgency}
+
+    *New income* and it's time for savings 🏦
+
+    I recommend saving: {min_save:,.0f}₴ - {max_save:,.0f}₴
+
+    💸 *Quick Save Commands:*
+    `++{min_save:.0f}` - Save {min_save:,.0f}₴ | `++{max_save:.0f}` - Save {max_save:,.0f}₴
+
+    _Wealth grows one transaction at a time_
+    """
         return message
 
     def send_message(self, chat_id, text, keyboard=None, parse_mode=None, reply_markup=None):
