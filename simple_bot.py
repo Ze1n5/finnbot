@@ -1384,6 +1384,7 @@ def api_financial_data():
 # ========== MINI-APP ROUTES ==========
 
 @flask_app.route('/mini-app')
+@app.route('/mini-app')
 def serve_mini_app():
     return """
     <!DOCTYPE html>
@@ -1401,58 +1402,61 @@ def serve_mini_app():
         }
         
         body {
-            background-color: #f5f5f7;
-            color: #1d1d1f;
-            padding: 20px;
+            background-color: #000000;
+            color: #ffffff;
+            padding: 0;
             display: flex;
             justify-content: center;
-            align-items: center;
             min-height: 100vh;
         }
         
         .container {
             width: 100%;
             max-width: 400px;
-            background-color: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            background-color: #1c1c1e;
+            border-radius: 0;
+            box-shadow: none;
             overflow: hidden;
+            min-height: 100vh;
         }
         
         .header {
-            padding: 24px 20px 16px;
+            padding: 60px 20px 24px;
             text-align: center;
-            border-bottom: 1px solid #e5e5e7;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
         }
         
         .header h1 {
             font-size: 24px;
             font-weight: 600;
-            color: #1d1d1f;
+            color: #ffffff;
         }
         
         .balance-section {
             padding: 24px 20px;
             text-align: center;
-            border-bottom: 1px solid #e5e5e7;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
         }
         
         .balance-label {
             font-size: 16px;
-            color: #86868b;
+            color: #8e8e93;
             margin-bottom: 8px;
         }
         
         .balance-amount {
             font-size: 36px;
             font-weight: 700;
-            color: #1d1d1f;
+            color: #ffffff;
         }
         
         .summary-section {
             display: flex;
             padding: 20px;
-            border-bottom: 1px solid #e5e5e7;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
         }
         
         .summary-item {
@@ -1462,7 +1466,7 @@ def serve_mini_app():
         
         .summary-label {
             font-size: 14px;
-            color: #86868b;
+            color: #8e8e93;
             margin-bottom: 4px;
         }
         
@@ -1472,26 +1476,28 @@ def serve_mini_app():
         }
         
         .income-amount {
-            color: #34c759;
+            color: #30d158;
         }
         
         .spending-amount {
-            color: #ff3b30;
+            color: #ff453a;
         }
         
         .savings-amount {
-            color: #007aff;
+            color: #0a84ff;
         }
         
         .transactions-section {
             padding: 20px;
+            background-color: #1c1c1e;
+            flex-grow: 1;
         }
         
         .transactions-header {
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 16px;
-            color: #1d1d1f;
+            color: #ffffff;
         }
         
         .transaction-item {
@@ -1499,7 +1505,7 @@ def serve_mini_app():
             justify-content: space-between;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid #f2f2f7;
+            border-bottom: 1px solid #2c2c2e;
         }
         
         .transaction-item:last-child {
@@ -1520,25 +1526,24 @@ def serve_mini_app():
         
         .transaction-name {
             font-size: 16px;
-            color: #1d1d1f;
+            color: #ffffff;
         }
         
         .transaction-amount {
             font-size: 16px;
             font-weight: 600;
-            color: #1d1d1f;
         }
         
         .rent-amount {
-            color: #ff3b30;
+            color: #ff453a;
         }
         
         .food-amount {
-            color: #ff3b30;
+            color: #ff453a;
         }
         
         .other-amount {
-            color: #007aff;
+            color: #0a84ff;
         }
     </style>
 </head>
@@ -1550,52 +1555,79 @@ def serve_mini_app():
         
         <div class="balance-section">
             <div class="balance-label">Balance</div>
-            <div class="balance-amount">20,000</div>
+            <div class="balance-amount" id="balance-amount">Loading...</div>
         </div>
         
         <div class="summary-section">
             <div class="summary-item">
                 <div class="summary-label">Income</div>
-                <div class="summary-amount income-amount">20,000</div>
+                <div class="summary-amount income-amount" id="income-amount">Loading...</div>
             </div>
             <div class="summary-item">
                 <div class="summary-label">Spending</div>
-                <div class="summary-amount spending-amount">1,000</div>
+                <div class="summary-amount spending-amount" id="spending-amount">Loading...</div>
             </div>
             <div class="summary-item">
                 <div class="summary-label">Savings</div>
-                <div class="summary-amount savings-amount">12,000</div>
+                <div class="summary-amount savings-amount" id="savings-amount">Loading...</div>
             </div>
         </div>
         
-        <div class="transactions-section">
+        <div class="transactions-section" id="transactions-section">
             <div class="transactions-header">Transactions</div>
-            
-            <div class="transaction-item">
-                <div class="transaction-info">
-                    <div class="transaction-emoji">🏠</div>
-                    <div class="transaction-name">Rent</div>
-                </div>
-                <div class="transaction-amount rent-amount">12,000</div>
-            </div>
-            
-            <div class="transaction-item">
-                <div class="transaction-info">
-                    <div class="transaction-emoji">🍕</div>
-                    <div class="transaction-name">Food</div>
-                </div>
-                <div class="transaction-amount food-amount">1,000</div>
-            </div>
-            
-            <div class="transaction-item">
-                <div class="transaction-info">
-                    <div class="transaction-emoji">🍽️</div>
-                    <div class="transaction-name">food</div>
-                </div>
-                <div class="transaction-amount other-amount">11,000</div>
-            </div>
+            <div id="transactions-list">Loading transactions...</div>
         </div>
     </div>
+
+    <script>
+        // Fetch real data from your API
+        async function loadFinancialData() {
+            try {
+                const response = await fetch('/api/financial-data');
+                const data = await response.json();
+                
+                // Update the UI with real data
+                document.getElementById('balance-amount').textContent = formatCurrency(data.balance);
+                document.getElementById('income-amount').textContent = formatCurrency(data.income);
+                document.getElementById('spending-amount').textContent = formatCurrency(data.spending);
+                document.getElementById('savings-amount').textContent = formatCurrency(data.savings);
+                
+                // Update transactions
+                const transactionsList = document.getElementById('transactions-list');
+                transactionsList.innerHTML = '';
+                
+                data.transactions.forEach(transaction => {
+                    const transactionElement = document.createElement('div');
+                    transactionElement.className = 'transaction-item';
+                    transactionElement.innerHTML = `
+                        <div class="transaction-info">
+                            <div class="transaction-emoji">${transaction.emoji}</div>
+                            <div class="transaction-name">${transaction.name}</div>
+                        </div>
+                        <div class="transaction-amount ${transaction.amount < 0 ? 'spending-amount' : 'income-amount'}">
+                            ${formatCurrency(Math.abs(transaction.amount))}
+                        </div>
+                    `;
+                    transactionsList.appendChild(transactionElement);
+                });
+                
+            } catch (error) {
+                console.error('Error loading financial data:', error);
+                document.getElementById('balance-amount').textContent = 'Error';
+                document.getElementById('income-amount').textContent = 'Error';
+                document.getElementById('spending-amount').textContent = 'Error';
+                document.getElementById('savings-amount').textContent = 'Error';
+                document.getElementById('transactions-list').textContent = 'Failed to load transactions';
+            }
+        }
+        
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US').format(amount);
+        }
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadFinancialData);
+    </script>
 </body>
 </html>
     """
