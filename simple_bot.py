@@ -1632,7 +1632,7 @@ def serve_mini_app():
         </div>
     </div>
 
-    <script>
+        <script>
         // Fetch real data from your API
         async function loadFinancialData() {
             try {
@@ -1644,43 +1644,42 @@ def serve_mini_app():
                 
                 console.log('📊 API Response:', data);
                 
-                // Update the UI with real data - use the correct field names from your API
-                document.getElementById('balance-amount').textContent = formatCurrency(data.total_balance || 0);
-                document.getElementById('income-amount').textContent = formatCurrency(data.total_income || 0);
-                document.getElementById('spending-amount').textContent = formatCurrency(data.total_expenses || 0);
+                // Update the UI with real data - FIXED FIELD NAMES
+                document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
+                document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
+                document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
                 document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
                 
-                // Update transactions - your API doesn't return transactions yet, so show message
                 // Update transactions
-        const transactionsList = document.getElementById('transactions-list');
-        if (data.transactions && data.transactions.length > 0) {
-            transactionsList.innerHTML = '';
-            data.transactions.forEach(transaction => {
-                const transactionElement = document.createElement('div');
-                transactionElement.className = 'transaction-item';
-                
-                // Determine if it's income or expense based on amount and context
-                // For now, we'll assume positive amounts are income, negative are expenses
-                const isIncome = transaction.amount > 0;
-                const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-                const amountDisplay = isIncome ? 
-                    `+${formatCurrency(transaction.amount)}` : 
-                    `-${formatCurrency(transaction.amount)}`;
-                
-                transactionElement.innerHTML = `
-                    <div class="transaction-info">
-                        <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                        <div class="transaction-name">${transaction.name || 'Transaction'}</div>
-                    </div>
-                    <div class="transaction-amount ${amountClass}">
-                        ${amountDisplay}₴
-                    </div>
-                `;
-                transactionsList.appendChild(transactionElement);
-            });
-        } else {
-            transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">No transactions yet</div></div></div>';
-        }
+                const transactionsList = document.getElementById('transactions-list');
+                if (data.transactions && data.transactions.length > 0) {
+                    transactionsList.innerHTML = '';
+                    data.transactions.forEach(transaction => {
+                        const transactionElement = document.createElement('div');
+                        transactionElement.className = 'transaction-item';
+                        
+                        // Determine if it's income or expense based on transaction type logic
+                        // For expenses, we show negative amounts
+                        const isIncome = transaction.amount > 0 && transaction.name !== "Savings";
+                        const amountClass = isIncome ? 'income-amount' : 'spending-amount';
+                        const amountDisplay = isIncome ? 
+                            `+${formatCurrency(transaction.amount)}` : 
+                            `-${formatCurrency(transaction.amount)}`;
+                        
+                        transactionElement.innerHTML = `
+                            <div class="transaction-info">
+                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                                <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                            </div>
+                            <div class="transaction-amount ${amountClass}">
+                                ${amountDisplay}₴
+                            </div>
+                        `;
+                        transactionsList.appendChild(transactionElement);
+                    });
+                } else {
+                    transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">No transactions yet</div></div></div>';
+                }
                 
             } catch (error) {
                 console.error('Error loading financial data:', error);
