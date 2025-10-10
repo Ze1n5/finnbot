@@ -91,6 +91,13 @@ class SimpleFinnBot:
             'expenses': "Витрати"
         }
     }
+        
+    def get_user_transactions(self, user_id):
+        """Get transactions for a specific user"""
+        if user_id not in self.transactions:
+            self.transactions[user_id] = []
+        return self.transactions[user_id]
+    
     def load_user_languages(self):
         """Load user language preferences"""
         try:
