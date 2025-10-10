@@ -1316,6 +1316,7 @@ def api_financial_data():
         total_income = 0
         total_expenses = 0
         transaction_count = 0
+        recent_transactions = []
 
         # Process all transactions for ALL users
         if isinstance(all_transactions, dict):
@@ -1323,54 +1324,67 @@ def api_financial_data():
                 if isinstance(user_transactions, list):
                     print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
                     
-                    for transaction in user_transactions:
+                    for transaction in user_transactions[-10:]:  # Last 10 transactions
                         if isinstance(transaction, dict):
                             amount = float(transaction.get('amount', 0))
                             trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
                             
-                            # LOG EVERY TRANSACTION FOR VERIFICATION
-                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            # Add to recent transactions for display
+                            emoji = "💰"
+                            if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                                emoji = "🏠"
+                            elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                                emoji = "🍕"
+                            elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                                emoji = "🚗"
+                            elif any(word in description.lower() for word in ['salary', 'income']):
+                                emoji = "💵"
+                            elif trans_type == 'savings':
+                                emoji = "🏦"
+                            elif trans_type == 'debt':
+                                emoji = "💳"
+                            
+                            recent_transactions.append({
+                                "emoji": emoji,
+                                "name": description[:30] + "..." if len(description) > 30 else description,
+                                "amount": amount if trans_type == 'income' else -amount
+                            })
                             
                             # CORRECTED BALANCE CALCULATION
                             if trans_type == 'income':
                                 balance += amount
                                 total_income += amount
-                                print(f"      → Income: +{amount} | Balance: {balance}")
                             elif trans_type == 'expense':
                                 balance -= amount
                                 total_expenses += amount
-                                print(f"      → Expense: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings':
                                 balance -= amount  # Money moved to savings
-                                print(f"      → Savings: -{amount} | Balance: {balance}")
                             elif trans_type == 'debt':
-                                balance += amount  # You receive money as debt - THIS IS CORRECT NOW
-                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                                balance += amount  # You receive money as debt
                             elif trans_type == 'debt_return':
                                 balance -= amount  # You pay back debt
-                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings_withdraw':
                                 balance += amount  # You take money from savings
-                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
                             
                             transaction_count += 1
 
-        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        # FINAL VERIFICATION
         print("=" * 50)
-        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"✅ FINAL CALCULATION:")
         print(f"   Balance: {balance}")
-        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
         print(f"   Transaction Count: {transaction_count}")
         print("=" * 50)
         
         response_data = {
-            'total_balance': balance,
-            'total_income': total_income,
-            'total_expenses': total_expenses,
+            'balance': balance,
+            'income': total_income,
+            'spending': total_expenses,
             'savings': max(balance, 0),
-            'transaction_count': transaction_count,
-            'income_count': 0
+            'transactions': recent_transactions[-5:],  # Last 5 transactions
+            'transaction_count': transaction_count
         }
         
         return jsonify(response_data)
@@ -1380,14 +1394,11 @@ def api_financial_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
-    
+
+# Serve mini app main page
 # ========== MINI-APP ROUTES ==========
 
 @flask_app.route('/mini-app')
-# ========== MINI APP ROUTES ==========
-
-# Serve mini app main page
-@flask_app.route('/mini-app')  # Change this line
 def serve_mini_app():
     return """
     <!DOCTYPE html>
@@ -1587,40 +1598,49 @@ def serve_mini_app():
         async function loadFinancialData() {
             try {
                 const response = await fetch('/api/financial-data');
+                if (!response.ok) {
+                    throw new Error('API response not ok');
+                }
                 const data = await response.json();
                 
-                // Update the UI with real data
-                document.getElementById('balance-amount').textContent = formatCurrency(data.balance);
-                document.getElementById('income-amount').textContent = formatCurrency(data.income);
-                document.getElementById('spending-amount').textContent = formatCurrency(data.spending);
-                document.getElementById('savings-amount').textContent = formatCurrency(data.savings);
+                console.log('📊 API Response:', data);
                 
-                // Update transactions
+                // Update the UI with real data - use the correct field names from your API
+                document.getElementById('balance-amount').textContent = formatCurrency(data.total_balance || 0);
+                document.getElementById('income-amount').textContent = formatCurrency(data.total_income || 0);
+                document.getElementById('spending-amount').textContent = formatCurrency(data.total_expenses || 0);
+                document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
+                
+                // Update transactions - your API doesn't return transactions yet, so show message
                 const transactionsList = document.getElementById('transactions-list');
-                transactionsList.innerHTML = '';
-                
-                data.transactions.forEach(transaction => {
-                    const transactionElement = document.createElement('div');
-                    transactionElement.className = 'transaction-item';
-                    transactionElement.innerHTML = `
-                        <div class="transaction-info">
-                            <div class="transaction-emoji">${transaction.emoji}</div>
-                            <div class="transaction-name">${transaction.name}</div>
-                        </div>
-                        <div class="transaction-amount ${transaction.amount < 0 ? 'spending-amount' : 'income-amount'}">
-                            ${formatCurrency(Math.abs(transaction.amount))}
-                        </div>
-                    `;
-                    transactionsList.appendChild(transactionElement);
-                });
+                if (data.transactions && data.transactions.length > 0) {
+                    transactionsList.innerHTML = '';
+                    data.transactions.forEach(transaction => {
+                        const transactionElement = document.createElement('div');
+                        transactionElement.className = 'transaction-item';
+                        transactionElement.innerHTML = `
+                            <div class="transaction-info">
+                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                                <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                            </div>
+                            <div class="transaction-amount ${transaction.amount < 0 ? 'spending-amount' : 'income-amount'}">
+                                ${formatCurrency(Math.abs(transaction.amount || 0))}
+                            </div>
+                        `;
+                        transactionsList.appendChild(transactionElement);
+                    });
+                } else {
+                    transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">View transactions in bot</div></div></div>';
+                }
                 
             } catch (error) {
                 console.error('Error loading financial data:', error);
-                document.getElementById('balance-amount').textContent = 'Error';
-                document.getElementById('income-amount').textContent = 'Error';
-                document.getElementById('spending-amount').textContent = 'Error';
-                document.getElementById('savings-amount').textContent = 'Error';
-                document.getElementById('transactions-list').textContent = 'Failed to load transactions';
+                // Show fallback data
+                document.getElementById('balance-amount').textContent = '0';
+                document.getElementById('income-amount').textContent = '0';
+                document.getElementById('spending-amount').textContent = '0';
+                document.getElementById('savings-amount').textContent = '0';
+                document.getElementById('transactions-list').innerHTML = '<div class="transaction-item">Failed to load data</div>';
             }
         }
         
