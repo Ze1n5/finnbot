@@ -137,7 +137,7 @@ class SimpleFinnBot:
             self.transactions = {}
 
     def save_user_transaction(self, user_id, transaction):
-        """Add transaction for a specific user and save to file"""
+        #Add transaction for a specific user and save to file
         if user_id not in self.transactions:
             self.transactions[user_id] = []
             
@@ -145,13 +145,13 @@ class SimpleFinnBot:
         self.save_transactions()
     
         # Sync to Railway
-        sync_to_railway({
+        """sync_to_railway({
             'amount': transaction['amount'],
             'description': transaction['description'],
             'category': transaction['category'],
             'timestamp': transaction['date'],
             'type': transaction['type']
-        })
+        })"""
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -219,10 +219,14 @@ class SimpleFinnBot:
     def extract_amount(self, text):
         # Check transaction type - order matters!
         is_savings = '++' in text  # Check for savings FIRST
-        is_income = '+' in text and not is_savings  # Single + but not ++
-        is_debt = text.strip().startswith('-')  # - for debt
         is_debt_return = '+-' in text  # +- for returning debt
         is_savings_withdraw = '-+' in text  # -+ for withdrawing from savings
+        is_income = '+' in text and not is_savings and not is_debt_return and not is_savings_withdraw  # Single + but not others
+        is_debt = text.strip().startswith('-') and not is_savings_withdraw  # - for debt, but not -+
+        
+        print(f"🔍 DEBUG extract_amount: text='{text}'")
+        print(f"   is_income: {is_income}, is_debt: {is_debt}, is_savings: {is_savings}")
+        print(f"   is_debt_return: {is_debt_return}, is_savings_withdraw: {is_savings_withdraw}")
         
         # Find amounts (including those with +, ++, +-, -+ or - signs)
         amounts = re.findall(r'[+-]+\s*(\d+[.,]\d{1,2})|\b(\d+[.,]\d{1,2})\b', text)
@@ -237,12 +241,15 @@ class SimpleFinnBot:
                     except ValueError:
                         continue
                 if amounts_float:
-                    return max(amounts_float), is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                    amount = max(amounts_float)
+                    print(f"   Extracted amount: {amount}")
+                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
         
         # If no amount found with pattern, check if the entire text is a number
         try:
-            clean_text = text.strip()
+            clean_text = text.strip().replace('+', '').replace('-', '')
             amount = float(clean_text)
+            print(f"   Extracted amount (clean): {amount}")
             return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
         except ValueError:
             pass
@@ -252,10 +259,12 @@ class SimpleFinnBot:
         if whole_numbers:
             try:
                 amount = float(max(whole_numbers, key=lambda x: float(x)))
+                print(f"   Extracted amount (whole): {amount}")
                 return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
             except ValueError:
                 pass
         
+        print(f"   No amount found")
         return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
 
     def guess_category(self, text, user_id):
@@ -1137,84 +1146,85 @@ def serve_mini_app():
 @flask_app.route('/api/financial-data')
 def api_financial_data():
     try:
-        print("📊 Fetching financial data for mini-app...")
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
         
-        # Read incomes
-        try:
-            with open('incomes.json', 'r') as f:
-                incomes_data = json.load(f)
-            print(f"💰 Incomes data type: {type(incomes_data)}, data: {incomes_data}")
-        except Exception as e:
-            print(f"❌ Error reading incomes: {e}")
-            incomes_data = {}
-
-        # Read transactions  
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions_data = json.load(f)
-            print(f"📂 Transactions data type: {type(transactions_data)}, keys: {list(transactions_data.keys()) if isinstance(transactions_data, dict) else 'list'}")
-        except Exception as e:
-            print(f"❌ Error reading transactions: {e}")
-            transactions_data = {}
-
-        # Calculate totals
+        # Use the SAME data structure as your bot - don't read from file directly!
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions from the bot instance (same data the bot uses)
+        all_transactions = bot_instance.transactions
+        print(f"📊 Transactions from bot instance: {all_transactions}")
+        
+        # Start with ZERO balance - calculate everything fresh
+        balance = 0
         total_income = 0
         total_expenses = 0
-        all_transactions = []
+        transaction_count = 0
 
-        # Process incomes (your data is in dict format: {"user_id": amount})
-        if isinstance(incomes_data, dict):
-            for user_id, amount in incomes_data.items():
-                if isinstance(amount, (int, float)) and amount > 0:
-                    total_income += amount
-                    all_transactions.append({
-                        'amount': amount,
-                        'type': 'income',
-                        'description': 'Monthly Income'
-                    })
-        elif isinstance(incomes_data, list):
-            for item in incomes_data:
-                if isinstance(item, dict):
-                    amount = item.get('amount', 0)
-                    if isinstance(amount, (int, float)) and amount > 0:
-                        total_income += amount
-
-        # Process transactions (your data is in dict format: {"user_id": [transactions]})
-        if isinstance(transactions_data, dict):
-            for user_id, user_transactions in transactions_data.items():
+        # Process all transactions for ALL users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
                 if isinstance(user_transactions, list):
+                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    
                     for transaction in user_transactions:
                         if isinstance(transaction, dict):
-                            amount = transaction.get('amount', 0)
+                            amount = float(transaction.get('amount', 0))
                             trans_type = transaction.get('type', 'expense')
                             
-                            if isinstance(amount, (int, float)):
-                                if trans_type == 'income' or amount > 0:
-                                    total_income += amount
-                                elif trans_type == 'expense' or amount < 0:
-                                    total_expenses += abs(amount)
-                                
-                                all_transactions.append(transaction)
+                            # LOG EVERY TRANSACTION FOR VERIFICATION
+                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            
+                            # UNAMBIGUOUS BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                                print(f"      → Income: +{amount} | Balance: {balance}")
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                                print(f"      → Expense: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings':
+                                balance -= amount
+                                print(f"      → Savings: -{amount} | Balance: {balance}")
+                            elif trans_type == 'debt':
+                                balance += amount
+                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                            elif trans_type == 'debt_return':
+                                balance -= amount
+                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount
+                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
+                            
+                            transaction_count += 1
 
-        total_balance = total_income - total_expenses
+        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        print("=" * 50)
+        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Transaction Count: {transaction_count}")
+        print("=" * 50)
         
         response_data = {
-            'total_balance': total_balance,
+            'total_balance': balance,
             'total_income': total_income,
             'total_expenses': total_expenses,
-            'savings': max(total_balance, 0),
-            'transaction_count': len(all_transactions),
-            'income_count': len(incomes_data) if isinstance(incomes_data, dict) else 0
+            'savings': max(balance, 0),
+            'transaction_count': transaction_count,
+            'income_count': 0
         }
         
-        print(f"📈 Financial data calculated: {response_data}")
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error in financial data API: {e}")
+        print(f"❌ CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Calculation error'}), 500
 
 @flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
 def add_transaction():
