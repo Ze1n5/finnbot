@@ -123,7 +123,7 @@ class SimpleFinnBot:
                 symbol = '-+'
             elif text.strip().startswith('-') and not '-+' in text:
                 trans_type = 'debt'
-                symbol = '-'
+                symbol = '-'  # But this should INCREASE balance!
             elif '+' in text and not any(x in text for x in ['++', '+-', '-+']):
                 trans_type = 'income'
                 symbol = '+'
@@ -131,7 +131,10 @@ class SimpleFinnBot:
                 trans_type = 'expense'
                 symbol = '-'
             
-            return result, trans_type, symbol
+            # For debt transactions, we need the POSITIVE amount since it increases balance
+            amount = abs(result)
+            
+            return amount, trans_type, symbol
             
         except Exception as e:
             print(f"❌ Calculation error: {e}")
@@ -821,17 +824,17 @@ Use the menu below or just start tracking!"""
                     if trans_list:
                         # Add section header
                         if trans_type == 'income':
-                            delete_text += "💰 *INCOME*\n"
+                            balance += amount
                         elif trans_type == 'expense':
-                            delete_text += "🛒 *EXPENSES*\n"
+                            balance -= amount
                         elif trans_type == 'savings':
-                            delete_text += "🏦 *SAVINGS*\n"
+                            balance -= amount  # Money moved to savings
                         elif trans_type == 'debt':
-                            delete_text += "💳 *DEBT*\n"
+                            balance += amount  # You receive money as debt - THIS SHOULD BE +
                         elif trans_type == 'debt_return':
-                            delete_text += "🔙 *RETURNED DEBT*\n"
+                            balance -= amount  # You pay back debt
                         elif trans_type == 'savings_withdraw':
-                            delete_text += "📥 *SAVINGS WITHDRAWAL*\n"
+                            balance += amount  # You take money from savings
                         
                         # Add transactions for this type
                         for orig_index, transaction in trans_list:
