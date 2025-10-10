@@ -1385,6 +1385,10 @@ def api_financial_data():
 
 @flask_app.route('/mini-app')
 @app.route('/mini-app')
+# ========== MINI APP ROUTES ==========
+
+# Serve mini app main page
+@flask_app.route('/mini-app')  # ← Change 'app' to 'flask_app'
 def serve_mini_app():
     return """
     <!DOCTYPE html>
@@ -1631,6 +1635,8 @@ def serve_mini_app():
 </body>
 </html>
     """
+
+# ========== TELEGRAM BOT SETUP ==========
 
 @flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
 def add_transaction():
