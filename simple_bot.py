@@ -1298,90 +1298,88 @@ def health_check():
     return jsonify({"status": "OK", "message": "FinnBot is running with webhooks!"})
 
 # Your existing API routes
-@flask_app.route('/api/user-data/<user_id>')
-def get_user_data(user_id):
+@flask_app.route('/api/financial-data')
+def api_financial_data():
     try:
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
+        
+        # Use the SAME data structure as your bot - don't read from file directly!
         if not bot_instance:
             return jsonify({'error': 'Bot not initialized'}), 500
-            
-        # Get user transactions from your existing data structure
-        user_transactions = bot_instance.get_user_transactions(int(user_id))
         
-        # Calculate statistics
-        income = 0
-        expenses = 0
-        savings_deposits = 0
-        savings_withdrawn = 0
-        debt_incurred = 0
-        debt_returned = 0
-        expense_by_category = {}
+        # Get transactions from the bot instance (same data the bot uses)
+        all_transactions = bot_instance.transactions
+        print(f"📊 Transactions from bot instance: {all_transactions}")
         
-        for transaction in user_transactions:
-            if transaction['type'] == 'income':
-                income += transaction['amount']
-            elif transaction['type'] == 'savings':
-                savings_deposits += transaction['amount']
-            elif transaction['type'] == 'savings_withdraw':
-                savings_withdrawn += transaction['amount']
-            elif transaction['type'] == 'debt':
-                debt_incurred += abs(transaction['amount'])
-            elif transaction['type'] == 'debt_return':
-                debt_returned += abs(transaction['amount'])
-            elif transaction['type'] == 'expense':
-                expenses += transaction['amount']
-                category = transaction['category']
-                if category not in expense_by_category:
-                    expense_by_category[category] = 0
-                expense_by_category[category] += transaction['amount']
+        # Start with ZERO balance - calculate everything fresh
+        balance = 0
+        total_income = 0
+        total_expenses = 0
+        transaction_count = 0
+
+        # Process all transactions for ALL users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            # LOG EVERY TRANSACTION FOR VERIFICATION
+                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            
+                            # CORRECTED BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                                print(f"      → Income: +{amount} | Balance: {balance}")
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                                print(f"      → Expense: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings':
+                                balance -= amount  # Money moved to savings
+                                print(f"      → Savings: -{amount} | Balance: {balance}")
+                            elif trans_type == 'debt':
+                                balance += amount  # You receive money as debt - THIS IS CORRECT NOW
+                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                            elif trans_type == 'debt_return':
+                                balance -= amount  # You pay back debt
+                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount  # You take money from savings
+                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
+                            
+                            transaction_count += 1
+
+        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        print("=" * 50)
+        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Transaction Count: {transaction_count}")
+        print("=" * 50)
         
-        net_savings = savings_deposits - savings_withdrawn
-        net_debt = debt_incurred - debt_returned
-        net_flow = income - expenses - net_savings
-        
-        def get_category_color(category):
-            color_map = {
-                'Food': '#ff6b6b',
-                'Transport': '#4dabf7', 
-                'Shopping': '#ffd43b',
-                'Bills': '#69db7c',
-                'Entertainment': '#cc5de8',
-                'Health': '#ff8787',
-                'Salary': '#00d26a',
-                'Business': '#20c997',
-                'Savings': '#4dabf7',
-                'Debt': '#ff8787',
-                'Other': '#adb5bd'
-            }
-            return color_map.get(category, '#adb5bd')
-        
-        # Prepare data for the mini app
-        user_data = {
-            'totalIncome': income,
-            'totalExpenses': expenses,
-            'totalSavings': net_savings,
-            'netFlow': net_flow,
-            'netDebt': net_debt,
-            'expensesByCategory': [
-                {'category': cat, 'amount': amount, 'color': get_category_color(cat)}
-                for cat, amount in expense_by_category.items()
-            ],
-            'recentTransactions': [
-                {
-                    'description': t['description'][:30],
-                    'category': t['category'],
-                    'amount': t['amount'] if t['type'] in ['income', 'savings'] else -t['amount'],
-                    'type': t['type'],
-                    'date': t['date'][:10] if 'date' in t else 'Unknown'
-                }
-                for t in user_transactions[-10:]
-            ]
+        response_data = {
+            'total_balance': balance,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'savings': max(balance, 0),
+            'transaction_count': transaction_count,
+            'income_count': 0
         }
         
-        return jsonify(user_data)
+        return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error in mini app API: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Calculation error'}), 500
     
 # ========== MINI-APP ROUTES ==========
 
