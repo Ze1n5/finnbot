@@ -55,12 +55,72 @@ class SimpleFinnBot:
         self.load_transactions()
         self.load_incomes()
         self.load_user_categories()
+        self.translations = {
+        'en': {
+            'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
+            'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
+            'help_text': """💡 *Available Commands:*
+• `15.50 lunch` - Add expense
+• `+5000 salary` - Add income  
+• `-100 debt` - Add debt
+• `++200 savings` - Add savings
+• Use menu below for more options!""",
+            'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
+            'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
+            'no_transactions': "No transactions recorded yet.",
+            'balance': "Balance",
+            'income': "Income",
+            'expenses': "Expenses"
+        },
+        'uk': {
+            'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
+            'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
+            'help_text': """💡 *Доступні команди:*
+• `15.50 обід` - Додати витрату
+• `+5000 зарплата` - Додати дохід  
+• `-100 борг` - Додати борг
+• `++200 заощадження` - Додати заощадження
+• Використовуйте меню нижче для більше опцій!""",
+            'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
+            'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
+            'no_transactions': "Ще немає записаних транзакцій.",
+            'balance': "Баланс",
+            'income': "Дохід",
+            'expenses': "Витрати"
+        }
+    }
+    def load_user_languages(self):
+        """Load user language preferences"""
+        try:
+            if os.path.exists("user_languages.json"):
+                with open("user_languages.json", "r") as f:
+                    self.user_languages = json.load(f)
+                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users")
+        except Exception as e:
+            print(f"❌ Error loading user languages: {e}")
 
-    def get_user_transactions(self, user_id):
-        """Get transactions for a specific user"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-        return self.transactions[user_id]
+    def save_user_languages(self):
+        """Save user language preferences"""
+        try:
+            with open("user_languages.json", "w") as f:
+                json.dump(self.user_languages, f, indent=2)
+        except Exception as e:
+            print(f"❌ Error saving user languages: {e}")
+
+    def get_user_language(self, user_id):
+        """Get user's preferred language, default to English"""
+        return self.user_languages.get(str(user_id), 'en')
+
+    def set_user_language(self, user_id, language_code):
+        """Set user's preferred language"""
+        self.user_languages[str(user_id)] = language_code
+        self.save_user_languages()
+        
+        def get_user_transactions(self, user_id):
+            """Get transactions for a specific user"""
+            if user_id not in self.transactions:
+                self.transactions[user_id] = []
+            return self.transactions[user_id]
 
     def load_incomes(self):
         """Load user incomes from JSON file"""
