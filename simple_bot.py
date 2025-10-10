@@ -1384,11 +1384,9 @@ def api_financial_data():
 # ========== MINI-APP ROUTES ==========
 
 @flask_app.route('/mini-app')
-@app.route('/mini-app')
-# ========== MINI APP ROUTES ==========
 
 # Serve mini app main page
-@flask_app.route('/mini-app')  # ← Change 'app' to 'flask_app'
+@flask_app.route('/mini-app')  # Change this line
 def serve_mini_app():
     return """
     <!DOCTYPE html>
