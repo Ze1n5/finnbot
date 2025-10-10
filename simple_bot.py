@@ -55,76 +55,6 @@ class SimpleFinnBot:
         self.load_transactions()
         self.load_incomes()
         self.load_user_categories()
-        self.user_languages = {}  # {user_id: 'en' or 'uk'}
-        self.load_user_languages()
-
-        self.translations = {
-            'en': {
-                'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
-                'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
-                'help_text': """💡 *Available Commands:*
-    • `15.50 lunch` - Add expense
-    • `+5000 salary` - Add income  
-    • `-100 debt` - Add debt
-    • `++200 savings` - Add savings
-    • Use menu below for more options!""",
-                'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
-                'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
-                'no_transactions': "No transactions recorded yet.",
-                'balance': "Balance",
-                'income': "Income",
-                'expenses': "Expenses"
-            },
-            'uk': {
-                'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
-                'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
-                'help_text': """💡 *Доступні команди:*
-    • `15.50 обід` - Додати витрату
-    • `+5000 зарплата` - Додати дохід  
-    • `-100 борг` - Додати борг
-    • `++200 заощадження` - Додати заощадження
-    • Використовуйте меню нижче для більше опцій!""",
-                'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
-                'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
-                'no_transactions': "Ще немає записаних транзакцій.",
-                'balance': "Баланс",
-                'income': "Дохід",
-                'expenses': "Витрати"
-            }
-        }
-
-    def load_user_languages(self):
-        """Load user language preferences"""
-        try:
-            if os.path.exists("user_languages.json"):
-                with open("user_languages.json", "r") as f:
-                    self.user_languages = json.load(f)
-                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users")
-        except Exception as e:
-            print(f"❌ Error loading user languages: {e}")
-
-    def save_user_languages(self):
-        """Save user language preferences"""
-        try:
-            with open("user_languages.json", "w") as f:
-                json.dump(self.user_languages, f, indent=2)
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
-
-    def get_user_language(self, user_id):
-        """Get user's preferred language, default to English"""
-        return self.user_languages.get(str(user_id), 'en')
-
-    def set_user_language(self, user_id, language_code):
-        """Set user's preferred language"""
-        self.user_languages[str(user_id)] = language_code
-        self.save_user_languages()
-
-    def translate(self, user_id, key, **kwargs):
-        """Get translated text for user"""
-        lang = self.get_user_language(user_id)
-        text = self.translations[lang].get(key, self.translations['en'].get(key, key))
-        return text.format(**kwargs) if kwargs else text
 
     def get_user_transactions(self, user_id):
         """Get transactions for a specific user"""
@@ -459,20 +389,11 @@ _Wealth grows one transaction at a time_
             print(f"❌ Error processing update: {e}")
 
     def process_message(self, msg):
+        """Process message from webhook"""
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
         
-        # Detect language from user's message or use existing preference
-        if not self.get_user_language(chat_id):
-            # Simple language detection based on common Ukrainian words
-            ukrainian_indicators = ['привіт', 'дякую', 'так', 'ні', 'будь ласка', 'гривні', 'гривня']
-            if any(word in text.lower() for word in ukrainian_indicators):
-                self.set_user_language(chat_id, 'uk')
-            else:
-                self.set_user_language(chat_id, 'en')
-        
-        user_lang = self.get_user_language(chat_id)
-        print(f"🌍 User {chat_id} language: {user_lang}")
+        print(f"📨 Processing message from {chat_id}: {text}")
         
         # Handle delete mode first if active
         if self.delete_mode.get(chat_id):
@@ -532,27 +453,44 @@ _Wealth grows one transaction at a time_
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
             user_name = msg["chat"].get("first_name", "there")
-            welcome_text = self.translate(chat_id, 'welcome')
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+            welcome_text = f"""👋 Hi, I'm *Finn* - your AI finance companion 💰
+
+Let's start our journey building your wealth by understanding your current situation.
+
+💼 *Please send me your current average income:*
+
+Just send me the amount, for example:  
+`30000`"""
             
             self.pending_income.add(chat_id)
             self.send_message(chat_id, welcome_text, parse_mode='Markdown')
 
         elif text == "/income":
-            update_text = self.translate(chat_id, 'income_prompt')
-            self.send_message(chat_id, update_text, parse_mode='Markdown')
+            update_text = """💼 *Update Your Monthly Income*
+
+Enter your new monthly income in UAH:
+
+*Example:*
+`20000` - for 20,000₴ per month
+`35000` - for 35,000₴ per month
+
+This will help me provide better financial recommendations!"""
             self.pending_income.add(chat_id)
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
         elif text == "/help":
-            help_text = self.translate(chat_id, 'help_text')
-            self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            help_text = """💡 *Available Commands:*
+• `15.50 lunch` - Add expense
+• `+5000 salary` - Add income  
+• `-100 debt` - Add debt
+• `++200 savings` - Add savings
+• Use menu below for more options!"""
             self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
         
         elif text == "📊 Financial Summary":
             user_transactions = self.get_user_transactions(chat_id)
             if not user_transactions:
-                success_text = self.translate(chat_id, 'income_set').format(income=income)
+                self.send_message(chat_id, "No transactions recorded yet.", reply_markup=self.get_main_menu())
             else:
                 income = 0
                 expenses = 0
