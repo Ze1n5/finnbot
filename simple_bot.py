@@ -50,6 +50,8 @@ class SimpleFinnBot:
         self.user_incomes = {}
         self.pending_income = set()
         self.user_categories = {}  # {user_id: {category_name: [keywords]}}
+        self.user_languages = {}  # {user_id: 'en' or 'uk'}
+        self.load_user_languages()
         
         # Load existing data
         self.load_transactions()
