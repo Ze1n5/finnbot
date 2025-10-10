@@ -265,13 +265,22 @@ class SimpleFinnBot:
             return True
         return False
 
-    def get_main_menu(self):
-        """Returns the persistent menu keyboard"""
-        keyboard = [
-            ["📊 Financial Summary", "📋 Commands"],
-            ["🗑️ Delete Transaction", "🏷️ Manage Categories"],
-            ["🌍 Language"]  # Add language option
-        ]
+    def get_main_menu(self, user_id=None):
+        user_lang = self.get_user_language(user_id) if user_id else 'en'
+        
+        if user_lang == 'uk':
+            keyboard = [
+                ["📊 Фінансовий звіт", "📋 Команди"],
+                ["🗑️ Видалити транзакцію", "🏷️ Керування категоріями"],
+                ["🌍 Мова"]
+            ]
+        else:
+            keyboard = [
+                ["📊 Financial Summary", "📋 Commands"],
+                ["🗑️ Delete Transaction", "🏷️ Manage Categories"], 
+                ["🌍 Language"]
+            ]
+        
         return {
             "keyboard": keyboard,
             "resize_keyboard": True,
@@ -556,8 +565,6 @@ Enter your new monthly income in UAH:
 `35000` - for 35,000₴ per month
 
 This will help me provide better financial recommendations!"""
-            success_text = f"""✅ *{'Дохід встановлено' if user_lang == 'uk' else 'Income set'}:* {income:,.0f}₴ {'на місяць' if user_lang == 'uk' else 'monthly'}
-            🎉 {'Тепер ми можемо почати покращувати ваші фінанси разом!' if user_lang == 'uk' else 'Now we can start enhancing your financial health together!'}"""
             self.pending_income.add(chat_id)
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
@@ -650,12 +657,15 @@ This will help me provide better financial recommendations!"""
                 
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
-        # Handle income collection
+                # Handle income collection
         elif chat_id in self.pending_income:
             try:
                 income = float(text)
+                user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+                
                 if income <= 0:
-                    self.send_message(chat_id, "❌ Please enter a positive amount for your income.")
+                    error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
+                    self.send_message(chat_id, error_msg)
                 else:
                     # Save the income
                     self.user_incomes[str(chat_id)] = income
@@ -663,7 +673,23 @@ This will help me provide better financial recommendations!"""
                     self.pending_income.remove(chat_id)
                     
                     # Welcome message with next steps
-                    success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
+                    if user_lang == 'uk':
+                        success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
+
+🎉 Тепер ми можемо почати покращувати ваші фінанси разом, і пам'ятайте:
+
+_Найкращий час посадити дерево був 20 років тому. Наступний найкращий час - зараз._
+
+📱 *Початок роботи:*
+Відстежуйте свою першу транзакцію:
+
+1 = Витрата | +1 = Дохід | ++1 = Заощадження
+-10 = Борг | +- 1 = Повернення боргу | -+1 = Зняття заощаджень
++їжа - Додати категорію | -їжа - Видалити категорію
+
+Використовуйте меню нижче або просто почніть відстежувати!"""
+                    else:
+                        success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
 
 🎉 Now we can start enhancing your financial health together, and remember:
 
@@ -677,6 +703,7 @@ Track your first transaction:
 +food - Add category | -food - Delete category
 
 Use the menu below or just start tracking!"""
+                    
                     self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
     
             except ValueError:
@@ -962,30 +989,49 @@ Use the menu below or just start tracking!"""
                     import traceback
                     traceback.print_exc()
                 
-                # Send appropriate confirmation message WITHOUT menu
+                user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+                
                 if transaction_type == 'income':
                     # Send savings recommendation
                     savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
                     self.send_message(chat_id, savings_msg, parse_mode='Markdown')
                     
                     # Send confirmation WITHOUT menu
-                    confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                    if user_lang == 'uk':
+                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                    else:
+                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, confirmation_msg)
                     
                 elif transaction_type == 'savings':
-                    message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'debt':        
-                    message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'debt_return':
-                    message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Борг повернено!\n💰 +-{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'savings_withdraw':
-                    message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Заощадження знято!\n💰 -+{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 else:
-                    message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                    if user_lang == 'uk':
+                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                    else:
+                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, message)
                 
                 # Clean up pending
