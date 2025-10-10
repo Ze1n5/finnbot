@@ -1308,7 +1308,7 @@ def api_financial_data():
         
         # Get transactions from the bot instance
         all_transactions = bot_instance.transactions
-        print(f"📊 Transactions from bot instance: {all_transactions}")
+        print(f"📊 Total users with transactions: {len(all_transactions)}")
         
         # Initialize totals
         balance = 0
@@ -1322,7 +1322,7 @@ def api_financial_data():
         if isinstance(all_transactions, dict):
             for user_id, user_transactions in all_transactions.items():
                 if isinstance(user_transactions, list):
-                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
                     
                     # Calculate totals from ALL transactions
                     for transaction in user_transactions:
@@ -1331,29 +1331,25 @@ def api_financial_data():
                             trans_type = transaction.get('type', 'expense')
                             description = transaction.get('description', 'Unknown')
                             
+                            print(f"   📝 {trans_type}: {amount} - {description}")
+                            
                             # CORRECTED BALANCE CALCULATION
                             if trans_type == 'income':
                                 balance += amount
                                 total_income += amount
-                                print(f"      → Income: +{amount} | Balance: {balance}")
                             elif trans_type == 'expense':
                                 balance -= amount
                                 total_expenses += amount
-                                print(f"      → Expense: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings':
                                 balance -= amount  # Money moved to savings
                                 total_savings += amount
-                                print(f"      → Savings: -{amount} | Balance: {balance}")
                             elif trans_type == 'debt':
                                 balance += amount  # You receive money as debt
-                                print(f"      → Debt: +{amount} | Balance: {balance}")
                             elif trans_type == 'debt_return':
                                 balance -= amount  # You pay back debt
-                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings_withdraw':
                                 balance += amount  # You take money from savings
                                 total_savings -= amount
-                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
                             
                             transaction_count += 1
                     
@@ -1368,13 +1364,11 @@ def api_financial_data():
                             # Determine emoji and display format
                             emoji = "💰"
                             display_name = description
-                            display_amount = amount
                             
                             if trans_type == 'income':
                                 emoji = "💵"
                                 # For income, show category instead of description
                                 display_name = category
-                                display_amount = amount  # Positive
                             elif trans_type == 'expense':
                                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
                                     emoji = "🏠"
@@ -1386,23 +1380,18 @@ def api_financial_data():
                                     emoji = "🛍️"
                                 else:
                                     emoji = "🛒"
-                                display_amount = -amount  # Negative for display
                             elif trans_type == 'savings':
                                 emoji = "🏦"
-                                display_name = "Savings Deposit"
-                                display_amount = amount  # Positive
+                                display_name = "Savings"
                             elif trans_type == 'debt':
                                 emoji = "💳"
                                 display_name = "Debt"
-                                display_amount = amount  # Positive (money received)
                             elif trans_type == 'debt_return':
                                 emoji = "🔙"
                                 display_name = "Debt Return"
-                                display_amount = -amount  # Negative (money paid)
                             elif trans_type == 'savings_withdraw':
                                 emoji = "📥"
-                                display_name = "Savings Withdrawal"
-                                display_amount = -amount  # Negative (money taken)
+                                display_name = "Savings Withdraw"
                             
                             # Truncate long descriptions
                             if len(display_name) > 25:
@@ -1411,10 +1400,10 @@ def api_financial_data():
                             recent_transactions.append({
                                 "emoji": emoji,
                                 "name": display_name,
-                                "amount": display_amount
+                                "amount": amount  # Use original amount, let frontend handle sign
                             })
 
-        # Use total_savings for savings display (sum of all savings deposits minus withdrawals)
+        # Use total_savings for savings display
         actual_savings = total_savings
         
         # FINAL VERIFICATION
@@ -1425,6 +1414,7 @@ def api_financial_data():
         print(f"   Total Expenses: {total_expenses}")
         print(f"   Total Savings: {actual_savings}")
         print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
         
         response_data = {
@@ -1661,26 +1651,36 @@ def serve_mini_app():
                 document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
                 
                 // Update transactions - your API doesn't return transactions yet, so show message
-                const transactionsList = document.getElementById('transactions-list');
-                if (data.transactions && data.transactions.length > 0) {
-                    transactionsList.innerHTML = '';
-                    data.transactions.forEach(transaction => {
-                        const transactionElement = document.createElement('div');
-                        transactionElement.className = 'transaction-item';
-                        transactionElement.innerHTML = `
-                            <div class="transaction-info">
-                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                                <div class="transaction-name">${transaction.name || 'Transaction'}</div>
-                            </div>
-                            <div class="transaction-amount ${transaction.amount < 0 ? 'spending-amount' : 'income-amount'}">
-                                ${formatCurrency(Math.abs(transaction.amount || 0))}
-                            </div>
-                        `;
-                        transactionsList.appendChild(transactionElement);
-                    });
-                } else {
-                    transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">View transactions in bot</div></div></div>';
-                }
+                // Update transactions
+        const transactionsList = document.getElementById('transactions-list');
+        if (data.transactions && data.transactions.length > 0) {
+            transactionsList.innerHTML = '';
+            data.transactions.forEach(transaction => {
+                const transactionElement = document.createElement('div');
+                transactionElement.className = 'transaction-item';
+                
+                // Determine if it's income or expense based on amount and context
+                // For now, we'll assume positive amounts are income, negative are expenses
+                const isIncome = transaction.amount > 0;
+                const amountClass = isIncome ? 'income-amount' : 'spending-amount';
+                const amountDisplay = isIncome ? 
+                    `+${formatCurrency(transaction.amount)}` : 
+                    `-${formatCurrency(transaction.amount)}`;
+                
+                transactionElement.innerHTML = `
+                    <div class="transaction-info">
+                        <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                        <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                    </div>
+                    <div class="transaction-amount ${amountClass}">
+                        ${amountDisplay}₴
+                    </div>
+                `;
+                transactionsList.appendChild(transactionElement);
+            });
+        } else {
+            transactionsList.innerHTML = '<div class="transaction-item"><div class="transaction-info"><div class="transaction-emoji">📊</div><div class="transaction-name">No transactions yet</div></div></div>';
+        }
                 
             } catch (error) {
                 console.error('Error loading financial data:', error);
