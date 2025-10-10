@@ -1303,78 +1303,127 @@ def api_financial_data():
     try:
         print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
         
-        # Use the SAME data structure as your bot - don't read from file directly!
         if not bot_instance:
             return jsonify({'error': 'Bot not initialized'}), 500
         
-        # Get transactions from the bot instance (same data the bot uses)
+        # Get transactions from the bot instance
         all_transactions = bot_instance.transactions
         print(f"📊 Transactions from bot instance: {all_transactions}")
         
-        # Start with ZERO balance - calculate everything fresh
+        # Initialize totals
         balance = 0
         total_income = 0
         total_expenses = 0
+        total_savings = 0
         transaction_count = 0
         recent_transactions = []
 
-        # Process all transactions for ALL users
+        # Process ALL transactions for calculation
         if isinstance(all_transactions, dict):
             for user_id, user_transactions in all_transactions.items():
                 if isinstance(user_transactions, list):
                     print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
                     
-                    for transaction in user_transactions[-10:]:  # Last 10 transactions
+                    # Calculate totals from ALL transactions
+                    for transaction in user_transactions:
                         if isinstance(transaction, dict):
                             amount = float(transaction.get('amount', 0))
                             trans_type = transaction.get('type', 'expense')
                             description = transaction.get('description', 'Unknown')
                             
-                            # Add to recent transactions for display
-                            emoji = "💰"
-                            if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                                emoji = "🏠"
-                            elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                                emoji = "🍕"
-                            elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                                emoji = "🚗"
-                            elif any(word in description.lower() for word in ['salary', 'income']):
-                                emoji = "💵"
-                            elif trans_type == 'savings':
-                                emoji = "🏦"
-                            elif trans_type == 'debt':
-                                emoji = "💳"
-                            
-                            recent_transactions.append({
-                                "emoji": emoji,
-                                "name": description[:30] + "..." if len(description) > 30 else description,
-                                "amount": amount if trans_type == 'income' else -amount
-                            })
-                            
                             # CORRECTED BALANCE CALCULATION
                             if trans_type == 'income':
                                 balance += amount
                                 total_income += amount
+                                print(f"      → Income: +{amount} | Balance: {balance}")
                             elif trans_type == 'expense':
                                 balance -= amount
                                 total_expenses += amount
+                                print(f"      → Expense: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings':
                                 balance -= amount  # Money moved to savings
+                                total_savings += amount
+                                print(f"      → Savings: -{amount} | Balance: {balance}")
                             elif trans_type == 'debt':
                                 balance += amount  # You receive money as debt
+                                print(f"      → Debt: +{amount} | Balance: {balance}")
                             elif trans_type == 'debt_return':
                                 balance -= amount  # You pay back debt
+                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings_withdraw':
                                 balance += amount  # You take money from savings
+                                total_savings -= amount
+                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
                             
                             transaction_count += 1
+                    
+                    # Get recent transactions for display (last 5)
+                    for transaction in user_transactions[-5:]:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            category = transaction.get('category', 'Other')
+                            
+                            # Determine emoji and display format
+                            emoji = "💰"
+                            display_name = description
+                            display_amount = amount
+                            
+                            if trans_type == 'income':
+                                emoji = "💵"
+                                # For income, show category instead of description
+                                display_name = category
+                                display_amount = amount  # Positive
+                            elif trans_type == 'expense':
+                                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                                    emoji = "🏠"
+                                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                                    emoji = "🍕"
+                                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                                    emoji = "🚗"
+                                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                                    emoji = "🛍️"
+                                else:
+                                    emoji = "🛒"
+                                display_amount = -amount  # Negative for display
+                            elif trans_type == 'savings':
+                                emoji = "🏦"
+                                display_name = "Savings Deposit"
+                                display_amount = amount  # Positive
+                            elif trans_type == 'debt':
+                                emoji = "💳"
+                                display_name = "Debt"
+                                display_amount = amount  # Positive (money received)
+                            elif trans_type == 'debt_return':
+                                emoji = "🔙"
+                                display_name = "Debt Return"
+                                display_amount = -amount  # Negative (money paid)
+                            elif trans_type == 'savings_withdraw':
+                                emoji = "📥"
+                                display_name = "Savings Withdrawal"
+                                display_amount = -amount  # Negative (money taken)
+                            
+                            # Truncate long descriptions
+                            if len(display_name) > 25:
+                                display_name = display_name[:22] + "..."
+                            
+                            recent_transactions.append({
+                                "emoji": emoji,
+                                "name": display_name,
+                                "amount": display_amount
+                            })
 
+        # Use total_savings for savings display (sum of all savings deposits minus withdrawals)
+        actual_savings = total_savings
+        
         # FINAL VERIFICATION
         print("=" * 50)
         print(f"✅ FINAL CALCULATION:")
         print(f"   Balance: {balance}")
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {actual_savings}")
         print(f"   Transaction Count: {transaction_count}")
         print("=" * 50)
         
@@ -1382,8 +1431,8 @@ def api_financial_data():
             'balance': balance,
             'income': total_income,
             'spending': total_expenses,
-            'savings': max(balance, 0),
-            'transactions': recent_transactions[-5:],  # Last 5 transactions
+            'savings': actual_savings,
+            'transactions': recent_transactions,
             'transaction_count': transaction_count
         }
         
