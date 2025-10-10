@@ -927,6 +927,17 @@ Use the menu below or just start tracking!"""
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu())
+
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
         elif data.startswith("lang_"):
             language = data[5:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
