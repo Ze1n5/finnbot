@@ -1298,6 +1298,93 @@ def health_check():
     return jsonify({"status": "OK", "message": "FinnBot is running with webhooks!"})
 
 # Your existing API routes
+@flask_app.route('/api/financial-data')
+def api_financial_data():
+    try:
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
+        
+        # Use the SAME data structure as your bot - don't read from file directly!
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions from the bot instance (same data the bot uses)
+        all_transactions = bot_instance.transactions
+        print(f"📊 Transactions from bot instance: {all_transactions}")
+        
+        # Start with ZERO balance - calculate everything fresh
+        balance = 0
+        total_income = 0
+        total_expenses = 0
+        transaction_count = 0
+
+        # Process all transactions for ALL users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            # LOG EVERY TRANSACTION FOR VERIFICATION
+                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            
+                            # CORRECTED BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                                print(f"      → Income: +{amount} | Balance: {balance}")
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                                print(f"      → Expense: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings':
+                                balance -= amount  # Money moved to savings
+                                print(f"      → Savings: -{amount} | Balance: {balance}")
+                            elif trans_type == 'debt':
+                                balance += amount  # You receive money as debt - THIS IS CORRECT NOW
+                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                            elif trans_type == 'debt_return':
+                                balance -= amount  # You pay back debt
+                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount  # You take money from savings
+                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
+                            
+                            transaction_count += 1
+
+        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        print("=" * 50)
+        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Transaction Count: {transaction_count}")
+        print("=" * 50)
+        
+        response_data = {
+            'total_balance': balance,
+            'total_income': total_income,
+            'total_expenses': total_expenses,
+            'savings': max(balance, 0),
+            'transaction_count': transaction_count,
+            'income_count': 0
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Calculation error'}), 500
+    
+# ========== MINI-APP ROUTES ==========
+
+@flask_app.route('/mini-app')
+# ========== MINI APP ROUTES ==========
 
 # Serve mini app main page
 @flask_app.route('/mini-app')  # Change this line
@@ -1547,74 +1634,6 @@ def serve_mini_app():
 </body>
 </html>
     """
-
-# API endpoint for financial data - ADD THIS RIGHT HERE
-@flask_app.route('/api/financial-data')
-def api_financial_data():
-    try:
-        # Calculate real data from your JSON files
-        try:
-            with open('incomes.json', 'r') as f:
-                incomes = json.load(f)
-        except:
-            incomes = []
-        
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = []
-        
-        # Calculate totals
-        total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
-        total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-        balance = total_income + total_expenses  # Expenses are negative, so we add
-        savings = balance  # Simple savings calculation
-        
-        # Prepare recent transactions for display
-        recent_transactions = []
-        for transaction in transactions[-10:]:  # Last 10 transactions
-            if isinstance(transaction, dict):
-                amount = transaction.get('amount', 0)
-                description = transaction.get('description', 'Unknown')
-                
-                # Assign emojis based on description
-                emoji = "💰"
-                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                    emoji = "🏠"
-                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                    emoji = "🍕"
-                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                    emoji = "🚗"
-                elif any(word in description.lower() for word in ['salary', 'income']):
-                    emoji = "💵"
-                
-                recent_transactions.append({
-                    "emoji": emoji,
-                    "name": description,
-                    "amount": amount
-                })
-        
-        return {
-            "balance": balance,
-            "income": total_income,
-            "spending": abs(total_expenses),  # Positive number for spending
-            "savings": savings,
-            "transactions": recent_transactions
-        }
-    except Exception as e:
-        print(f"Error in financial data API: {e}")
-        return {
-            "balance": 0,
-            "income": 0,
-            "spending": 0,
-            "savings": 0,
-            "transactions": []
-        }
-
-# ========== TELEGRAM BOT SETUP ==========
-
-async def setup_bot():
 
 # ========== TELEGRAM BOT SETUP ==========
 
