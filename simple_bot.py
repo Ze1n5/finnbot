@@ -516,14 +516,19 @@ _Wealth grows one transaction at a time_
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
             user_name = msg["chat"].get("first_name", "there")
-            welcome_text = f"""👋 Hi, I'm *Finn* - your AI finance companion 💰
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                welcome_text = "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`"
+            else:
+                welcome_text = f"""👋 Hi, I'm *Finn* - your AI finance companion 💰
 
-Let's start our journey building your wealth by understanding your current situation.
+        Let's start our journey building your wealth by understanding your current situation.
 
-💼 *Please send me your current average income:*
+        💼 *Please send me your current average income:*
 
-Just send me the amount, for example:  
-`30000`"""
+        Just send me the amount, for example:  
+        `30000`"""
             
             self.pending_income.add(chat_id)
             self.send_message(chat_id, welcome_text, parse_mode='Markdown')
@@ -551,17 +556,31 @@ Enter your new monthly income in UAH:
 `35000` - for 35,000₴ per month
 
 This will help me provide better financial recommendations!"""
+            success_text = f"""✅ *{'Дохід встановлено' if user_lang == 'uk' else 'Income set'}:* {income:,.0f}₴ {'на місяць' if user_lang == 'uk' else 'monthly'}
+            🎉 {'Тепер ми можемо почати покращувати ваші фінанси разом!' if user_lang == 'uk' else 'Now we can start enhancing your financial health together!'}"""
             self.pending_income.add(chat_id)
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
         elif text == "/help":
-            help_text = """💡 *Available Commands:*
-• `15.50 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `-100 debt` - Add debt
-• `++200 savings` - Add savings
-• Use menu below for more options!"""
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                help_text = """💡 *Доступні команди:*
+        • `15.50 обід` - Додати витрату
+        • `+5000 зарплата` - Додати дохід  
+        • `-100 борг` - Додати борг
+        • `++200 заощадження` - Додати заощадження
+        • Використовуйте меню нижче для більше опцій!"""
+            else:
+                help_text = """💡 *Available Commands:*
+        • `15.50 lunch` - Add expense
+        • `+5000 salary` - Add income  
+        • `-100 debt` - Add debt
+        • `++200 savings` - Add savings
+        • Use menu below for more options!"""
+            
             self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+
         
         elif text == "📊 Financial Summary":
             user_transactions = self.get_user_transactions(chat_id)
