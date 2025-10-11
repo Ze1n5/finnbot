@@ -548,7 +548,9 @@ class SimpleFinnBot:
         """Process message from webhook"""
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
-        
+        print(f"📨 Processing message from {chat_id}: '{text}'")
+        print(f"🔍 DEBUG - pending_income: {chat_id in self.pending_income}")
+        print(f"🔍 DEBUG - delete_mode: {self.delete_mode.get(chat_id, False)}")
         print(f"📨 Processing message from {chat_id}: {text}")
         
         # Handle delete mode first if active
@@ -610,6 +612,20 @@ class SimpleFinnBot:
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
+            # Check if user already has income set
+            existing_income = self.get_user_income(chat_id)
+            if existing_income:
+                # User already setup, show normal welcome
+                user_lang = self.get_user_language(chat_id)
+                if user_lang == 'uk':
+                    welcome_msg = f"👋 З поверненням! Ваш поточний дохід: {existing_income:,.0f}₴\n\nВикористовуйте меню нижче для керування фінансами."
+                else:
+                    welcome_msg = f"👋 Welcome back! Your current income: {existing_income:,.0f}₴\n\nUse the menu below to manage your finances."
+                
+                self.send_message(chat_id, welcome_msg, reply_markup=self.get_main_menu())
+                return
+            
+            # New user - show language selection
             user_name = msg["chat"].get("first_name", "there")
             
             # Show language selection first
@@ -856,16 +872,16 @@ This will help me provide better financial recommendations!"""
                 if income <= 0:
                     error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
                     self.send_message(chat_id, error_msg)
-                    return
-                else:
-                    # Save the income
-                    self.user_incomes[str(chat_id)] = income
-                    self.save_incomes()
-                    self.pending_income.remove(chat_id)
-                    
-                    # Welcome message with next steps
-                    if user_lang == 'uk':
-                        success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
+                    return  # Exit after error
+                
+                # Save the income
+                self.user_incomes[str(chat_id)] = income
+                self.save_incomes()
+                self.pending_income.discard(chat_id)  # Use discard instead of remove to avoid errors
+                
+                # Welcome message with next steps
+                if user_lang == 'uk':
+                    success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
 
         🎉 Чудово! Тепер ми готові до роботи!
 
@@ -878,8 +894,8 @@ This will help me provide better financial recommendations!"""
         📋 *Переглянути повний список команд можна в меню*
 
         💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
-                    else:
-                        success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
+                else:
+                    success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
 
         🎉 Excellent! Now we're ready to go!
 
@@ -892,13 +908,13 @@ This will help me provide better financial recommendations!"""
         📋 *View the full list of commands in the menu*
 
         💡 Start tracking transactions or use the menu below!"""
-                    
-                    self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-                    return  # ADD THIS LINE - prevent further processing of the same message
+                
+                self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                return  # CRITICAL: Exit after processing income
             
             except ValueError:
                 self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                return
+                return  # Exit after error
         else:
             # Regular transaction processing
             print(f"🔍 DEBUG: Processing transaction - text: '{text}'")            
@@ -1089,6 +1105,7 @@ This will help me provide better financial recommendations!"""
         self.answer_callback(query["id"])
 
             # NEW: Handle start language selection
+        # NEW: Handle start language selection
         if data.startswith("start_lang_"):
             language = data[11:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
@@ -1096,40 +1113,42 @@ This will help me provide better financial recommendations!"""
             if language == 'uk':
                 welcome_text = """👋 Вітаю! Я *Finn* - ваш особистий фінансовий помічник! 💰
 
-Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
+        Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
 
-💼 *Давайте почнемо! Надішліть мені ваш середньомісячний дохід:*
+        💼 *Давайте почнемо! Надішліть мені ваш середньомісячний дохід:*
 
-Просто введіть суму, наприклад:
-`25000` - для 25,000₴ на місяць
-`15000` - для 15,000₴ на місяць
+        Просто введіть суму, наприклад:
+        `25000` - для 25,000₴ на місяць
+        `15000` - для 15,000₴ на місяць
 
-Це допоможе мені краще розуміти ваші фінансові можливості! 📈"""
-        else:
-            welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
+        Це допоможе мені краще розуміти ваші фінансові можливості! 📈"""
+            else:
+                welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
 
-Together we'll track your finances, analyze spending, and build towards financial freedom.
+        Together we'll track your finances, analyze spending, and build towards financial freedom.
 
-💼 *Let's get started! Send me your average monthly income:*
+        💼 *Let's get started! Send me your average monthly income:*
 
-Just enter the amount, for example:
-`25000` - for 25,000₴ per month  
-`15000` - for 15,000₴ per month
+        Just enter the amount, for example:
+        `25000` - for 25,000₴ per month  
+        `15000` - for 15,000₴ per month
 
-This will help me better understand your financial capabilities! 📈"""
-        
-        # Add user to pending income collection
-        self.pending_income.add(chat_id)
-        self.send_message(chat_id, welcome_text, parse_mode='Markdown')
-        
-        # Delete the language selection message
-        try:
-            delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
-                "chat_id": chat_id,
-                "message_id": message_id
-            })
-        except Exception as e:
-            print(f"⚠️ Error deleting language message: {e}")
+        This will help me better understand your financial capabilities! 📈"""
+            
+            # Add user to pending income collection
+            self.pending_income.add(chat_id)
+            self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+            
+            # Delete the language selection message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting language message: {e}")
+            
+            return  # ADD THIS CRITICAL RETURN STATEMENT
 
         
         if data.startswith("cat_"):
