@@ -612,20 +612,6 @@ class SimpleFinnBot:
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
-            # Check if user already has income set
-            existing_income = self.get_user_income(chat_id)
-            if existing_income:
-                # User already setup, show normal welcome
-                user_lang = self.get_user_language(chat_id)
-                if user_lang == 'uk':
-                    welcome_msg = f"👋 З поверненням! Ваш поточний дохід: {existing_income:,.0f}₴\n\nВикористовуйте меню нижче для керування фінансами."
-                else:
-                    welcome_msg = f"👋 Welcome back! Your current income: {existing_income:,.0f}₴\n\nUse the menu below to manage your finances."
-                
-                self.send_message(chat_id, welcome_msg, reply_markup=self.get_main_menu())
-                return
-            
-            # New user - show language selection
             user_name = msg["chat"].get("first_name", "there")
             
             # Show language selection first
