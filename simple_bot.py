@@ -58,39 +58,47 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
         self.translations = {
-        'en': {
-            'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
-            'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
-            'help_text': """💡 *Available Commands:*
+    'en': {
+        'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
+        'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
+        'help_text': """💡 *Available Commands:*
 • `15.50 lunch` - Add expense
 • `+5000 salary` - Add income  
 • `-100 debt` - Add debt
 • `++200 savings` - Add savings
 • Use menu below for more options!""",
-            'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
-            'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
-            'no_transactions': "No transactions recorded yet.",
-            'balance': "Balance",
-            'income': "Income",
-            'expenses': "Expenses"
-        },
-        'uk': {
-            'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
-            'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
-            'help_text': """💡 *Доступні команди:*
+        'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
+        'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
+        'no_transactions': "No transactions recorded yet.",
+        'balance': "Balance",
+        'income': "Income",
+        'expenses': "Expenses",
+        # ADD THESE NEW TRANSLATIONS:
+        'restart_confirm': "🔄 *Restart Bot*\n\nThis action will delete all your data including transactions, categories, and settings. This cannot be undone!\n\nAre you sure?",
+        'restart_success': "✅ *Bot restarted!* All data has been cleared. Let's start fresh!",
+        'restart_cancelled': "❌ Restart cancelled. Your data remains untouched."
+    },
+    'uk': {
+        'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
+        'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
+        'help_text': """💡 *Доступні команди:*
 • `15.50 обід` - Додати витрату
 • `+5000 зарплата` - Додати дохід  
 • `-100 борг` - Додати борг
 • `++200 заощадження` - Додати заощадження
 • Використовуйте меню нижче для більше опцій!""",
-            'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
-            'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
-            'no_transactions': "Ще немає записаних транзакцій.",
-            'balance': "Баланс",
-            'income': "Дохід",
-            'expenses': "Витрати"
-        }
+        'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
+        'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
+        'no_transactions': "Ще немає записаних транзакцій.",
+        'balance': "Баланс",
+        'income': "Дохід",
+        'expenses': "Витрати",
+        # ADD THESE NEW TRANSLATIONS:
+        'restart_confirm': "🔄 *Перезапуск бота*\n\nЦя дія видалить всі ваші дані, включаючи транзакції, категорії та налаштування. Цю дію не можна скасувати!\n\nВи впевнені?",
+        'restart_success': "✅ *Бота перезапущено!* Всі дані було очищено. Давайте почнемо знову!",
+        'restart_cancelled': "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
     }
+}
         
     def calculate_expression(self, text):
         """Calculate mathematical expressions with percentages"""
@@ -327,13 +335,13 @@ class SimpleFinnBot:
             keyboard = [
                 ["📊 Фінансовий звіт", "📋 Команди"],
                 ["🗑️ Видалити транзакцію", "🏷️ Керування категоріями"],
-                ["🌍 Мова"]
+                ["🔄 Перезапустити бота", "🌍 Мова"]
             ]
         else:
             keyboard = [
                 ["📊 Financial Summary", "📋 Commands"],
                 ["🗑️ Delete Transaction", "🏷️ Manage Categories"], 
-                ["🌍 Language"]
+                ["🔄 Restart Bot", "🌍 Language"]
             ]
         
         return {
@@ -638,6 +646,50 @@ class SimpleFinnBot:
             current_lang_text = "English" if current_lang == 'en' else "Українська"
             message = f"🌍 Current language: {current_lang_text}\n\nChoose your language / Оберіть мову:"
             self.send_message(chat_id, message, keyboard)
+
+        elif text == "🔄 Restart Bot" or text == "🔄 Перезапустити бота":
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                confirmation_text = """🔄 *Перезапуск бота*
+                
+        Ця дія видалить:
+        • Всі ваші транзакції
+        • Всі категорії витрат
+        • Ваші налаштування
+        • Історію доходів
+
+        *Цю дію не можна скасувати!*
+
+        Ви впевнені, що хочете продовжити?"""
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "✅ Так, перезапустити", "callback_data": "confirm_restart"}],
+                        [{"text": "❌ Скасувати", "callback_data": "cancel_restart"}]
+                    ]
+                }
+            else:
+                confirmation_text = """🔄 *Restart Bot*
+                
+        This action will delete:
+        • All your transactions
+        • All spending categories  
+        • Your settings
+        • Income history
+
+        *This action cannot be undone!*
+
+        Are you sure you want to proceed?"""
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "✅ Yes, restart", "callback_data": "confirm_restart"}],
+                        [{"text": "❌ Cancel", "callback_data": "cancel_restart"}]
+                    ]
+                }
+            
+            self.send_message(chat_id, confirmation_text, parse_mode='Markdown', keyboard=keyboard)
 
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
@@ -1267,6 +1319,82 @@ This will help me provide better financial recommendations!"""
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu())
+
+        elif data == "confirm_restart":
+            user_lang = self.get_user_language(chat_id)
+            
+            # Clear all user data
+            user_id_str = str(chat_id)
+            
+            # Clear transactions
+            if chat_id in self.transactions:
+                del self.transactions[chat_id]
+            
+            # Clear income
+            if user_id_str in self.user_incomes:
+                del self.user_incomes[user_id_str]
+            
+            # Clear user categories (keep only default)
+            if user_id_str in self.user_categories:
+                self.user_categories[user_id_str] = {"Other": []}
+            
+            # Clear pending states
+            if chat_id in self.pending:
+                del self.pending[chat_id]
+            if chat_id in self.pending_income:
+                self.pending_income.discard(chat_id)
+            if chat_id in self.delete_mode:
+                del self.delete_mode[chat_id]
+            
+            # Save all changes
+            self.save_transactions()
+            self.save_incomes()
+            self.save_user_categories()
+            
+            if user_lang == 'uk':
+                success_msg = """✅ *Бота перезапущено!*
+                
+        Всі ваші дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
+
+        🚀 *Давайте почнемо знову!*
+        Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
+            else:
+                success_msg = """✅ *Bot restarted!*
+                
+        All your data has been successfully deleted. The bot is ready to start fresh!
+
+        🚀 *Let's start fresh!*
+        Add your first transaction or use the menu to get started."""
+            
+            self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            
+            # Delete the confirmation message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting restart message: {e}")
+
+        elif data == "cancel_restart":
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+            else:
+                cancel_msg = "❌ Restart cancelled. Your data remains untouched."
+            
+            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
+            
+            # Delete the confirmation message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting restart message: {e}")
 
         elif data.startswith("lang_"):
             language = data[5:]  # 'en' or 'uk'
