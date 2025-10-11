@@ -1482,7 +1482,7 @@ def api_transactions():
             if trans_type == 'income':
                 emoji = "💵"
                 # For income: show category in brackets
-                display_name = f"[{category}]"
+                display_name = f"{category}"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
                     emoji = "🏠"
@@ -1497,21 +1497,21 @@ def api_transactions():
                 
                 # For expenses: show category and description
                 if description.lower() != category.lower():
-                    display_name = f"[{category}] {description}"
+                    display_name = f"{category} {description}"
                 else:
-                    display_name = f"[{category}]"
+                    display_name = f"{category}"
             elif trans_type == 'savings':
                 emoji = "🏦"
-                display_name = "[Savings]"
+                display_name = "Savings"
             elif trans_type == 'debt':
                 emoji = "💳"
-                display_name = "[Debt]"
+                display_name = "Debt"
             elif trans_type == 'debt_return':
                 emoji = "🔙"
-                display_name = "[Debt Return]"
+                display_name = "Debt Return"
             elif trans_type == 'savings_withdraw':
                 emoji = "📥"
-                display_name = "[Savings Withdraw]"
+                display_name = "Savings Withdraw"
             
             # Truncate long descriptions
             if len(display_name) > 30:
