@@ -740,10 +740,12 @@ This will help me provide better financial recommendations!"""
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
                 # Handle income collection
+                # Handle income collection
+                # Handle income collection (only for initial setup)
         elif chat_id in self.pending_income:
             try:
                 income = float(text)
-                user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+                user_lang = self.get_user_language(chat_id)
                 
                 if income <= 0:
                     error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
@@ -755,7 +757,6 @@ This will help me provide better financial recommendations!"""
                     self.pending_income.remove(chat_id)
                     
                     # Welcome message with next steps
-                                        # Welcome message with next steps
                     if user_lang == 'uk':
                         success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
 
@@ -789,7 +790,8 @@ This will help me provide better financial recommendations!"""
     
             except ValueError:
                 self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                                    
+     
+     
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
             if not user_transactions:
