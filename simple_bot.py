@@ -611,22 +611,18 @@ class SimpleFinnBot:
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
             user_name = msg["chat"].get("first_name", "there")
-            user_lang = self.get_user_language(chat_id)
             
-            if user_lang == 'uk':
-                welcome_text = "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`"
-            else:
-                welcome_text = f"""👋 Hi, I'm *Finn* - your AI finance companion 💰
-
-        Let's start our journey building your wealth by understanding your current situation.
-
-        💼 *Please send me your current average income:*
-
-        Just send me the amount, for example:  
-        `30000`"""
+            # Show language selection first
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🇺🇸 English", "callback_data": "start_lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "start_lang_uk"}]
+                ]
+            }
             
-            self.pending_income.add(chat_id)
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+            welcome_text = f"👋 Welcome {user_name}! Let's set up your language first.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
+            
+            self.send_message(chat_id, welcome_text, keyboard)
 
         elif text == "🌍 Language":
             # Show language selection keyboard
@@ -759,36 +755,35 @@ This will help me provide better financial recommendations!"""
                     self.pending_income.remove(chat_id)
                     
                     # Welcome message with next steps
+                                        # Welcome message with next steps
                     if user_lang == 'uk':
                         success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
 
-🎉 Тепер ми можемо почати покращувати ваші фінанси разом, і пам'ятайте:
+🎉 Чудово! Тепер ми готові до роботи!
 
-_Найкращий час посадити дерево був 20 років тому. Наступний найкращий час - зараз._
+🚀 *Швидкий старт:*
+• `150 обід` - Додати витрату
+• `+5000 зарплата` - Додати дохід
+• `++1000` - Додати заощадження
+• `-200 борг` - Додати борг
 
-📱 *Початок роботи:*
-Відстежуйте свою першу транзакцію:
+📋 *Переглянути повний список команд можна в меню*
 
-1 = Витрата | +1 = Дохід | ++1 = Заощадження
--10 = Борг | +- 1 = Повернення боргу | -+1 = Зняття заощаджень
-+їжа - Додати категорію | -їжа - Видалити категорію
-
-Використовуйте меню нижче або просто почніть відстежувати!"""
+💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
                     else:
                         success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
 
-🎉 Now we can start enhancing your financial health together, and remember:
+🎉 Excellent! Now we're ready to go!
 
-_The best time to plant a tree was 20 years ago. The second best time is now._
+🚀 *Quick Start:*
+• `150 lunch` - Add expense
+• `+5000 salary` - Add income  
+• `++1000` - Add savings
+• `-200 debt` - Add debt
 
-📱 *Get started:*
-Track your first transaction:
+📋 *View the full list of commands in the menu*
 
-1 = Spending | +1 = Income | ++1 = Savings
--10 = Debt | +- 1 = Debt returned | -+1 = Savings withdrawal
-+food - Add category | -food - Delete category
-
-Use the menu below or just start tracking!"""
+💡 Start tracking transactions or use the menu below!"""
                     
                     self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
     
@@ -845,7 +840,7 @@ Use the menu below or just start tracking!"""
                             if len(description) > 25:
                                 description = description[:22] + "..."
                             
-                            delete_text += f"`*{current_number:2d}* ` {amount_display} • {transaction['category']}\n"
+                            delete_text += f"*`{current_number:2d} `* {amount_display} • {transaction['category']}\n"
                             
                             transaction_map[current_number] = orig_index
                             current_number += 1
@@ -1089,6 +1084,50 @@ Use the menu below or just start tracking!"""
         
         # Answer the callback query first to remove loading state
         self.answer_callback(query["id"])
+
+            # NEW: Handle start language selection
+        if data.startswith("start_lang_"):
+            language = data[11:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'uk':
+                welcome_text = """👋 Вітаю! Я *Finn* - ваш особистий фінансовий помічник! 💰
+
+Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
+
+💼 *Давайте почнемо! Надішліть мені ваш середньомісячний дохід:*
+
+Просто введіть суму, наприклад:
+`25000` - для 25,000₴ на місяць
+`15000` - для 15,000₴ на місяць
+
+Це допоможе мені краще розуміти ваші фінансові можливості! 📈"""
+        else:
+            welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
+
+Together we'll track your finances, analyze spending, and build towards financial freedom.
+
+💼 *Let's get started! Send me your average monthly income:*
+
+Just enter the amount, for example:
+`25000` - for 25,000₴ per month  
+`15000` - for 15,000₴ per month
+
+This will help me better understand your financial capabilities! 📈"""
+        
+        # Add user to pending income collection
+        self.pending_income.add(chat_id)
+        self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+        
+        # Delete the language selection message
+        try:
+            delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                "chat_id": chat_id,
+                "message_id": message_id
+            })
+        except Exception as e:
+            print(f"⚠️ Error deleting language message: {e}")
+
         
         if data.startswith("cat_"):
             category = data[4:]
