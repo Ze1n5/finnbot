@@ -845,7 +845,7 @@ Use the menu below or just start tracking!"""
                             if len(description) > 25:
                                 description = description[:22] + "..."
                             
-                            delete_text += f"`{current_number:2d}` {amount_display} • {transaction['category']}\n"
+                            delete_text += f"`*{current_number:2d}* ` {amount_display} • {transaction['category']}\n"
                             
                             transaction_map[current_number] = orig_index
                             current_number += 1
