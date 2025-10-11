@@ -741,56 +741,7 @@ This will help me provide better financial recommendations!"""
 
                 # Handle income collection
                 # Handle income collection
-                # Handle income collection (only for initial setup)
-        elif chat_id in self.pending_income:
-            try:
-                income = float(text)
-                user_lang = self.get_user_language(chat_id)
-                
-                if income <= 0:
-                    error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
-                    self.send_message(chat_id, error_msg)
-                else:
-                    # Save the income
-                    self.user_incomes[str(chat_id)] = income
-                    self.save_incomes()
-                    self.pending_income.remove(chat_id)
-                    
-                    # Welcome message with next steps
-                    if user_lang == 'uk':
-                        success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
-
-🎉 Чудово! Тепер ми готові до роботи!
-
-🚀 *Швидкий старт:*
-• `150 обід` - Додати витрату
-• `+5000 зарплата` - Додати дохід
-• `++1000` - Додати заощадження
-• `-200 борг` - Додати борг
-
-📋 *Переглянути повний список команд можна в меню*
-
-💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
-                    else:
-                        success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
-
-🎉 Excellent! Now we're ready to go!
-
-🚀 *Quick Start:*
-• `150 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `++1000` - Add savings
-• `-200 debt` - Add debt
-
-📋 *View the full list of commands in the menu*
-
-💡 Start tracking transactions or use the menu below!"""
-                    
-                    self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-    
-            except ValueError:
-                self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-     
+                # Handle income collection (only for initial setup)    
      
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
@@ -896,11 +847,59 @@ This will help me provide better financial recommendations!"""
                     self.send_message(chat_id, f"❌ Cannot remove *{category_to_remove}* - category not found or is essential", parse_mode='Markdown', reply_markup=self.get_main_menu())
             except Exception as e:
                 self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
+
+        elif chat_id in self.pending_income:
+            try:
+                income = float(text)
+                user_lang = self.get_user_language(chat_id)
+                
+                if income <= 0:
+                    error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
+                    self.send_message(chat_id, error_msg)
+                else:
+                    # Save the income
+                    self.user_incomes[str(chat_id)] = income
+                    self.save_incomes()
+                    self.pending_income.remove(chat_id)
+                    
+                    # Welcome message with next steps
+                    if user_lang == 'uk':
+                        success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
+
+🎉 Чудово! Тепер ми готові до роботи!
+
+🚀 *Швидкий старт:*
+• `150 обід` - Додати витрату
+• `+5000 зарплата` - Додати дохід
+• `++1000` - Додати заощадження
+• `-200 борг` - Додати борг
+
+📋 *Переглянути повний список команд можна в меню*
+
+💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
+                    else:
+                        success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
+
+🎉 Excellent! Now we're ready to go!
+
+🚀 *Quick Start:*
+• `150 lunch` - Add expense
+• `+5000 salary` - Add income  
+• `++1000` - Add savings
+• `-200 debt` - Add debt
+
+📋 *View the full list of commands in the menu*
+
+💡 Start tracking transactions or use the menu below!"""
+                    
+                    self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+    
+            except ValueError:
+                self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
         
         else:
             # Regular transaction processing
-            print(f"🔍 DEBUG: Processing transaction - text: '{text}'")
-            
+            print(f"🔍 DEBUG: Processing transaction - text: '{text}'")            
             # Check if it's a calculation expression (ADD THIS PART)
             if any(op in text for op in ['+', '-', '*', '/', '%']) and any(char.isdigit() for char in text):
                 # Try to calculate the expression
