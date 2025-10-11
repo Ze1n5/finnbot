@@ -893,6 +893,7 @@ This will help me provide better financial recommendations!"""
 💡 Start tracking transactions or use the menu below!"""
                     
                     self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    return  # ADD THIS LINE - prevent further processing of the same message
     
             except ValueError:
                 self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
