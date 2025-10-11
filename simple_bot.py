@@ -2237,6 +2237,20 @@ def add_transaction():
     except Exception as e:
         print(f"❌ Error adding transaction: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@flask_app.route('/api/delete-transaction', methods=['POST'])
+def delete_transaction():
+    try:
+        data = request.json
+        transaction_id = data.get('transaction_id')
+        user_id = data.get('user_id')
+        
+        # Your logic to delete the transaction from your data store
+        # This would remove it from transactions.json and update calculations
+        
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @flask_app.route('/api/add-income', methods=['POST']) 
 def add_income():
