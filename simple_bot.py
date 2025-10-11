@@ -1482,7 +1482,7 @@ def api_transactions():
             if trans_type == 'income':
                 emoji = "💵"
                 # For income: show category in brackets
-                display_name = f"{category}"
+                display_name = f"[{category}]"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
                     emoji = "🏠"
@@ -1495,11 +1495,22 @@ def api_transactions():
                 else:
                     emoji = "🛒"
                 
-                # For expenses: show category and description
-                if description.lower() != category.lower():
-                    display_name = f"{category} {description}"
+                # For expenses: extract the actual description (remove numbers and symbols)
+                # The description might be "100 food" - we want just "food"
+                clean_description = description
+                
+                # Remove numbers and currency symbols
+                clean_description = re.sub(r'[\d+.,₴]', '', clean_description).strip()
+                
+                # Remove common transaction symbols
+                clean_description = re.sub(r'[+-]+', '', clean_description).strip()
+                
+                # If we have a meaningful description after cleaning
+                if clean_description and clean_description.lower() != category:
+                    display_name = f"{category} {clean_description}"
                 else:
                     display_name = f"{category}"
+                    
             elif trans_type == 'savings':
                 emoji = "🏦"
                 display_name = "Savings"
@@ -1520,10 +1531,10 @@ def api_transactions():
             formatted_transactions.append({
                 "emoji": emoji,
                 "name": display_name,
-                "display_name": display_name,  # Add this for the frontend
+                "display_name": display_name,
                 "amount": amount,
                 "timestamp": timestamp,
-                "type": trans_type  # Add type for proper amount formatting
+                "type": trans_type
             })
         
         has_more = len(all_transactions_list) > end_idx
