@@ -822,19 +822,7 @@ Use the menu below or just start tracking!"""
                 # Display transactions by type with clear sections
                 for trans_type, trans_list in transactions_by_type.items():
                     if trans_list:
-                        # Add section header
-                        if trans_type == 'income':
-                            balance += amount
-                        elif trans_type == 'expense':
-                            balance -= amount
-                        elif trans_type == 'savings':
-                            balance -= amount  # Money moved to savings
-                        elif trans_type == 'debt':
-                            balance += amount  # You receive money as debt - THIS SHOULD BE +
-                        elif trans_type == 'debt_return':
-                            balance -= amount  # You pay back debt
-                        elif trans_type == 'savings_withdraw':
-                            balance += amount  # You take money from savings
+                        # Add section header (REMOVED the balance calculation that was causing the error)
                         
                         # Add transactions for this type
                         for orig_index, transaction in trans_list:
