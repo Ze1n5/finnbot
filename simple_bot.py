@@ -1115,29 +1115,47 @@ This will help me provide better financial recommendations!"""
 
         Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
 
-        💼 *Давайте почнемо! Надішліть мені ваш середньомісячний дохід:*
+        🚀 *Що я можу для вас зробити:*
+        • 📊 Відстежувати доходи та витрати
+        • 🏦 Допомагати з заощадженнями
+        • 💳 Керувати боргами
+        • 📈 Аналізувати фінансові звички
+        • 🎯 Надавати персоналізовані рекомендації
 
-        Просто введіть суму, наприклад:
-        `25000` - для 25,000₴ на місяць
-        `15000` - для 15,000₴ на місяць
+        💡 *Ваш середній дохід буде автоматично розраховано* на основі введених вами доходів, що дозволить нам створити оптимальну фінансову стратегію!
 
-        Це допоможе мені краще розуміти ваші фінансові можливості! 📈"""
+        🎯 *Давайте почнемо!* Просто додайте вашу першу транзакцію:
+
+        💵 *Дохід:* `+5000 зарплата`
+        🛒 *Витрати:* `150 обід` 
+        🏦 *Заощадження:* `++1000`
+        💳 *Борг:* `-200 кредит`
+
+        Або використовуйте меню нижче для більше можливостей!"""
             else:
                 welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
 
         Together we'll track your finances, analyze spending, and build towards financial freedom.
 
-        💼 *Let's get started! Send me your average monthly income:*
+        🚀 *What I can do for you:*
+        • 📊 Track income and expenses
+        • 🏦 Help with savings
+        • 💳 Manage debts
+        • 📈 Analyze financial habits
+        • 🎯 Provide personalized recommendations
 
-        Just enter the amount, for example:
-        `25000` - for 25,000₴ per month  
-        `15000` - for 15,000₴ per month
+        💡 *Your average income will be automatically calculated* based on your entered income transactions, allowing us to create an optimal financial strategy!
 
-        This will help me better understand your financial capabilities! 📈"""
+        🎯 *Let's get started!* Just add your first transaction:
+
+        💵 *Income:* `+5000 salary`
+        🛒 *Expenses:* `150 lunch`
+        🏦 *Savings:* `++1000`
+        💳 *Debt:* `-200 loan`
+
+        Or use the menu below for more options!"""
             
-            # Add user to pending income collection
-            self.pending_income.add(chat_id)
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+            self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
             # Delete the language selection message
             try:
@@ -1148,7 +1166,7 @@ This will help me provide better financial recommendations!"""
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
             
-            return  # ADD THIS CRITICAL RETURN STATEMENT
+            return
 
         
         if data.startswith("cat_"):
