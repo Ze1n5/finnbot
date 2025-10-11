@@ -1482,7 +1482,7 @@ def api_transactions():
             if trans_type == 'income':
                 emoji = "💵"
                 # For income: show category in brackets
-                display_name = f"[{category}]"
+                display_name = f"{category}"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
                     emoji = "🏠"
