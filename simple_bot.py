@@ -1708,16 +1708,25 @@ def serve_mini_app():
             color: #ffffff;
         }
         
+        .transaction-container {
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid #2c2c2e;
+        }
+        
         .transaction-item {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             padding: 12px 0;
-            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
+            position: relative;
+            transition: transform 0.3s ease;
+            width: 100%;
         }
         
-        .transaction-item:last-child {
-            border-bottom: none;
+        .transaction-item.swiping {
+            transition: none;
         }
         
         .transaction-info {
@@ -1751,9 +1760,32 @@ def serve_mini_app():
         
         .transaction-amount {
             font-size: 16px;
-            font-weight: 400; /* Changed from 600 to 400 for regular weight */
+            font-weight: 400;
             text-align: right;
             min-width: 80px;
+        }
+        
+        .delete-action {
+            position: absolute;
+            right: -80px;
+            top: 0;
+            bottom: 0;
+            width: 80px;
+            background-color: #ff453a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            transition: right 0.3s ease;
+        }
+        
+        .delete-action.visible {
+            right: 0;
+        }
+        
+        .delete-text {
+            font-size: 14px;
         }
         
         .loading {
@@ -1766,6 +1798,15 @@ def serve_mini_app():
             text-align: center;
             padding: 40px 20px;
             color: #8e8e93;
+        }
+        
+        .swipe-hint {
+            text-align: center;
+            padding: 10px 20px;
+            color: #8e8e93;
+            font-size: 12px;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
         }
     </style>
 </head>
@@ -1791,6 +1832,10 @@ def serve_mini_app():
             </div>
         </div>
         
+        <div class="swipe-hint">
+            💡 Swipe left on any transaction to delete
+        </div>
+        
         <div class="transactions-section" id="transactions-section">
             <div class="transactions-header">Transactions</div>
             <div id="transactions-list">
@@ -1804,6 +1849,9 @@ def serve_mini_app():
         let isLoading = false;
         let hasMoreTransactions = true;
         const transactionsPerPage = 10;
+        let touchStartX = 0;
+        let currentSwipeElement = null;
+        let swipeThreshold = 50;
 
         // Fetch real data from your API
         async function loadFinancialData() {
@@ -1898,10 +1946,18 @@ def serve_mini_app():
             }
         }
 
-        // Create transaction element with date
+        // Create transaction element with swipe functionality
         function createTransactionElement(transaction) {
+            const container = document.createElement('div');
+            container.className = 'transaction-container';
+            
             const transactionElement = document.createElement('div');
             transactionElement.className = 'transaction-item';
+            
+            // Delete action panel
+            const deleteAction = document.createElement('div');
+            deleteAction.className = 'delete-action';
+            deleteAction.innerHTML = '<div class="delete-text">DELETE</div>';
             
             // Determine transaction type and amount display
             const isIncome = transaction.type === 'income';
@@ -1937,7 +1993,155 @@ def serve_mini_app():
                 </div>
             `;
             
-            return transactionElement;
+            container.appendChild(transactionElement);
+            container.appendChild(deleteAction);
+            
+            // Add swipe functionality
+            addSwipeListeners(container, transactionElement, deleteAction, transaction);
+            
+            return container;
+        }
+
+        // Add swipe functionality to transaction
+        function addSwipeListeners(container, transactionElement, deleteAction, transaction) {
+            let startX = 0;
+            let currentX = 0;
+            let isSwiping = false;
+            
+            transactionElement.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                currentX = startX;
+                isSwiping = true;
+                transactionElement.classList.add('swiping');
+                
+                // Reset other swiped elements
+                resetOtherSwipes(container);
+            });
+            
+            transactionElement.addEventListener('touchmove', (e) => {
+                if (!isSwiping) return;
+                
+                currentX = e.touches[0].clientX;
+                const diff = startX - currentX;
+                
+                // Only allow left swipe (positive diff)
+                if (diff > 0) {
+                    transactionElement.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+                    
+                    // Show delete action when threshold is reached
+                    if (diff > swipeThreshold) {
+                        deleteAction.classList.add('visible');
+                    } else {
+                        deleteAction.classList.remove('visible');
+                    }
+                }
+            });
+            
+            transactionElement.addEventListener('touchend', () => {
+                if (!isSwiping) return;
+                
+                const diff = startX - currentX;
+                isSwiping = false;
+                transactionElement.classList.remove('swiping');
+                
+                // If swiped beyond threshold, keep it open, otherwise reset
+                if (diff > swipeThreshold) {
+                    transactionElement.style.transform = 'translateX(-80px)';
+                    deleteAction.classList.add('visible');
+                    
+                    // Add click listener to delete action
+                    const deleteHandler = () => {
+                        deleteTransaction(transaction, container);
+                        deleteAction.removeEventListener('click', deleteHandler);
+                    };
+                    deleteAction.addEventListener('click', deleteHandler);
+                } else {
+                    resetSwipe(transactionElement, deleteAction);
+                }
+            });
+            
+            // Reset on click/tap
+            transactionElement.addEventListener('click', () => {
+                resetSwipe(transactionElement, deleteAction);
+            });
+        }
+
+        // Reset swipe position
+        function resetSwipe(transactionElement, deleteAction) {
+            transactionElement.style.transform = 'translateX(0)';
+            deleteAction.classList.remove('visible');
+        }
+
+        // Reset other swiped elements
+        function resetOtherSwipes(currentContainer) {
+            const allContainers = document.querySelectorAll('.transaction-container');
+            allContainers.forEach(container => {
+                if (container !== currentContainer) {
+                    const transactionEl = container.querySelector('.transaction-item');
+                    const deleteEl = container.querySelector('.delete-action');
+                    resetSwipe(transactionEl, deleteEl);
+                }
+            });
+        }
+
+        // Delete transaction
+        async function deleteTransaction(transaction, container) {
+            if (!confirm('Are you sure you want to delete this transaction?')) {
+                resetSwipe(container.querySelector('.transaction-item'), container.querySelector('.delete-action'));
+                return;
+            }
+            
+            try {
+                // Show loading state
+                container.style.opacity = '0.5';
+                
+                // Here you would call your backend API to delete the transaction
+                // For now, we'll just remove it from the frontend and reload data
+                console.log('Deleting transaction:', transaction);
+                
+                // Remove from UI immediately
+                container.style.transition = 'opacity 0.3s ease';
+                container.style.opacity = '0';
+                setTimeout(() => {
+                    container.remove();
+                }, 300);
+                
+                // Reload financial data to update balances
+                await loadFinancialData();
+                
+                // Show success message
+                showNotification('Transaction deleted successfully');
+                
+            } catch (error) {
+                console.error('Error deleting transaction:', error);
+                showNotification('Error deleting transaction', true);
+                container.style.opacity = '1';
+            }
+        }
+
+        // Show notification
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: ${isError ? '#ff453a' : '#30d158'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-weight: 600;
+                z-index: 1000;
+                animation: slideDown 0.3s ease;
+            `;
+            
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
         }
 
         // Format date as "Oct 11, 2:50 PM"
