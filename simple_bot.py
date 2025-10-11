@@ -856,6 +856,7 @@ This will help me provide better financial recommendations!"""
                 if income <= 0:
                     error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
                     self.send_message(chat_id, error_msg)
+                    return
                 else:
                     # Save the income
                     self.user_incomes[str(chat_id)] = income
@@ -866,38 +867,38 @@ This will help me provide better financial recommendations!"""
                     if user_lang == 'uk':
                         success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
 
-🎉 Чудово! Тепер ми готові до роботи!
+        🎉 Чудово! Тепер ми готові до роботи!
 
-🚀 *Швидкий старт:*
-• `150 обід` - Додати витрату
-• `+5000 зарплата` - Додати дохід
-• `++1000` - Додати заощадження
-• `-200 борг` - Додати борг
+        🚀 *Швидкий старт:*
+        • `150 обід` - Додати витрату
+        • `+5000 зарплата` - Додати дохід
+        • `++1000` - Додати заощадження
+        • `-200 борг` - Додати борг
 
-📋 *Переглянути повний список команд можна в меню*
+        📋 *Переглянути повний список команд можна в меню*
 
-💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
+        💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
                     else:
                         success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
 
-🎉 Excellent! Now we're ready to go!
+        🎉 Excellent! Now we're ready to go!
 
-🚀 *Quick Start:*
-• `150 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `++1000` - Add savings
-• `-200 debt` - Add debt
+        🚀 *Quick Start:*
+        • `150 lunch` - Add expense
+        • `+5000 salary` - Add income  
+        • `++1000` - Add savings
+        • `-200 debt` - Add debt
 
-📋 *View the full list of commands in the menu*
+        📋 *View the full list of commands in the menu*
 
-💡 Start tracking transactions or use the menu below!"""
+        💡 Start tracking transactions or use the menu below!"""
                     
                     self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
                     return  # ADD THIS LINE - prevent further processing of the same message
-    
+            
             except ValueError:
                 self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-        
+                return
         else:
             # Regular transaction processing
             print(f"🔍 DEBUG: Processing transaction - text: '{text}'")            
