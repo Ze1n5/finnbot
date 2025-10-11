@@ -1477,11 +1477,12 @@ def api_transactions():
             
             # Determine emoji and display name
             emoji = "💰"
-            display_name = description
+            display_name = ""
             
             if trans_type == 'income':
                 emoji = "💵"
-                display_name = category
+                # For income: show category in brackets
+                display_name = f"[{category}]"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
                     emoji = "🏠"
@@ -1493,28 +1494,36 @@ def api_transactions():
                     emoji = "🛍️"
                 else:
                     emoji = "🛒"
+                
+                # For expenses: show category and description
+                if description.lower() != category.lower():
+                    display_name = f"[{category}] {description}"
+                else:
+                    display_name = f"[{category}]"
             elif trans_type == 'savings':
                 emoji = "🏦"
-                display_name = "Savings"
+                display_name = "[Savings]"
             elif trans_type == 'debt':
                 emoji = "💳"
-                display_name = "Debt"
+                display_name = "[Debt]"
             elif trans_type == 'debt_return':
                 emoji = "🔙"
-                display_name = "Debt Return"
+                display_name = "[Debt Return]"
             elif trans_type == 'savings_withdraw':
                 emoji = "📥"
-                display_name = "Savings Withdraw"
+                display_name = "[Savings Withdraw]"
             
             # Truncate long descriptions
-            if len(display_name) > 25:
-                display_name = display_name[:22] + "..."
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
             
             formatted_transactions.append({
                 "emoji": emoji,
                 "name": display_name,
+                "display_name": display_name,  # Add this for the frontend
                 "amount": amount,
-                "timestamp": timestamp
+                "timestamp": timestamp,
+                "type": trans_type  # Add type for proper amount formatting
             })
         
         has_more = len(all_transactions_list) > end_idx
@@ -1682,7 +1691,7 @@ def serve_mini_app():
         
         .transaction-amount {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 400; /* Changed from 600 to 400 for regular weight */
             text-align: right;
             min-width: 80px;
         }
@@ -1834,11 +1843,22 @@ def serve_mini_app():
             const transactionElement = document.createElement('div');
             transactionElement.className = 'transaction-item';
             
-            const isIncome = transaction.amount > 0 && transaction.name !== "Savings";
+            // Determine transaction type and amount display
+            const isIncome = transaction.type === 'income';
+            const isSavings = transaction.type === 'savings';
+            const isDebt = transaction.type === 'debt';
+            const isDebtReturn = transaction.type === 'debt_return';
+            const isSavingsWithdraw = transaction.type === 'savings_withdraw';
+            
             const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-            const amountDisplay = isIncome ? 
-                `+${formatCurrency(transaction.amount)}` : 
-                `-${formatCurrency(transaction.amount)}`;
+            
+            // FIXED: Expenses, debt returns, and savings withdrawals should show negative
+            let amountDisplay;
+            if (isIncome || isDebt) {
+                amountDisplay = `+${formatCurrency(transaction.amount)}`;
+            } else {
+                amountDisplay = `-${formatCurrency(transaction.amount)}`;
+            }
             
             // Format date
             const transactionDate = new Date(transaction.timestamp || transaction.date);
@@ -1848,7 +1868,7 @@ def serve_mini_app():
                 <div class="transaction-info">
                     <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                     <div class="transaction-details">
-                        <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                        <div class="transaction-name">${transaction.display_name || transaction.name || 'Transaction'}</div>
                         <div class="transaction-date">${formattedDate}</div>
                     </div>
                 </div>
