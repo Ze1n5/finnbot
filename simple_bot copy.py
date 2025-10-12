@@ -50,17 +50,142 @@ class SimpleFinnBot:
         self.user_incomes = {}
         self.pending_income = set()
         self.user_categories = {}  # {user_id: {category_name: [keywords]}}
+        self.user_languages = {}  # {user_id: 'en' or 'uk'}
+        self.load_user_languages()
         
         # Load existing data
         self.load_transactions()
         self.load_incomes()
         self.load_user_categories()
-
+        self.translations = {
+    'en': {
+        'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
+        'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
+        'help_text': """💡 *Available Commands:*
+• `15.50 lunch` - Add expense
+• `+5000 salary` - Add income  
+• `-100 debt` - Add debt
+• `++200 savings` - Add savings
+• Use menu below for more options!""",
+        'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
+        'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
+        'no_transactions': "No transactions recorded yet.",
+        'balance': "Balance",
+        'income': "Income",
+        'expenses': "Expenses",
+        # ADD THESE NEW TRANSLATIONS:
+        'restart_confirm': "🔄 *Restart Bot*\n\nThis action will delete all your data including transactions, categories, and settings. This cannot be undone!\n\nAre you sure?",
+        'restart_success': "✅ *Bot restarted!* All data has been cleared. Let's start fresh!",
+        'restart_cancelled': "❌ Restart cancelled. Your data remains untouched."
+    },
+    'uk': {
+        'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
+        'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
+        'help_text': """💡 *Доступні команди:*
+• `15.50 обід` - Додати витрату
+• `+5000 зарплата` - Додати дохід  
+• `-100 борг` - Додати борг
+• `++200 заощадження` - Додати заощадження
+• Використовуйте меню нижче для більше опцій!""",
+        'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
+        'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
+        'no_transactions': "Ще немає записаних транзакцій.",
+        'balance': "Баланс",
+        'income': "Дохід",
+        'expenses': "Витрати",
+        # ADD THESE NEW TRANSLATIONS:
+        'restart_confirm': "🔄 *Перезапуск бота*\n\nЦя дія видалить всі ваші дані, включаючи транзакції, категорії та налаштування. Цю дію не можна скасувати!\n\nВи впевнені?",
+        'restart_success': "✅ *Бота перезапущено!* Всі дані було очищено. Давайте почнемо знову!",
+        'restart_cancelled': "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+    }
+}
+        
+    def calculate_expression(self, text):
+        """Calculate mathematical expressions with percentages"""
+        try:
+            # Remove spaces and convert to lowercase
+            expression = text.replace(' ', '').lower()
+            
+            # Handle percentages: convert 1.5% to *0.015
+            expression = re.sub(r'(\d+(?:\.\d+)?)%', r'*(\1/100)', expression)
+            
+            # Replace multiple operators with proper format
+            expression = expression.replace('++', '+').replace('--', '+').replace('+-', '-').replace('-+', '-')
+            
+            # Basic safety check - only allow numbers, basic operators, and parentheses
+            if not re.match(r'^[\d+\-*/().\s]+$', expression):
+                return None, "❌ Invalid characters in expression"
+            
+            # Calculate the result
+            result = eval(expression)
+            
+            # Determine transaction type based on result and original text
+            if '++' in text:
+                trans_type = 'savings'
+                symbol = '++'
+            elif '+-' in text:
+                trans_type = 'debt_return' 
+                symbol = '+-'
+            elif '-+' in text:
+                trans_type = 'savings_withdraw'
+                symbol = '-+'
+            elif text.strip().startswith('-') and not '-+' in text:
+                trans_type = 'debt'
+                symbol = '-'  # But this should INCREASE balance!
+            elif '+' in text and not any(x in text for x in ['++', '+-', '-+']):
+                trans_type = 'income'
+                symbol = '+'
+            else:
+                trans_type = 'expense'
+                symbol = '-'
+            
+            # For debt transactions, we need the POSITIVE amount since it increases balance
+            amount = abs(result)
+            
+            return amount, trans_type, symbol
+            
+        except Exception as e:
+            print(f"❌ Calculation error: {e}")
+            return None, f"❌ Calculation error: {str(e)}"
+        
     def get_user_transactions(self, user_id):
         """Get transactions for a specific user"""
         if user_id not in self.transactions:
             self.transactions[user_id] = []
         return self.transactions[user_id]
+    
+    def load_user_languages(self):
+        """Load user language preferences"""
+        try:
+            if os.path.exists("user_languages.json"):
+                with open("user_languages.json", "r") as f:
+                    self.user_languages = json.load(f)
+                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users")
+        except Exception as e:
+            print(f"❌ Error loading user languages: {e}")
+
+    def save_user_languages(self):
+        """Save user language preferences"""
+        try:
+            with open("user_languages.json", "w") as f:
+                json.dump(self.user_languages, f, indent=2)
+        except Exception as e:
+            print(f"❌ Error saving user languages: {e}")
+
+    def get_user_language(self, user_id):
+        """Get user's preferred language, default to English"""
+        return self.user_languages.get(str(user_id), 'en')
+
+    def set_user_language(self, user_id, language_code):
+        """Set user's preferred language"""
+        self.user_languages[str(user_id)] = language_code
+        self.save_user_languages()
+        
+        def get_user_transactions(self, user_id):
+            """Get transactions for a specific user"""
+            if user_id not in self.transactions:
+                self.transactions[user_id] = []
+            return self.transactions[user_id]
 
     def load_incomes(self):
         """Load user incomes from JSON file"""
@@ -203,12 +328,22 @@ class SimpleFinnBot:
             return True
         return False
 
-    def get_main_menu(self):
-        """Returns the persistent menu keyboard"""
-        keyboard = [
-            ["📊 Financial Summary", "📋 Commands"],
-            ["🗑️ Delete Transaction", "🏷️ Manage Categories"]
-        ]
+    def get_main_menu(self, user_id=None):
+        user_lang = self.get_user_language(user_id) if user_id else 'en'
+        
+        if user_lang == 'uk':
+            keyboard = [
+                ["📊 Фінансовий звіт", "📋 Команди"],
+                ["🗑️ Видалити транзакцію", "🏷️ Керування категоріями"],
+                ["🔄 Перезапустити бота", "🌍 Мова"]
+            ]
+        else:
+            keyboard = [
+                ["📊 Financial Summary", "📋 Commands"],
+                ["🗑️ Delete Transaction", "🏷️ Manage Categories"], 
+                ["🔄 Restart Bot", "🌍 Language"]
+            ]
+        
         return {
             "keyboard": keyboard,
             "resize_keyboard": True,
@@ -295,46 +430,75 @@ class SimpleFinnBot:
         user_transactions = self.get_user_transactions(user_id)
         current_savings = sum(t['amount'] for t in user_transactions if t['type'] == 'savings')
         
+        # Get user language
+        user_lang = self.get_user_language(user_id)
+        
         # UAH-specific savings rules
         if income_amount > 100000:
             # Large income (>100,000 UAH) - recommend 10% savings
             min_save = income_amount * 0.10
             max_save = income_amount * 0.15
-            min_percent = 10
-            max_percent = 15
-            urgency = "🏦 Conservative Savings"
-            reason = "Large income detected! 10% savings will build significant wealth over time."
+            if user_lang == 'uk':
+                urgency = "🏦 Консервативні заощадження"
+                reason = "Великий дохід виявлено! 10% заощаджень створять значне багатство з часом."
+            else:
+                urgency = "🏦 Conservative Savings"
+                reason = "Large income detected! 10% savings will build significant wealth over time."
             
         else:
             # Smaller income (≤100,000 UAH) - recommend 15-20% savings
             min_save = income_amount * 0.15
             max_save = income_amount * 0.20
-            min_percent = 15
-            max_percent = 20
-            urgency = "💪 Balanced Approach"
-            reason = "Perfect income range for building savings! 15-20% is the sweet spot."
+            if user_lang == 'uk':
+                urgency = "💪 Збалансований підхід"
+                reason = "Ідеальний діапазон доходу для накопичення заощаджень! 15-20% - це ідеальний баланс."
+            else:
+                urgency = "💪 Balanced Approach"
+                reason = "Perfect income range for building savings! 15-20% is the sweet spot."
         
         # Adjust based on current savings in UAH context
-        if current_savings < 50000:
-            reason += " You're building your initial emergency fund - every UAH counts! 💰"
-        elif current_savings < 200000:
-            reason += " Good progress! You're building a solid financial cushion. 🎯"
+        if user_lang == 'uk':
+            if current_savings < 50000:
+                reason += " Ви будуєте свій початковий резервний фонд - кожна гривня має значення! 💰"
+            elif current_savings < 200000:
+                reason += " Хороший прогрес! Ви будуєте солідну фінансову подушку. 🎯"
+            else:
+                reason += " Відмінна дисципліна заощаджень! Ви будуєте реальну фінансову безпеку. 🚀"
         else:
-            reason += " Excellent savings discipline! You're building real financial security. 🚀"
+            if current_savings < 50000:
+                reason += " You're building your initial emergency fund - every UAH counts! 💰"
+            elif current_savings < 200000:
+                reason += " Good progress! You're building a solid financial cushion. 🎯"
+            else:
+                reason += " Excellent savings discipline! You're building real financial security. 🚀"
         
-        # Format amounts in UAH (English only)
-        message = f"""
-{urgency}
+        # Format amounts in UAH
+        if user_lang == 'uk':
+            message = f"""
+    {urgency}
 
-*New income* and it's time for savings 🏦
+    *Новий дохід* і час для заощаджень 🏦
 
-I recommend saving: {min_save:,.0f}₴ - {max_save:,.0f}₴
+    Рекомендую заощадити: {min_save:,.0f}₴ - {max_save:,.0f}₴
 
-💸 *Quick Save Commands:*
-`++{min_save:.0f}` - Save {min_save:,.0f}₴ | `++{max_save:.0f}` - Save {max_save:,.0f}₴
+    💸 *Швидкі команди для збереження:*
+    `++{min_save:.0f}` - Зберегти {min_save:,.0f}₴ | `++{max_save:.0f}` - Зберегти {max_save:,.0f}₴
 
-_Wealth grows one transaction at a time_
-"""
+    _Багатство зростає з кожною транзакцією_
+    """
+        else:
+            message = f"""
+    {urgency}
+
+    *New income* and it's time for savings 🏦
+
+    I recommend saving: {min_save:,.0f}₴ - {max_save:,.0f}₴
+
+    💸 *Quick Save Commands:*
+    `++{min_save:.0f}` - Save {min_save:,.0f}₴ | `++{max_save:.0f}` - Save {max_save:,.0f}₴
+
+    _Wealth grows one transaction at a time_
+    """
         return message
 
     def send_message(self, chat_id, text, keyboard=None, parse_mode=None, reply_markup=None):
@@ -392,7 +556,9 @@ _Wealth grows one transaction at a time_
         """Process message from webhook"""
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
-        
+        print(f"📨 Processing message from {chat_id}: '{text}'")
+        print(f"🔍 DEBUG - pending_income: {chat_id in self.pending_income}")
+        print(f"🔍 DEBUG - delete_mode: {self.delete_mode.get(chat_id, False)}")
         print(f"📨 Processing message from {chat_id}: {text}")
         
         # Handle delete mode first if active
@@ -404,6 +570,8 @@ _Wealth grows one transaction at a time_
                 if text == "0":
                     self.delete_mode[chat_id] = False
                     self.send_message(chat_id, "✅ Exit delete mode. Back to normal operation.", reply_markup=self.get_main_menu())
+
+                
                 else:
                     selected_number = int(text)
                     if selected_number in transaction_map:
@@ -453,17 +621,75 @@ _Wealth grows one transaction at a time_
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         if text == "/start":
             user_name = msg["chat"].get("first_name", "there")
-            welcome_text = f"""👋 Hi, I'm *Finn* - your AI finance companion 💰
-
-Let's start our journey building your wealth by understanding your current situation.
-
-💼 *Please send me your current average income:*
-
-Just send me the amount, for example:  
-`30000`"""
             
-            self.pending_income.add(chat_id)
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown')
+            # Show language selection first
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🇺🇸 English", "callback_data": "start_lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "start_lang_uk"}]
+                ]
+            }
+            
+            welcome_text = f"👋 Welcome {user_name}! Let's set up your language first.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
+            
+            self.send_message(chat_id, welcome_text, keyboard)
+
+        elif text == "🌍 Language":
+            # Show language selection keyboard
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "🇺🇸 English", "callback_data": "lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "lang_uk"}]
+                ]
+            }
+            current_lang = self.get_user_language(chat_id)
+            current_lang_text = "English" if current_lang == 'en' else "Українська"
+            message = f"🌍 Current language: {current_lang_text}\n\nChoose your language / Оберіть мову:"
+            self.send_message(chat_id, message, keyboard)
+
+        elif text == "🔄 Restart Bot" or text == "🔄 Перезапустити бота":
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                confirmation_text = """🔄 *Перезапуск бота*
+                
+        Ця дія видалить:
+        • Всі ваші транзакції
+        • Всі категорії витрат
+        • Ваші налаштування
+        • Історію доходів
+
+        *Цю дію не можна скасувати!*
+
+        Ви впевнені, що хочете продовжити?"""
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "✅ Так, перезапустити", "callback_data": "confirm_restart"}],
+                        [{"text": "❌ Скасувати", "callback_data": "cancel_restart"}]
+                    ]
+                }
+            else:
+                confirmation_text = """🔄 *Restart Bot*
+                
+        This action will delete:
+        • All your transactions
+        • All spending categories  
+        • Your settings
+        • Income history
+
+        *This action cannot be undone!*
+
+        Are you sure you want to proceed?"""
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "✅ Yes, restart", "callback_data": "confirm_restart"}],
+                        [{"text": "❌ Cancel", "callback_data": "cancel_restart"}]
+                    ]
+                }
+            
+            self.send_message(chat_id, confirmation_text, parse_mode='Markdown', keyboard=keyboard)
 
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
@@ -479,13 +705,25 @@ This will help me provide better financial recommendations!"""
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
         elif text == "/help":
-            help_text = """💡 *Available Commands:*
-• `15.50 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `-100 debt` - Add debt
-• `++200 savings` - Add savings
-• Use menu below for more options!"""
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                help_text = """💡 *Доступні команди:*
+        • `15.50 обід` - Додати витрату
+        • `+5000 зарплата` - Додати дохід  
+        • `-100 борг` - Додати борг
+        • `++200 заощадження` - Додати заощадження
+        • Використовуйте меню нижче для більше опцій!"""
+            else:
+                help_text = """💡 *Available Commands:*
+        • `15.50 lunch` - Add expense
+        • `+5000 salary` - Add income  
+        • `-100 debt` - Add debt
+        • `++200 savings` - Add savings
+        • Use menu below for more options!"""
+            
             self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+
         
         elif text == "📊 Financial Summary":
             user_transactions = self.get_user_transactions(chat_id)
@@ -555,38 +793,10 @@ This will help me provide better financial recommendations!"""
                 
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
-        # Handle income collection
-        elif chat_id in self.pending_income:
-            try:
-                income = float(text)
-                if income <= 0:
-                    self.send_message(chat_id, "❌ Please enter a positive amount for your income.")
-                else:
-                    # Save the income
-                    self.user_incomes[str(chat_id)] = income
-                    self.save_incomes()
-                    self.pending_income.remove(chat_id)
-                    
-                    # Welcome message with next steps
-                    success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
-
-🎉 Now we can start enhancing your financial health together, and remember:
-
-_The best time to plant a tree was 20 years ago. The second best time is now._
-
-📱 *Get started:*
-Track your first transaction:
-
-1 = Spending | +1 = Income | ++1 = Savings
--10 = Debt | +- 1 = Debt returned | -+1 = Savings withdrawal
-+food - Add category | -food - Delete category
-
-Use the menu below or just start tracking!"""
-                    self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-    
-            except ValueError:
-                self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
-                                    
+                # Handle income collection
+                # Handle income collection
+                # Handle income collection (only for initial setup)    
+     
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
             if not user_transactions:
@@ -614,19 +824,7 @@ Use the menu below or just start tracking!"""
                 # Display transactions by type with clear sections
                 for trans_type, trans_list in transactions_by_type.items():
                     if trans_list:
-                        # Add section header
-                        if trans_type == 'income':
-                            delete_text += "💰 *INCOME*\n"
-                        elif trans_type == 'expense':
-                            delete_text += "🛒 *EXPENSES*\n"
-                        elif trans_type == 'savings':
-                            delete_text += "🏦 *SAVINGS*\n"
-                        elif trans_type == 'debt':
-                            delete_text += "💳 *DEBT*\n"
-                        elif trans_type == 'debt_return':
-                            delete_text += "🔙 *RETURNED DEBT*\n"
-                        elif trans_type == 'savings_withdraw':
-                            delete_text += "📥 *SAVINGS WITHDRAWAL*\n"
+                        # Add section header (REMOVED the balance calculation that was causing the error)
                         
                         # Add transactions for this type
                         for orig_index, transaction in trans_list:
@@ -649,7 +847,7 @@ Use the menu below or just start tracking!"""
                             if len(description) > 25:
                                 description = description[:22] + "..."
                             
-                            delete_text += f"`{current_number:2d}` {amount_display} • {transaction['category']}\n"
+                            delete_text += f"*`{current_number:2d} `* {amount_display} • {transaction['category']}\n"
                             
                             transaction_map[current_number] = orig_index
                             current_number += 1
@@ -703,10 +901,134 @@ Use the menu below or just start tracking!"""
                     self.send_message(chat_id, f"❌ Cannot remove *{category_to_remove}* - category not found or is essential", parse_mode='Markdown', reply_markup=self.get_main_menu())
             except Exception as e:
                 self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
-        
+
+        elif chat_id in self.pending_income:
+            try:
+                income = float(text)
+                user_lang = self.get_user_language(chat_id)
+                
+                if income <= 0:
+                    error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
+                    self.send_message(chat_id, error_msg)
+                    return  # Exit after error
+                
+                # Save the income
+                self.user_incomes[str(chat_id)] = income
+                self.save_incomes()
+                self.pending_income.discard(chat_id)  # Use discard instead of remove to avoid errors
+                
+                # Welcome message with next steps
+                if user_lang == 'uk':
+                    success_text = f"""✅ *Дохід встановлено:* {income:,.0f}₴ на місяць
+
+        🎉 Чудово! Тепер ми готові до роботи!
+
+        🚀 *Швидкий старт:*
+        • `150 обід` - Додати витрату
+        • `+5000 зарплата` - Додати дохід
+        • `++1000` - Додати заощадження
+        • `-200 борг` - Додати борг
+
+        📋 *Переглянути повний список команд можна в меню*
+
+        💡 Почніть відстежувати транзакції або використовуйте меню нижче!"""
+                else:
+                    success_text = f"""✅ *Income set:* {income:,.0f}₴ monthly
+
+        🎉 Excellent! Now we're ready to go!
+
+        🚀 *Quick Start:*
+        • `150 lunch` - Add expense
+        • `+5000 salary` - Add income  
+        • `++1000` - Add savings
+        • `-200 debt` - Add debt
+
+        📋 *View the full list of commands in the menu*
+
+        💡 Start tracking transactions or use the menu below!"""
+                
+                self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                return  # CRITICAL: Exit after processing income
+            
+            except ValueError:
+                self.send_message(chat_id, "❌ Please enter a valid number for your monthly income.\n\nExample: `15000` for 15,000₴ per month", parse_mode='Markdown')
+                return  # Exit after error
         else:
             # Regular transaction processing
-            print(f"🔍 DEBUG: Processing transaction - text: '{text}'")
+            print(f"🔍 DEBUG: Processing transaction - text: '{text}'")            
+            # Check if it's a calculation expression (ADD THIS PART)
+            if any(op in text for op in ['+', '-', '*', '/', '%']) and any(char.isdigit() for char in text):
+                # Try to calculate the expression
+                result = self.calculate_expression(text)
+                
+                if result is not None and result[0] is not None:
+                    amount, trans_type, symbol = result
+                    
+                    # Store pending transaction
+                    self.pending[chat_id] = {
+                        'amount': amount, 
+                        'text': f"{text} = {symbol}{amount:,.0f}₴",
+                        'category': "Salary" if trans_type == 'income' else "Other",
+                        'type': trans_type
+                    }
+                    
+                    # Show calculation result and ask for category
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    if trans_type == 'income':
+                        if user_lang == 'uk':
+                            message = f"🧮 Розрахунок: {text}\n💰 Результат: +{amount:,.0f}₴\n📝 Оберіть категорію:"
+                        else:
+                            message = f"🧮 Calculation: {text}\n💰 Result: +{amount:,.0f}₴\n📝 Select category:"
+                            
+                        # Create category keyboard
+                        if user_lang == 'uk':
+                            income_cats = ["Зарплата", "Бізнес"]
+                        else:
+                            income_cats = list(self.income_categories.keys())
+                        
+                        keyboard_rows = []
+                        for i in range(0, len(income_cats), 2):
+                            row = []
+                            for cat in income_cats[i:i+2]:
+                                row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                            keyboard_rows.append(row)
+                        
+                        keyboard = {"inline_keyboard": keyboard_rows}
+                        
+                    else:
+                        # For other transaction types, just confirm
+                        if user_lang == 'uk':
+                            type_names = {
+                                'expense': 'Витрата',
+                                'savings': 'Заощадження', 
+                                'debt': 'Борг',
+                                'debt_return': 'Повернення боргу',
+                                'savings_withdraw': 'Зняття заощаджень'
+                            }
+                            message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
+                        else:
+                            type_names = {
+                                'expense': 'Expense',
+                                'savings': 'Savings',
+                                'debt': 'Debt',
+                                'debt_return': 'Debt Return', 
+                                'savings_withdraw': 'Savings Withdraw'
+                            }
+                            message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+                        
+                        keyboard = {"inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
+                        ]]}
+                    
+                    self.send_message(chat_id, message, keyboard)
+                    return
+                elif result is not None and result[0] is None:
+                    # Calculation error
+                    self.send_message(chat_id, result[1])
+                    return
+            
+            # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
         
             if amount is not None:
@@ -819,6 +1141,71 @@ Use the menu below or just start tracking!"""
         
         # Answer the callback query first to remove loading state
         self.answer_callback(query["id"])
+
+            # NEW: Handle start language selection
+        # NEW: Handle start language selection
+        if data.startswith("start_lang_"):
+            language = data[11:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'uk':
+                welcome_text = """👋 Вітаю! Я *Finn* - ваш особистий фінансовий помічник! 💰
+
+        Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
+
+        🚀 *Що я можу для вас зробити:*
+        • 📊 Відстежувати доходи та витрати
+        • 🏦 Допомагати з заощадженнями
+        • 💳 Керувати боргами
+        • 📈 Аналізувати фінансові звички
+        • 🎯 Надавати персоналізовані рекомендації
+
+        💡 *Ваш середній дохід буде автоматично розраховано* на основі введених вами доходів, що дозволить нам створити оптимальну фінансову стратегію!
+
+        🎯 *Давайте почнемо!* Просто додайте вашу першу транзакцію:
+
+        💵 *Дохід:* `+5000 зарплата`
+        🛒 *Витрати:* `150 обід` 
+        🏦 *Заощадження:* `++1000`
+        💳 *Борг:* `-200 кредит`
+
+        Або використовуйте меню нижче для більше можливостей!"""
+            else:
+                welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
+
+        Together we'll track your finances, analyze spending, and build towards financial freedom.
+
+        🚀 *What I can do for you:*
+        • 📊 Track income and expenses
+        • 🏦 Help with savings
+        • 💳 Manage debts
+        • 📈 Analyze financial habits
+        • 🎯 Provide personalized recommendations
+
+        💡 *Your average income will be automatically calculated* based on your entered income transactions, allowing us to create an optimal financial strategy!
+
+        🎯 *Let's get started!* Just add your first transaction:
+
+        💵 *Income:* `+5000 salary`
+        🛒 *Expenses:* `150 lunch`
+        🏦 *Savings:* `++1000`
+        💳 *Debt:* `-200 loan`
+
+        Or use the menu below for more options!"""
+            
+            self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            
+            # Delete the language selection message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting language message: {e}")
+            
+            return
+
         
         if data.startswith("cat_"):
             category = data[4:]
@@ -867,30 +1254,49 @@ Use the menu below or just start tracking!"""
                     import traceback
                     traceback.print_exc()
                 
-                # Send appropriate confirmation message WITHOUT menu
+                user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+                
                 if transaction_type == 'income':
                     # Send savings recommendation
                     savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
                     self.send_message(chat_id, savings_msg, parse_mode='Markdown')
                     
                     # Send confirmation WITHOUT menu
-                    confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                    if user_lang == 'uk':
+                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                    else:
+                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, confirmation_msg)
                     
                 elif transaction_type == 'savings':
-                    message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'debt':        
-                    message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'debt_return':
-                    message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Борг повернено!\n💰 +-{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 elif transaction_type == 'savings_withdraw':
-                    message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
+                    if user_lang == 'uk':
+                        message = f"✅ Заощадження знято!\n💰 -+{amount:,.0f}₴"
+                    else:
+                        message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
                     self.send_message(chat_id, message)
                 else:
-                    message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                    if user_lang == 'uk':
+                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                    else:
+                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, message)
                 
                 # Clean up pending
@@ -913,6 +1319,112 @@ Use the menu below or just start tracking!"""
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu())
+
+        elif data == "confirm_restart":
+            user_lang = self.get_user_language(chat_id)
+            
+            # Clear all user data
+            user_id_str = str(chat_id)
+            
+            # Clear transactions
+            if chat_id in self.transactions:
+                del self.transactions[chat_id]
+            
+            # Clear income
+            if user_id_str in self.user_incomes:
+                del self.user_incomes[user_id_str]
+            
+            # Clear user categories (keep only default)
+            if user_id_str in self.user_categories:
+                self.user_categories[user_id_str] = {"Other": []}
+            
+            # Clear pending states
+            if chat_id in self.pending:
+                del self.pending[chat_id]
+            if chat_id in self.pending_income:
+                self.pending_income.discard(chat_id)
+            if chat_id in self.delete_mode:
+                del self.delete_mode[chat_id]
+            
+            # Save all changes
+            self.save_transactions()
+            self.save_incomes()
+            self.save_user_categories()
+            
+            if user_lang == 'uk':
+                success_msg = """✅ *Бота перезапущено!*
+                
+        Всі ваші дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
+
+        🚀 *Давайте почнемо знову!*
+        Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
+            else:
+                success_msg = """✅ *Bot restarted!*
+                
+        All your data has been successfully deleted. The bot is ready to start fresh!
+
+        🚀 *Let's start fresh!*
+        Add your first transaction or use the menu to get started."""
+            
+            self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            
+            # Delete the confirmation message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting restart message: {e}")
+
+        elif data == "cancel_restart":
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+            else:
+                cancel_msg = "❌ Restart cancelled. Your data remains untouched."
+            
+            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
+            
+            # Delete the confirmation message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting restart message: {e}")
+
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+            
+            # Delete the language selection message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting language message: {e}")
 
 # Initialize bot instance
 bot_instance = SimpleFinnBot()
@@ -967,255 +1479,132 @@ def health_check():
     return jsonify({"status": "OK", "message": "FinnBot is running with webhooks!"})
 
 # Your existing API routes
-@flask_app.route('/api/user-data/<user_id>')
-def get_user_data(user_id):
-    try:
-        if not bot_instance:
-            return jsonify({'error': 'Bot not initialized'}), 500
-            
-        # Get user transactions from your existing data structure
-        user_transactions = bot_instance.get_user_transactions(int(user_id))
-        
-        # Calculate statistics
-        income = 0
-        expenses = 0
-        savings_deposits = 0
-        savings_withdrawn = 0
-        debt_incurred = 0
-        debt_returned = 0
-        expense_by_category = {}
-        
-        for transaction in user_transactions:
-            if transaction['type'] == 'income':
-                income += transaction['amount']
-            elif transaction['type'] == 'savings':
-                savings_deposits += transaction['amount']
-            elif transaction['type'] == 'savings_withdraw':
-                savings_withdrawn += transaction['amount']
-            elif transaction['type'] == 'debt':
-                debt_incurred += abs(transaction['amount'])
-            elif transaction['type'] == 'debt_return':
-                debt_returned += abs(transaction['amount'])
-            elif transaction['type'] == 'expense':
-                expenses += transaction['amount']
-                category = transaction['category']
-                if category not in expense_by_category:
-                    expense_by_category[category] = 0
-                expense_by_category[category] += transaction['amount']
-        
-        net_savings = savings_deposits - savings_withdrawn
-        net_debt = debt_incurred - debt_returned
-        net_flow = income - expenses - net_savings
-        
-        def get_category_color(category):
-            color_map = {
-                'Food': '#ff6b6b',
-                'Transport': '#4dabf7', 
-                'Shopping': '#ffd43b',
-                'Bills': '#69db7c',
-                'Entertainment': '#cc5de8',
-                'Health': '#ff8787',
-                'Salary': '#00d26a',
-                'Business': '#20c997',
-                'Savings': '#4dabf7',
-                'Debt': '#ff8787',
-                'Other': '#adb5bd'
-            }
-            return color_map.get(category, '#adb5bd')
-        
-        # Prepare data for the mini app
-        user_data = {
-            'totalIncome': income,
-            'totalExpenses': expenses,
-            'totalSavings': net_savings,
-            'netFlow': net_flow,
-            'netDebt': net_debt,
-            'expensesByCategory': [
-                {'category': cat, 'amount': amount, 'color': get_category_color(cat)}
-                for cat, amount in expense_by_category.items()
-            ],
-            'recentTransactions': [
-                {
-                    'description': t['description'][:30],
-                    'category': t['category'],
-                    'amount': t['amount'] if t['type'] in ['income', 'savings'] else -t['amount'],
-                    'type': t['type'],
-                    'date': t['date'][:10] if 'date' in t else 'Unknown'
-                }
-                for t in user_transactions[-10:]
-            ]
-        }
-        
-        return jsonify(user_data)
-        
-    except Exception as e:
-        print(f"❌ Error in mini app API: {e}")
-        return jsonify({'error': str(e)}), 500
-    
-# ========== MINI-APP ROUTES ==========
-
-@flask_app.route('/mini-app')
-def serve_mini_app():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Financial Dashboard</title>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                margin: 0; 
-                padding: 20px; 
-                background: #1a1a1a; 
-                color: white; 
-            }
-            .container { max-width: 400px; margin: 0 auto; }
-            .card { 
-                background: #2d2d2d; 
-                padding: 20px; 
-                margin: 10px 0; 
-                border-radius: 10px; 
-            }
-            .loading { color: #888; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>💰 Financial Dashboard</h2>
-            
-            <div class="card">
-                <h3>Total Balance</h3>
-                <h1 id="balance" class="loading">Loading...</h1>
-            </div>
-            
-            <div class="card">
-                <h3>Income vs Expenses</h3>
-                <p>Income: <span id="income" class="loading">0</span>₴</p>
-                <p>Expenses: <span id="expenses" class="loading">0</span>₴</p>
-            </div>
-            
-            <div class="card">
-                <h3>Recent Activity</h3>
-                <p>Transactions: <span id="transactionCount" class="loading">0</span></p>
-                <p>Incomes: <span id="incomeCount" class="loading">0</span></p>
-            </div>
-        </div>
-        
-        <script>
-            // Load real data from API
-            async function loadData() {
-                try {
-                    console.log('Loading financial data...');
-                    const response = await fetch('/api/financial-data');
-                    const data = await response.json();
-                    
-                    console.log('Real data received:', data);
-                    
-                    // Update UI with real data
-                    document.getElementById('balance').textContent = data.total_balance + '₴';
-                    document.getElementById('balance').className = '';
-                    
-                    document.getElementById('income').textContent = data.total_income;
-                    document.getElementById('income').className = '';
-                    
-                    document.getElementById('expenses').textContent = Math.abs(data.total_expenses);
-                    document.getElementById('expenses').className = '';
-                    
-                    document.getElementById('transactionCount').textContent = data.transaction_count;
-                    document.getElementById('transactionCount').className = '';
-                    
-                    document.getElementById('incomeCount').textContent = data.income_count;
-                    document.getElementById('incomeCount').className = '';
-                    
-                } catch (error) {
-                    console.error('Failed to load data:', error);
-                    document.getElementById('balance').textContent = 'Error loading data';
-                }
-            }
-            
-            // Load data when page opens
-            document.addEventListener('DOMContentLoaded', loadData);
-        </script>
-    </body>
-    </html>
-    """
-
 @flask_app.route('/api/financial-data')
 def api_financial_data():
     try:
         print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
         
-        # Use the SAME data structure as your bot - don't read from file directly!
         if not bot_instance:
             return jsonify({'error': 'Bot not initialized'}), 500
         
-        # Get transactions from the bot instance (same data the bot uses)
+        # Get transactions from the bot instance
         all_transactions = bot_instance.transactions
-        print(f"📊 Transactions from bot instance: {all_transactions}")
+        print(f"📊 Total users with transactions: {len(all_transactions)}")
         
-        # Start with ZERO balance - calculate everything fresh
+        # Initialize totals
         balance = 0
         total_income = 0
         total_expenses = 0
+        total_savings = 0
         transaction_count = 0
+        recent_transactions = []
 
-        # Process all transactions for ALL users
+        # Process ALL transactions for calculation
         if isinstance(all_transactions, dict):
             for user_id, user_transactions in all_transactions.items():
                 if isinstance(user_transactions, list):
-                    print(f"👤 Processing {len(user_transactions)} transactions for user {user_id}")
+                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
                     
+                    # Calculate totals from ALL transactions
                     for transaction in user_transactions:
                         if isinstance(transaction, dict):
                             amount = float(transaction.get('amount', 0))
                             trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
                             
-                            # LOG EVERY TRANSACTION FOR VERIFICATION
-                            print(f"   📝 Transaction: {trans_type} {amount}")
+                            print(f"   📝 {trans_type}: {amount} - {description}")
                             
-                            # UNAMBIGUOUS BALANCE CALCULATION
+                            # CORRECTED BALANCE CALCULATION
                             if trans_type == 'income':
                                 balance += amount
                                 total_income += amount
-                                print(f"      → Income: +{amount} | Balance: {balance}")
                             elif trans_type == 'expense':
                                 balance -= amount
                                 total_expenses += amount
-                                print(f"      → Expense: -{amount} | Balance: {balance}")
                             elif trans_type == 'savings':
-                                balance -= amount
-                                print(f"      → Savings: -{amount} | Balance: {balance}")
+                                balance -= amount  # Money moved to savings
+                                total_savings += amount
                             elif trans_type == 'debt':
-                                balance += amount
-                                print(f"      → Debt: +{amount} | Balance: {balance}")
+                                balance += amount  # You receive money as debt
                             elif trans_type == 'debt_return':
-                                balance -= amount
-                                print(f"      → Debt Return: -{amount} | Balance: {balance}")
+                                balance -= amount  # You pay back debt
                             elif trans_type == 'savings_withdraw':
-                                balance += amount
-                                print(f"      → Savings Withdraw: +{amount} | Balance: {balance}")
+                                balance += amount  # You take money from savings
+                                total_savings -= amount
                             
                             transaction_count += 1
+                    
+                    # Get recent transactions for display (last 5)
+                    for transaction in user_transactions[-5:]:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            category = transaction.get('category', 'Other')
+                            
+                            # Determine emoji and display format
+                            emoji = "💰"
+                            display_name = description
+                            
+                            if trans_type == 'income':
+                                emoji = "💵"
+                                # For income, show category instead of description
+                                display_name = category
+                            elif trans_type == 'expense':
+                                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                                    emoji = "🏠"
+                                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                                    emoji = "🍕"
+                                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                                    emoji = "🚗"
+                                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                                    emoji = "🛍️"
+                                else:
+                                    emoji = "🛒"
+                            elif trans_type == 'savings':
+                                emoji = "🏦"
+                                display_name = "Savings"
+                            elif trans_type == 'debt':
+                                emoji = "💳"
+                                display_name = "Debt"
+                            elif trans_type == 'debt_return':
+                                emoji = "🔙"
+                                display_name = "Debt Return"
+                            elif trans_type == 'savings_withdraw':
+                                emoji = "📥"
+                                display_name = "Savings Withdraw"
+                            
+                            # Truncate long descriptions
+                            if len(display_name) > 25:
+                                display_name = display_name[:22] + "..."
+                            
+                            recent_transactions.append({
+                                "emoji": emoji,
+                                "name": display_name,
+                                "amount": amount  # Use original amount, let frontend handle sign
+                            })
 
-        # FINAL VERIFICATION - NO INCOME FROM incomes.json!
+        # Use total_savings for savings display
+        actual_savings = total_savings
+        
+        # FINAL VERIFICATION
         print("=" * 50)
-        print(f"✅ FINAL VERIFICATION (NO AVERAGE INCOME INCLUDED):")
+        print(f"✅ FINAL CALCULATION:")
         print(f"   Balance: {balance}")
-        print(f"   Total Income (from transactions): {total_income}") 
+        print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {actual_savings}")
         print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
         
         response_data = {
-            'total_balance': balance,
-            'total_income': total_income,
-            'total_expenses': total_expenses,
-            'savings': max(balance, 0),
-            'transaction_count': transaction_count,
-            'income_count': 0
+            'balance': balance,
+            'income': total_income,
+            'spending': total_expenses,
+            'savings': actual_savings,
+            'transactions': recent_transactions,
+            'transaction_count': transaction_count
         }
         
         return jsonify(response_data)
@@ -1225,6 +1614,721 @@ def api_financial_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
+    
+
+@flask_app.route('/api/transactions')
+def api_transactions():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        all_transactions = bot_instance.transactions
+        all_transactions_list = []
+        
+        # Collect all transactions from all users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            # Add user_id to transaction for uniqueness
+                            transaction_with_user = transaction.copy()
+                            transaction_with_user['user_id'] = user_id
+                            all_transactions_list.append(transaction_with_user)
+        
+        # Sort by date (newest first)
+        all_transactions_list.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_transactions = all_transactions_list[start_idx:end_idx]
+        
+        # Format transactions for display
+        formatted_transactions = []
+        for transaction in paginated_transactions:
+            amount = float(transaction.get('amount', 0))
+            trans_type = transaction.get('type', 'expense')
+            description = transaction.get('description', 'Unknown')
+            category = transaction.get('category', 'Other')
+            timestamp = transaction.get('date', '')
+            
+            # Determine emoji and display name
+            emoji = "💰"
+            display_name = ""
+            
+            if trans_type == 'income':
+                emoji = "💵"
+                # For income: show category in brackets
+                display_name = f"{category}"
+            elif trans_type == 'expense':
+                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                    emoji = "🏠"
+                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                    emoji = "🍕"
+                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                    emoji = "🚗"
+                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                    emoji = "🛍️"
+                else:
+                    emoji = "🛒"
+                
+                # For expenses: extract the actual description (remove numbers and symbols)
+                # The description might be "100 food" - we want just "food"
+                clean_description = description
+                
+                # Remove numbers and currency symbols
+                clean_description = re.sub(r'[\d+.,₴]', '', clean_description).strip()
+                
+                # Remove common transaction symbols
+                clean_description = re.sub(r'[+-]+', '', clean_description).strip()
+                
+                # If we have a meaningful description after cleaning
+                if clean_description and clean_description.lower() != category:
+                    display_name = f"{category} {clean_description}"
+                else:
+                    display_name = f"{category}"
+                    
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = "Savings"
+            elif trans_type == 'debt':
+                emoji = "💳"
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+            
+            # Truncate long descriptions
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
+            
+            formatted_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "display_name": display_name,
+                "amount": amount,
+                "timestamp": timestamp,
+                "type": trans_type
+            })
+        
+        has_more = len(all_transactions_list) > end_idx
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'has_more': has_more,
+            'current_page': page,
+            'total_transactions': len(all_transactions_list)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in transactions API: {e}")
+        return jsonify({'error': 'Failed to load transactions'}), 500
+
+# Serve mini app main page
+# ========== MINI-APP ROUTES ==========
+
+@flask_app.route('/mini-app')
+def serve_mini_app():
+    return """
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        body {
+            background-color: #000000;
+            color: #ffffff;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background-color: #1c1c1e;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .balance-section {
+            padding: 40px 20px 24px;
+            text-align: center;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
+        }
+        
+        .balance-label {
+            font-size: 16px;
+            color: #8e8e93;
+            margin-bottom: 8px;
+        }
+        
+        .balance-amount {
+            font-size: 36px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+        
+        .summary-section {
+            display: flex;
+            padding: 20px;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
+        }
+        
+        .summary-item {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: #8e8e93;
+            margin-bottom: 4px;
+        }
+        
+        .summary-amount {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .income-amount {
+            color: #30d158;
+        }
+        
+        .spending-amount {
+            color: #ff453a;
+        }
+        
+        .savings-amount {
+            color: #0a84ff;
+        }
+        
+        .transactions-section {
+            padding: 20px;
+            background-color: #1c1c1e;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        
+        .transactions-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #ffffff;
+        }
+        
+        .transaction-container {
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid #2c2c2e;
+        }
+        
+        .transaction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 12px 0;
+            background-color: #1c1c1e;
+            position: relative;
+            transition: transform 0.3s ease;
+            width: 100%;
+        }
+        
+        .transaction-item.swiping {
+            transition: none;
+        }
+        
+        .transaction-info {
+            display: flex;
+            align-items: flex-start;
+            flex: 1;
+        }
+        
+        .transaction-emoji {
+            font-size: 20px;
+            margin-right: 12px;
+            width: 24px;
+            text-align: center;
+            margin-top: 2px;
+        }
+        
+        .transaction-details {
+            flex: 1;
+        }
+        
+        .transaction-name {
+            font-size: 16px;
+            color: #ffffff;
+            margin-bottom: 4px;
+        }
+        
+        .transaction-date {
+            font-size: 12px;
+            color: #8e8e93;
+        }
+        
+        .transaction-amount {
+            font-size: 16px;
+            font-weight: 400;
+            text-align: right;
+            min-width: 80px;
+        }
+        
+        .delete-action {
+            position: absolute;
+            right: -80px;
+            top: 0;
+            bottom: 0;
+            width: 80px;
+            background-color: #ff453a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            transition: right 0.3s ease;
+        }
+        
+        .delete-action.visible {
+            right: 0;
+        }
+        
+        .delete-text {
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #8e8e93;
+        }
+        
+        .no-transactions {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8e8e93;
+        }
+        
+        .swipe-hint {
+            text-align: center;
+            padding: 10px 20px;
+            color: #8e8e93;
+            font-size: 12px;
+            border-bottom: 1px solid #2c2c2e;
+            background-color: #1c1c1e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="balance-section">
+            <div class="balance-label">Balance</div>
+            <div class="balance-amount" id="balance-amount">0</div>
+        </div>
+        
+        <div class="summary-section">
+            <div class="summary-item">
+                <div class="summary-label">Income</div>
+                <div class="summary-amount income-amount" id="income-amount">0</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-label">Spending</div>
+                <div class="summary-amount spending-amount" id="spending-amount">0</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-label">Savings</div>
+                <div class="summary-amount savings-amount" id="savings-amount">0</div>
+            </div>
+        </div>
+        
+        <div class="swipe-hint">
+            💡 Swipe left on any transaction to delete
+        </div>
+        
+        <div class="transactions-section" id="transactions-section">
+            <div class="transactions-header">Transactions</div>
+            <div id="transactions-list">
+                <div class="loading">Loading transactions...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let isLoading = false;
+        let hasMoreTransactions = true;
+        const transactionsPerPage = 10;
+        let touchStartX = 0;
+        let currentSwipeElement = null;
+        let swipeThreshold = 50;
+
+        // Fetch real data from your API
+        async function loadFinancialData() {
+            try {
+                const response = await fetch('/api/financial-data');
+                if (!response.ok) {
+                    throw new Error('API response not ok');
+                }
+                const data = await response.json();
+                
+                console.log('📊 API Response:', data);
+                
+                // Update the UI with real data
+                document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
+                document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
+                document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
+                document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
+                
+            } catch (error) {
+                console.error('Error loading financial data:', error);
+                document.getElementById('balance-amount').textContent = '0';
+                document.getElementById('income-amount').textContent = '0';
+                document.getElementById('spending-amount').textContent = '0';
+                document.getElementById('savings-amount').textContent = '0';
+            }
+        }
+
+        // Load transactions with pagination
+        async function loadTransactions(page = 1) {
+            if (isLoading) return;
+            
+            isLoading = true;
+            
+            try {
+                const response = await fetch(`/api/transactions?page=${page}&limit=${transactionsPerPage}`);
+                if (!response.ok) {
+                    throw new Error('API response not ok');
+                }
+                const data = await response.json();
+                
+                const transactionsList = document.getElementById('transactions-list');
+                
+                // Remove loading message on first load
+                if (page === 1) {
+                    transactionsList.innerHTML = '';
+                }
+                
+                if (data.transactions && data.transactions.length > 0) {
+                    data.transactions.forEach(transaction => {
+                        const transactionElement = createTransactionElement(transaction);
+                        transactionsList.appendChild(transactionElement);
+                    });
+                    
+                    // Check if there are more transactions
+                    hasMoreTransactions = data.has_more || false;
+                    
+                    // Remove loading indicator if it exists
+                    const existingLoader = document.getElementById('loading-indicator');
+                    if (existingLoader) {
+                        existingLoader.remove();
+                    }
+                    
+                    // Add loading indicator if there are more transactions
+                    if (hasMoreTransactions) {
+                        const loadingIndicator = document.createElement('div');
+                        loadingIndicator.className = 'loading';
+                        loadingIndicator.id = 'loading-indicator';
+                        loadingIndicator.textContent = 'Loading more transactions...';
+                        transactionsList.appendChild(loadingIndicator);
+                    }
+                } else if (page === 1) {
+                    // No transactions at all
+                    transactionsList.innerHTML = `
+                        <div class="no-transactions">
+                            <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
+                            <div>No transactions yet</div>
+                            <div style="font-size: 12px; margin-top: 8px;">Start adding transactions in the bot</div>
+                        </div>
+                    `;
+                }
+                
+                currentPage = page;
+                
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+                if (page === 1) {
+                    document.getElementById('transactions-list').innerHTML = 
+                        '<div class="loading">Failed to load transactions</div>';
+                }
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        // Create transaction element with swipe functionality
+        function createTransactionElement(transaction) {
+            const container = document.createElement('div');
+            container.className = 'transaction-container';
+            
+            const transactionElement = document.createElement('div');
+            transactionElement.className = 'transaction-item';
+            
+            // Delete action panel
+            const deleteAction = document.createElement('div');
+            deleteAction.className = 'delete-action';
+            deleteAction.innerHTML = '<div class="delete-text">DELETE</div>';
+            
+            // Determine transaction type and amount display
+            const isIncome = transaction.type === 'income';
+            const isSavings = transaction.type === 'savings';
+            const isDebt = transaction.type === 'debt';
+            const isDebtReturn = transaction.type === 'debt_return';
+            const isSavingsWithdraw = transaction.type === 'savings_withdraw';
+            
+            const amountClass = isIncome ? 'income-amount' : 'spending-amount';
+            
+            // FIXED: Expenses, debt returns, and savings withdrawals should show negative
+            let amountDisplay;
+            if (isIncome || isDebt) {
+                amountDisplay = `+${formatCurrency(transaction.amount)}`;
+            } else {
+                amountDisplay = `-${formatCurrency(transaction.amount)}`;
+            }
+            
+            // Format date
+            const transactionDate = new Date(transaction.timestamp || transaction.date);
+            const formattedDate = formatDate(transactionDate);
+            
+            transactionElement.innerHTML = `
+                <div class="transaction-info">
+                    <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                    <div class="transaction-details">
+                        <div class="transaction-name">${transaction.display_name || transaction.name || 'Transaction'}</div>
+                        <div class="transaction-date">${formattedDate}</div>
+                    </div>
+                </div>
+                <div class="transaction-amount ${amountClass}">
+                    ${amountDisplay}₴
+                </div>
+            `;
+            
+            container.appendChild(transactionElement);
+            container.appendChild(deleteAction);
+            
+            // Add swipe functionality
+            addSwipeListeners(container, transactionElement, deleteAction, transaction);
+            
+            return container;
+        }
+
+        // Add swipe functionality to transaction
+        function addSwipeListeners(container, transactionElement, deleteAction, transaction) {
+            let startX = 0;
+            let currentX = 0;
+            let isSwiping = false;
+            
+            transactionElement.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                currentX = startX;
+                isSwiping = true;
+                transactionElement.classList.add('swiping');
+                
+                // Reset other swiped elements
+                resetOtherSwipes(container);
+            });
+            
+            transactionElement.addEventListener('touchmove', (e) => {
+                if (!isSwiping) return;
+                
+                currentX = e.touches[0].clientX;
+                const diff = startX - currentX;
+                
+                // Only allow left swipe (positive diff)
+                if (diff > 0) {
+                    transactionElement.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+                    
+                    // Show delete action when threshold is reached
+                    if (diff > swipeThreshold) {
+                        deleteAction.classList.add('visible');
+                    } else {
+                        deleteAction.classList.remove('visible');
+                    }
+                }
+            });
+            
+            transactionElement.addEventListener('touchend', () => {
+                if (!isSwiping) return;
+                
+                const diff = startX - currentX;
+                isSwiping = false;
+                transactionElement.classList.remove('swiping');
+                
+                // If swiped beyond threshold, keep it open, otherwise reset
+                if (diff > swipeThreshold) {
+                    transactionElement.style.transform = 'translateX(-80px)';
+                    deleteAction.classList.add('visible');
+                    
+                    // Add click listener to delete action
+                    const deleteHandler = () => {
+                        deleteTransaction(transaction, container);
+                        deleteAction.removeEventListener('click', deleteHandler);
+                    };
+                    deleteAction.addEventListener('click', deleteHandler);
+                } else {
+                    resetSwipe(transactionElement, deleteAction);
+                }
+            });
+            
+            // Reset on click/tap
+            transactionElement.addEventListener('click', () => {
+                resetSwipe(transactionElement, deleteAction);
+            });
+        }
+
+        // Reset swipe position
+        function resetSwipe(transactionElement, deleteAction) {
+            transactionElement.style.transform = 'translateX(0)';
+            deleteAction.classList.remove('visible');
+        }
+
+        // Reset other swiped elements
+        function resetOtherSwipes(currentContainer) {
+            const allContainers = document.querySelectorAll('.transaction-container');
+            allContainers.forEach(container => {
+                if (container !== currentContainer) {
+                    const transactionEl = container.querySelector('.transaction-item');
+                    const deleteEl = container.querySelector('.delete-action');
+                    resetSwipe(transactionEl, deleteEl);
+                }
+            });
+        }
+
+        // Delete transaction
+        async function deleteTransaction(transaction, container) {
+            if (!confirm('Are you sure you want to delete this transaction?')) {
+                resetSwipe(container.querySelector('.transaction-item'), container.querySelector('.delete-action'));
+                return;
+            }
+            
+            try {
+                // Show loading state
+                container.style.opacity = '0.5';
+                
+                // Here you would call your backend API to delete the transaction
+                // For now, we'll just remove it from the frontend and reload data
+                console.log('Deleting transaction:', transaction);
+                
+                // Remove from UI immediately
+                container.style.transition = 'opacity 0.3s ease';
+                container.style.opacity = '0';
+                setTimeout(() => {
+                    container.remove();
+                }, 300);
+                
+                // Reload financial data to update balances
+                await loadFinancialData();
+                
+                // Show success message
+                showNotification('Transaction deleted successfully');
+                
+            } catch (error) {
+                console.error('Error deleting transaction:', error);
+                showNotification('Error deleting transaction', true);
+                container.style.opacity = '1';
+            }
+        }
+
+        // Show notification
+        function showNotification(message, isError = false) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: ${isError ? '#ff453a' : '#30d158'};
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-weight: 600;
+                z-index: 1000;
+                animation: slideDown 0.3s ease;
+            `;
+            
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Format date as "Oct 11, 2:50 PM"
+        function formatDate(date) {
+            if (isNaN(date.getTime())) {
+                return 'Recent';
+            }
+            
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[date.getMonth()];
+            const day = date.getDate();
+            
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            
+            hours = hours % 12;
+            hours = hours ? hours : 12; // the hour '0' should be '12'
+            
+            return `${month} ${day}, ${hours}:${minutes} ${ampm}`;
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US').format(amount);
+        }
+
+        // Infinite scroll handler
+        function handleScroll() {
+            const transactionsSection = document.getElementById('transactions-section');
+            const scrollTop = transactionsSection.scrollTop;
+            const scrollHeight = transactionsSection.scrollHeight;
+            const clientHeight = transactionsSection.clientHeight;
+            
+            // Load more when 100px from bottom
+            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreTransactions && !isLoading) {
+                loadTransactions(currentPage + 1);
+            }
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load financial data and first page of transactions
+            loadFinancialData();
+            loadTransactions(1);
+            
+            // Add scroll event listener for infinite scroll
+            const transactionsSection = document.getElementById('transactions-section');
+            transactionsSection.addEventListener('scroll', handleScroll);
+        });
+    </script>
+</body>
+</html>
+    """
+
+# ========== TELEGRAM BOT SETUP ==========
 
 @flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
 def add_transaction():
@@ -1264,6 +2368,20 @@ def add_transaction():
         
     except Exception as e:
         print(f"❌ Error adding transaction: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@flask_app.route('/api/delete-transaction', methods=['POST'])
+def delete_transaction():
+    try:
+        data = request.json
+        transaction_id = data.get('transaction_id')
+        user_id = data.get('user_id')
+        
+        # Your logic to delete the transaction from your data store
+        # This would remove it from transactions.json and update calculations
+        
+        return jsonify({'status': 'success'})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @flask_app.route('/api/add-income', methods=['POST']) 

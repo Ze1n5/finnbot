@@ -59,44 +59,42 @@ class SimpleFinnBot:
         self.load_user_categories()
         self.translations = {
     'en': {
-        'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
-        'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
-        'help_text': """💡 *Available Commands:*
-• `15.50 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `-100 debt` - Add debt
-• `++200 savings` - Add savings
-• Use menu below for more options!""",
-        'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
-        'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
-        'no_transactions': "No transactions recorded yet.",
-        'balance': "Balance",
-        'income': "Income",
-        'expenses': "Expenses",
-        # ADD THESE NEW TRANSLATIONS:
-        'restart_confirm': "🔄 *Restart Bot*\n\nThis action will delete all your data including transactions, categories, and settings. This cannot be undone!\n\nAre you sure?",
-        'restart_success': "✅ *Bot restarted!* All data has been cleared. Let's start fresh!",
-        'restart_cancelled': "❌ Restart cancelled. Your data remains untouched."
+        'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
+
+Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
+
+🎯 *50/30/20 Breakdown:*
+• 🏠 *50% Needs* - Rent, food, utilities, transport
+• 🎉 *30% Wants* - Dining, entertainment, shopping  
+• 🏦 *20% Future* - Savings, debt repayment, investments
+
+🚀 *Quick Start:*
+`+5000 salary` - Add income
+`150 lunch` - Add expense  
+`++1000` - Add to savings
+`-200 loan` - Add debt
+
+Let's build your financial health together! 💪""",
+        # ... keep other English translations the same ...
     },
     'uk': {
-        'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
-        'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
-        'help_text': """💡 *Доступні команди:*
-• `15.50 обід` - Додати витрату
-• `+5000 зарплата` - Додати дохід  
-• `-100 борг` - Додати борг
-• `++200 заощадження` - Додати заощадження
-• Використовуйте меню нижче для більше опцій!""",
-        'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
-        'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
-        'no_transactions': "Ще немає записаних транзакцій.",
-        'balance': "Баланс",
-        'income': "Дохід",
-        'expenses': "Витрати",
-        # ADD THESE NEW TRANSLATIONS:
-        'restart_confirm': "🔄 *Перезапуск бота*\n\nЦя дія видалить всі ваші дані, включаючи транзакції, категорії та налаштування. Цю дію не можна скасувати!\n\nВи впевнені?",
-        'restart_success': "✅ *Бота перезапущено!* Всі дані було очищено. Давайте почнемо знову!",
-        'restart_cancelled': "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+        'welcome': """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
+
+Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
+
+🎯 *Розподіл 50/30/20:*
+• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
+• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
+• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
+
+🚀 *Швидкий старт:*
+`+5000 зарплата` - Додати дохід
+`150 обід` - Додати витрату
+`++1000` - Додати до заощаджень
+`-200 кредит` - Додати борг
+
+Давайте будувати ваше фінансове здоров'я разом! 💪""",
+        # ... keep other Ukrainian translations the same ...
     }
 }
         
@@ -1149,49 +1147,39 @@ This will help me provide better financial recommendations!"""
             self.set_user_language(chat_id, language)
             
             if language == 'uk':
-                welcome_text = """👋 Вітаю! Я *Finn* - ваш особистий фінансовий помічник! 💰
+                welcome_text = """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
 
-        Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
+Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
 
-        🚀 *Що я можу для вас зробити:*
-        • 📊 Відстежувати доходи та витрати
-        • 🏦 Допомагати з заощадженнями
-        • 💳 Керувати боргами
-        • 📈 Аналізувати фінансові звички
-        • 🎯 Надавати персоналізовані рекомендації
+        🎯 *Розподіл 50/30/20:*
+        • 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
+        • 🎉 *30% Бажання* - Ресторани, розваги, шопінг
+        • 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
 
-        💡 *Ваш середній дохід буде автоматично розраховано* на основі введених вами доходів, що дозволить нам створити оптимальну фінансову стратегію!
+        🚀 *Швидкий старт:*
+        `+5000 зарплата` - Додати дохід
+        `150 обід` - Додати витрату
+        `++1000` - Додати до заощаджень
+        `-200 кредит` - Додати борг
 
-        🎯 *Давайте почнемо!* Просто додайте вашу першу транзакцію:
-
-        💵 *Дохід:* `+5000 зарплата`
-        🛒 *Витрати:* `150 обід` 
-        🏦 *Заощадження:* `++1000`
-        💳 *Борг:* `-200 кредит`
-
-        Або використовуйте меню нижче для більше можливостей!"""
+        Давайте будувати ваше фінансове здоров'я разом! 💪"""
             else:
-                welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
+                welcome_text = """Hi! I'm *Finn* - your AI finance assistant 🤖💰
 
-        Together we'll track your finances, analyze spending, and build towards financial freedom.
+        Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
 
-        🚀 *What I can do for you:*
-        • 📊 Track income and expenses
-        • 🏦 Help with savings
-        • 💳 Manage debts
-        • 📈 Analyze financial habits
-        • 🎯 Provide personalized recommendations
+        🎯 *50/30/20 Breakdown:*
+        • 🏠 *50% Needs* - Rent, food, utilities, transport
+        • 🎉 *30% Wants* - Dining, entertainment, shopping  
+        • 🏦 *20% Future* - Savings, debt repayment, investments
 
-        💡 *Your average income will be automatically calculated* based on your entered income transactions, allowing us to create an optimal financial strategy!
+        🚀 *Quick Start:*
+        `+5000 salary` - Add income
+        `150 lunch` - Add expense  
+        `++1000` - Add to savings
+        `-200 loan` - Add debt
 
-        🎯 *Let's get started!* Just add your first transaction:
-
-        💵 *Income:* `+5000 salary`
-        🛒 *Expenses:* `150 lunch`
-        🏦 *Savings:* `++1000`
-        💳 *Debt:* `-200 loan`
-
-        Or use the menu below for more options!"""
+        Let's build your financial health together! 💪"""
             
             self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
