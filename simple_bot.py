@@ -57,6 +57,26 @@ class SimpleFinnBot:
         self.load_transactions()
         self.load_incomes()
         self.load_user_categories()
+        self.monthly_totals = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}}
+        self.monthly_percentages = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0}}
+        self.current_month = datetime.now().strftime("%Y-%m")
+        self.category_mapping = {
+        'needs': [
+            'Rent', 'Mortgage', 'Groceries', 'Utilities', 'Electricity', 
+            'Water', 'Gas', 'Internet', 'Phone', 'Transport', 'Fuel', 
+            'Public Transport', 'Car Maintenance', 'Healthcare', 'Insurance',
+            'Medicine', 'Doctor'
+        ],
+        'wants': [
+            'Shopping', 'Restaurants', 'Cafe', 'Dining', 'Entertainment',
+            'Movies', 'Concerts', 'Hobbies', 'Travel', 'Vacation', 'Luxury',
+            'Electronics', 'Clothing', 'Beauty', 'Gifts'
+        ],
+        'future': [
+            'Savings', 'Crypto', 'Stock', 'Investment', 'Debt Return',
+            'Education', 'Retirement', 'Emergency Fund'
+        ]
+    }
         self.translations = {
     'en': {
         'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
@@ -98,6 +118,135 @@ Let's build your financial health together! 💪""",
     }
 }
         
+    def categorize_transaction(self, category_name, description=""):
+        """Categorize transaction into needs/wants/future"""
+        category_lower = category_name.lower()
+        description_lower = description.lower()
+        
+        # Check category name first
+        for bucket, categories in self.category_mapping.items():
+            for cat in categories:
+                if cat.lower() in category_lower:
+                    return bucket
+        
+        # Check description if category is generic
+        for bucket, categories in self.category_mapping.items():
+            for cat in categories:
+                if cat.lower() in description_lower:
+                    return bucket
+        
+        # Default to 'wants' for unknown categories
+        return 'wants'
+
+    def update_503020_totals(self, user_id, amount, bucket):
+        """Update monthly totals for 50/30/20 tracking"""
+        user_id_str = str(user_id)
+        current_month = datetime.now().strftime("%Y-%m")
+        
+        # Initialize if new user or new month
+        if user_id_str not in self.monthly_totals:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+        
+        # Reset if new month
+        if hasattr(self, 'current_month') and current_month != self.current_month:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+            self.current_month = current_month
+        
+        # Update the bucket total
+        if bucket in self.monthly_totals[user_id_str]:
+            self.monthly_totals[user_id_str][bucket] += amount
+        
+        # Update percentages
+        self.calculate_503020_percentages(user_id_str)
+
+    def update_income_for_503020(self, user_id, amount):
+        """Update income for percentage calculations"""
+        user_id_str = str(user_id)
+        
+        if user_id_str not in self.monthly_totals:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+        
+        self.monthly_totals[user_id_str]['income'] += amount
+        self.calculate_503020_percentages(user_id_str)
+
+    def calculate_503020_percentages(self, user_id_str):
+        """Calculate current percentages for 50/30/20"""
+        if user_id_str not in self.monthly_totals:
+            return
+        
+        totals = self.monthly_totals[user_id_str]
+        income = totals['income']
+        
+        if income > 0:
+            self.monthly_percentages[user_id_str] = {
+                'needs': (totals['needs'] / income) * 100,
+                'wants': (totals['wants'] / income) * 100,
+                'future': (totals['future'] / income) * 100
+            }
+        else:
+            self.monthly_percentages[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0}
+
+    def check_503020_limits(self, user_id):
+        """Check if user crossed any 50/30/20 limits and return messages"""
+        user_id_str = str(user_id)
+        
+        if user_id_str not in self.monthly_percentages:
+            return []
+        
+        current = self.monthly_percentages[user_id_str]
+        
+        # Store previous percentages (you might want to persist this)
+        previous = getattr(self, 'previous_percentages', {}).get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0})
+        
+        messages = []
+        user_lang = self.get_user_language(user_id)
+        
+        # Needs checks (45% and 50%)
+        if 45 <= current['needs'] < 50 and previous['needs'] < 45:
+            if user_lang == 'uk':
+                messages.append("🏠 *Потреби наближаються до ліміту*\n\nВи витратили 45% вашого доходу на потреби цього місяця.\n\nВи близько до рекомендованого ліміту 50%. Розгляньте перегляд ваших основних витрат.")
+            else:
+                messages.append("🏠 *Needs Approaching Limit*\n\nYou've spent 45% of your income on needs this month.\n\nYou're close to the 50% recommended limit. Consider reviewing your essential expenses.")
+        
+        elif current['needs'] >= 50 and previous['needs'] < 50:
+            if user_lang == 'uk':
+                messages.append(f"🚨 *Потреби перевищили бюджет*\n\nВи витратили {current['needs']:.1f}% на потреби - понад цільовий показник 50%.\n\nЦе може вплинути на ваші заощадження та витрати на спосіб життя. Давайте оптимізуємо!")
+            else:
+                messages.append(f"🚨 *Needs Over Budget*\n\nYou've spent {current['needs']:.1f}% on needs - over the 50% target.\n\nThis may impact your savings and lifestyle expenses. Let's optimize!")
+        
+        # Wants checks (27% and 30%)
+        if 27 <= current['wants'] < 30 and previous['wants'] < 27:
+            if user_lang == 'uk':
+                messages.append("🎉 *Бажання наближаються до ліміту*\n\nВи витратили 27% на бажання способу життя цього місяця.\n\nНаближається до ліміту 30%. Розгляньте темпу ваших дискреційних витрат.")
+            else:
+                messages.append("🎉 *Wants Approaching Limit*\n\nYou've spent 27% on lifestyle wants this month.\n\nApproaching the 30% limit. Consider pacing your discretionary spending.")
+        
+        elif current['wants'] >= 30 and previous['wants'] < 30:
+            if user_lang == 'uk':
+                messages.append(f"⚠️ *Бажання перевищили бюджет*\n\nВи витратили {current['wants']:.1f}% на бажання - понад цільовий показник 30%.\n\nЦе впливає на ваші майбутні заощадження. Час пріоритезувати!")
+            else:
+                messages.append(f"⚠️ *Wants Over Budget*\n\nYou've spent {current['wants']:.1f}% on wants - over the 30% target.\n\nThis affects your future savings. Time to prioritize!")
+        
+        # Future praise (20% and 25%)
+        if current['future'] >= 20 and previous['future'] < 20:
+            if user_lang == 'uk':
+                messages.append("🏆 *Майбутня увага досягнута!*\n\nВи виділили 20%+ на ваше майбутнє цього місяця!\n\nІдеальний баланс - ви будуєте фінансову безпеку, насолоджуючись життям сьогодні. 🎯")
+            else:
+                messages.append("🏆 *Future Focus Achieved!*\n\nYou've allocated 20%+ to your future this month!\n\nPerfect balance - you're building financial security while enjoying life today. 🎯")
+        
+        elif current['future'] >= 25 and previous['future'] < 25:
+            if user_lang == 'uk':
+                messages.append(f"🌟 *Фінансова зірка!*\n\n{current['future']:.1f}% на ваше майбутнє? Вражаюче!\n\nВи не просто зберігаєте - ви будуєте багатство та безпеку. Це фінансове здоров'я наступного рівня! 💪")
+            else:
+                messages.append(f"🌟 *Financial Rockstar!*\n\n{current['future']:.1f}% to your future? Outstanding!\n\nYou're not just saving - you're building wealth and security. This is next-level financial health! 💪")
+        
+        # Update previous percentages
+        if not hasattr(self, 'previous_percentages'):
+            self.previous_percentages = {}
+        self.previous_percentages[user_id_str] = current.copy()
+        
+        return messages
+
     def calculate_expression(self, text):
         """Calculate mathematical expressions with percentages"""
         try:
@@ -331,13 +480,13 @@ Let's build your financial health together! 💪""",
         
         if user_lang == 'uk':
             keyboard = [
-                ["📊 Фінансовий звіт", "📋 Команди"],
+                ["📊 Фінансовий звіт", "📊 50/30/20 Status"],
                 ["🗑️ Видалити транзакцію", "🏷️ Керування категоріями"],
                 ["🔄 Перезапустити бота", "🌍 Мова"]
             ]
         else:
             keyboard = [
-                ["📊 Financial Summary", "📋 Commands"],
+                ["📊 Financial Summary", "📊 50/30/20 Status"],
                 ["🗑️ Delete Transaction", "🏷️ Manage Categories"], 
                 ["🔄 Restart Bot", "🌍 Language"]
             ]
@@ -793,7 +942,84 @@ This will help me provide better financial recommendations!"""
 
                 # Handle income collection
                 # Handle income collection
-                # Handle income collection (only for initial setup)    
+                # Handle income collection (only for initial setup)
+
+        elif text == "📊 50/30/20 Status" or text == "📊 50/30/20 Status":
+            user_id_str = str(chat_id)
+            user_lang = self.get_user_language(chat_id)
+            
+            # Check if we have data for this user
+            if (user_id_str not in self.monthly_totals or 
+                user_id_str not in self.monthly_percentages or
+                self.monthly_totals[user_id_str]['income'] == 0):
+                
+                if user_lang == 'uk':
+                    self.send_message(chat_id, "📊 Ще немає даних для аналізу 50/30/20 цього місяця. Додайте доходи та витрати, щоб побачити статистику.")
+                else:
+                    self.send_message(chat_id, "📊 No data yet for 50/30/20 analysis this month. Add some income and expenses to see your statistics.")
+                return
+            
+            percentages = self.monthly_percentages.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0})
+            totals = self.monthly_totals.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0, 'income': 0})
+            
+            # Ensure we have valid percentages
+            needs_pct = percentages.get('needs', 0)
+            wants_pct = percentages.get('wants', 0) 
+            future_pct = percentages.get('future', 0)
+            
+            if user_lang == 'uk':
+                summary = f"""📊 *Статус 50/30/20*
+
+        🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+        🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+        🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+        💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
+
+        """
+                # Add status indicators
+                if needs_pct <= 50:
+                    summary += "✅ Потреби в межах цілі\n"
+                else:
+                    summary += "⚠️ Потреби перевищують ціль\n"
+                    
+                if wants_pct <= 30:
+                    summary += "✅ Бажання в межах цілі\n"
+                else:
+                    summary += "⚠️ Бажання перевищують ціль\n"
+                    
+                if future_pct >= 20:
+                    summary += "🎯 Майбутнє на цільовому рівні!"
+                else:
+                    summary += "💡 Можна покращити майбутнє"
+                    
+            else:
+                summary = f"""📊 *50/30/20 Status*
+
+        🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+        🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+        🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+        💰 Total Income: {totals.get('income', 0):,.0f}₴
+
+        """
+                # Add status indicators
+                if needs_pct <= 50:
+                    summary += "✅ Needs within target\n"
+                else:
+                    summary += "⚠️ Needs over target\n"
+                    
+                if wants_pct <= 30:
+                    summary += "✅ Wants within target\n"
+                else:
+                    summary += "⚠️ Wants over target\n"
+                    
+                if future_pct >= 20:
+                    summary += "🎯 Future on target!"
+                else:
+                    summary += "💡 Future can be improved"
+            
+            self.send_message(chat_id, summary, parse_mode='Markdown')  
      
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
@@ -1243,6 +1469,20 @@ Let's build your financial health together! 💪"""
                     traceback.print_exc()
                 
                 user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+
+                # Update 50/30/20 tracking
+                bucket = self.categorize_transaction(category, text)
+
+                # For income transactions, update income total
+                if transaction_type == 'income':
+                    self.update_income_for_503020(chat_id, amount)
+                else:
+                    self.update_503020_totals(chat_id, amount, bucket)
+
+                # Check for 50/30/20 limit crossings
+                limit_messages = self.check_503020_limits(chat_id)
+                for message in limit_messages:
+                    self.send_message(chat_id, message, parse_mode='Markdown')
                 
                 if transaction_type == 'income':
                     # Send savings recommendation
