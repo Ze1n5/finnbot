@@ -1147,39 +1147,39 @@ This will help me provide better financial recommendations!"""
             self.set_user_language(chat_id, language)
             
             if language == 'uk':
-                welcome_text = """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
-
+                welcome_text = """
+Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
 Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
 
-        🎯 *Розподіл 50/30/20:*
-        • 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
-        • 🎉 *30% Бажання* - Ресторани, розваги, шопінг
-        • 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
+🎯 *Розподіл 50/30/20:*
+• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
+• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
+• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
 
-        🚀 *Швидкий старт:*
-        `+5000 зарплата` - Додати дохід
-        `150 обід` - Додати витрату
-        `++1000` - Додати до заощаджень
-        `-200 кредит` - Додати борг
+🚀 *Швидкий старт:*
+`+5000 зарплата` - Додати дохід
+`150 обід` - Додати витрату
+`++1000` - Додати до заощаджень
+`-200 кредит` - Додати борг
 
-        Давайте будувати ваше фінансове здоров'я разом! 💪"""
+Давайте будувати ваше фінансове здоров'я разом! 💪"""
             else:
-                welcome_text = """Hi! I'm *Finn* - your AI finance assistant 🤖💰
+                welcome_text = """
+Hi! I'm *Finn* - your AI finance assistant 🤖💰
+Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
 
-        Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
+🎯 *50/30/20 Breakdown:*
+• 🏠 *50% Needs* - Rent, food, utilities, transport
+• 🎉 *30% Wants* - Dining, entertainment, shopping  
+• 🏦 *20% Future* - Savings, debt repayment, investments
 
-        🎯 *50/30/20 Breakdown:*
-        • 🏠 *50% Needs* - Rent, food, utilities, transport
-        • 🎉 *30% Wants* - Dining, entertainment, shopping  
-        • 🏦 *20% Future* - Savings, debt repayment, investments
+🚀 *Quick Start:*
+`+5000 salary` - Add income
+`150 lunch` - Add expense  
+`++1000` - Add to savings
+`-200 loan` - Add debt
 
-        🚀 *Quick Start:*
-        `+5000 salary` - Add income
-        `150 lunch` - Add expense  
-        `++1000` - Add to savings
-        `-200 loan` - Add debt
-
-        Let's build your financial health together! 💪"""
+Let's build your financial health together! 💪"""
             
             self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
