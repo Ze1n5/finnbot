@@ -41,6 +41,20 @@ class SimpleFinnBot:
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
         }
+        self.savings_category_translations = {
+        'en': {
+            'Crypto': 'Crypto',
+            'Bank': 'Bank', 
+            'Personal': 'Personal',
+            'Investment': 'Investment'
+        },
+        'uk': {
+            'Crypto': 'Кріпто',
+            'Bank': 'Банк',
+            'Personal': 'Особисте',
+            'Investment': 'Інвестиції'
+        }
+    }
         
         # User-specific data
         self.learned_patterns = {}
@@ -53,6 +67,7 @@ class SimpleFinnBot:
         self.user_languages = {}  # {user_id: 'en' or 'uk'}
         self.load_user_languages()
         self.daily_reminders = {}
+        self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
         # Load existing data
         self.load_transactions()
@@ -74,8 +89,8 @@ class SimpleFinnBot:
             'Electronics', 'Clothing', 'Beauty', 'Gifts'
         ],
         'future': [
-            'Savings', 'Crypto', 'Stock', 'Investment', 'Debt Return',
-            'Education', 'Retirement', 'Emergency Fund'
+            'Savings', 'Crypto', 'Bank', 'Personal', 'Investment', 'Stock', 
+            'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
         ]
     }
         self.translations = {
@@ -513,6 +528,11 @@ Let's build your financial health together! 💪""",
     def remove_user_category(self, user_id, category_name):
         """Remove a spending category from a user"""
         user_categories = self.get_user_categories(user_id)
+        
+        # Protect savings categories from deletion
+        if category_name in self.protected_savings_categories:
+            return False
+            
         if category_name in user_categories and category_name not in ["Food", "Other"]:
             del user_categories[category_name]
             self.save_user_categories()
@@ -929,11 +949,19 @@ This will help me provide better financial recommendations!"""
                 debt_returned = 0
                 expense_by_category = {}
                 
+                # ADD THIS: Savings by category tracking
+                savings_by_category = {}
+                
                 for transaction in user_transactions:
                     if transaction['type'] == 'income':
                         income += transaction['amount']
                     elif transaction['type'] == 'savings':
                         savings_deposits += transaction['amount']
+                        # Track savings by category
+                        category = transaction['category']
+                        if category not in savings_by_category:
+                            savings_by_category[category] = 0
+                        savings_by_category[category] += transaction['amount']
                     elif transaction['type'] == 'debt':
                         debt_incurred += abs(transaction['amount'])
                     elif transaction['type'] == 'debt_return':
@@ -947,45 +975,17 @@ This will help me provide better financial recommendations!"""
                             expense_by_category[category] = 0
                         expense_by_category[category] += transaction['amount']
                 
-                # CALCULATE NET AMOUNTS
-                net_savings = savings_deposits - savings_withdrawn
-                net_debt = debt_incurred - debt_returned
-                net_flow = income - expenses - net_savings
+                # ... your existing summary calculations ...
                 
-                summary_text = "📊 *Financial Summary*\n\n"
-                
-                # CASH FLOW SECTION
-                summary_text += "💸 *Cash Flow Analysis:*\n"
-                summary_text += f"   Income: {income:,.0f}₴\n"
-                summary_text += f"   Expenses: {expenses:,.0f}₴\n"
-                summary_text += f"   Savings: {net_savings:,.0f}₴\n"
-                summary_text += f"   ─────────────────\n"
-                summary_text += f"   Net Cash Flow: {net_flow:,.0f}₴\n\n"
-                
-                # SAVINGS SECTION
-                summary_text += "🏦 *Savings Account:*\n"
-                summary_text += f"   Deposited: {savings_deposits:,.0f}₴\n"
-                summary_text += f"   Net Savings: {net_savings:,.0f}₴\n\n"
-                
-                # DEBT SECTION (only show if there's debt activity)
-                if debt_incurred > 0 or debt_returned > 0:
-                    summary_text += "💳 *Debt Account:*\n"
-                    summary_text += f"   Incurred: {debt_incurred:,.0f}₴\n"
-                    if debt_returned > 0:
-                        summary_text += f"   Returned: {debt_returned:,.0f}₴\n"
-                    summary_text += f"   Net Debt: {net_debt:,.0f}₴\n\n"
-                
-                # EXPENSES BY CATEGORY
-                if expense_by_category:
-                    summary_text += "📋 *Expenses by Category:*\n"
-                    for category, amount in sorted(expense_by_category.items(), key=lambda x: x[1], reverse=True):
-                        percentage = (amount / expenses) * 100 if expenses > 0 else 0
+                # ADD THIS SECTION AFTER THE EXISTING SUMMARY SECTIONS:
+                # SAVINGS BY CATEGORY SECTION
+                if savings_by_category:
+                    summary_text += "\n🏦 *Savings by Category:*\n"
+                    for category, amount in sorted(savings_by_category.items(), key=lambda x: x[1], reverse=True):
+                        percentage = (amount / savings_deposits) * 100 if savings_deposits > 0 else 0
                         summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
                 
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-
-                # Handle income collection
-                # Handle income collection
                 # Handle income collection (only for initial setup)
 
         elif text == "📊 50/30/20 Status" or text == "📊 50/30/20 Status":
@@ -1134,18 +1134,36 @@ This will help me provide better financial recommendations!"""
         
         elif text == "🏷️ Manage Categories":
             user_categories = self.get_user_categories(chat_id)
-            categories_text = "🏷️ *Your Spending Categories*\n\n"
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                categories_text = "🏷️ *Ваші категорії витрат*\n\n"
+                categories_text += "*🔒 Захищені категорії заощаджень:*\n"
+                categories_text += "• Кріпто • Банк • Особисте • Інвестиції\n\n"
+                categories_text += "*Ваші категорії витрат:*\n"
+            else:
+                categories_text = "🏷️ *Your Spending Categories*\n\n"
+                categories_text += "*🔒 Protected Savings Categories:*\n"
+                categories_text += "• Crypto • Bank • Personal • Investment\n\n"
+                categories_text += "*Your Spending Categories:*\n"
+            
             for category, keywords in user_categories.items():
                 categories_text += f"• *{category}*"
                 if keywords:
                     categories_text += f" - {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
                 categories_text += "\n"
             
-            categories_text += "\n*Quick Commands:*\n"
-            categories_text += "• `+Food` - Add new category\n"
-            categories_text += "• `-Shopping` - Remove category\n"
-            categories_text += "• Categories are used to auto-categorize your expenses"
-            
+            if user_lang == 'uk':
+                categories_text += "\n*Швидкі команди:*\n"
+                categories_text += "• `+Їжа` - Додати нову категорію\n"
+                categories_text += "• `-Шопінг` - Видалити категорію\n"
+                categories_text += "• Захищені категорії не можна змінити"
+            else:
+                categories_text += "\n*Quick Commands:*\n"
+                categories_text += "• `+Food` - Add new category\n"
+                categories_text += "• `-Shopping` - Remove category\n"
+                categories_text += "• Protected categories cannot be modified"
+    
             self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         elif text.startswith("+") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
@@ -1311,8 +1329,22 @@ This will help me provide better financial recommendations!"""
                     category = "Debt"
                     transaction_type = "debt"
                 elif is_savings:
-                    category = "Savings"
-                    transaction_type = "savings"
+                    # Use protected savings categories
+                    if user_lang == 'uk':
+                        savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                    else:
+                        savings_cats = self.protected_savings_categories
+                    
+                    keyboard_rows = []
+                    for i in range(0, len(savings_cats), 2):
+                        row = []
+                        for cat in savings_cats[i:i+2]:
+                            row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                        keyboard_rows.append(row)
+                    
+                    keyboard = {"inline_keyboard": keyboard_rows}
+                    
+                    message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                 elif is_income:
                     category = "Salary"  # Default income category
                     transaction_type = "income"
