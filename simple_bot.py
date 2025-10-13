@@ -2706,29 +2706,34 @@ def set_webhook():
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
 
-import schedule
-def run_scheduler():
-    """Run the reminder scheduler in background"""
+def check_reminders_periodically():
+    """Check every hour if it's time for reminders"""
     while True:
         try:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
+            now = datetime.now()
+            current_hour = now.hour
+            
+            # Only check at 12:00 and 18:00
+            if current_hour in [12, 18]:
+                print(f"🕐 It's {current_hour}:00, checking reminders...")
+                bot_instance.check_daily_reminders()
+                
+                # Sleep for 1 hour to avoid sending multiple times
+                time.sleep(3600)
+            else:
+                # Sleep for 1 hour and check again
+                time.sleep(3600)
+                
         except Exception as e:
-            print(f"❌ Scheduler error: {e}")
-            time.sleep(60)
+            print(f"❌ Reminder error: {e}")
+            time.sleep(3600)
 
-# Schedule the reminder checks
-schedule.every().day.at("12:00").do(lambda: bot_instance.check_daily_reminders())
-schedule.every().day.at("18:00").do(lambda: bot_instance.check_daily_reminders())
-
-print("✅ Scheduler set up for 12:00 and 18:00 reminders")
-
-# Start scheduler in background thread (only if not already running)
-if not hasattr(bot_instance, 'scheduler_started'):
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    bot_instance.scheduler_started = True
-    print("🚀 Scheduler thread started")
+# Start the periodic checker
+if not hasattr(bot_instance, 'reminder_started'):
+    reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
+    reminder_thread.start()
+    bot_instance.reminder_started = True
+    print("✅ Periodic reminder checker started")
 
 if __name__ == "__main__":
     if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
