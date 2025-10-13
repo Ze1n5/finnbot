@@ -1356,12 +1356,23 @@ This will help me provide better financial recommendations!"""
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
+                    # ✅ CRITICAL FIX: Store the pending transaction BEFORE sending the message
+                    self.pending[chat_id] = {
+                        'amount': amount, 
+                        'text': text, 
+                        'category': "Savings",  # Default category
+                        'type': "savings"
+                    }
+                    
                     if user_lang == 'uk':
                         message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
                     self.send_message(chat_id, message, keyboard)
+                    
+                    # ✅ ADD THIS: Return after sending the category selection to prevent duplicate processing
+                    return
 
                 elif is_income:
                     category = "Salary"  # Default income category
@@ -1409,11 +1420,6 @@ This will help me provide better financial recommendations!"""
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                elif is_savings:
-                    message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                    keyboard = {"inline_keyboard": [[
-                        {"text": "✅ Confirm Savings", "callback_data": "cat_Savings"}
-                    ]]}
                 else:
                     message = f"💰 Expense: -{amount:,.0f}₴\n🏷️ Category: {category}\n📝 Description: {text}\n\nSelect correct category:"
                     # Get user's spending categories for the keyboard
@@ -1766,6 +1772,19 @@ def webhook():
         threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
         
         return jsonify({"status": "success"}), 200
+    
+@flask_app.route('/debug-categories')
+def debug_categories():
+    """Debug route to check if categories are working"""
+    try:
+        return jsonify({
+            "protected_categories": bot_instance.protected_savings_categories,
+            "user_languages": bot_instance.user_languages,
+            "pending_transactions": len(bot_instance.pending),
+            "transactions_count": len(bot_instance.transactions)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     
 @flask_app.route('/debug-webhook')
 def debug_webhook():
