@@ -77,22 +77,22 @@ class SimpleFinnBot:
         self.monthly_percentages = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0}}
         self.current_month = datetime.now().strftime("%Y-%m")
         self.category_mapping = {
-        'needs': [
-            'Rent', 'Mortgage', 'Groceries', 'Utilities', 'Electricity', 
-            'Water', 'Gas', 'Internet', 'Phone', 'Transport', 'Fuel', 
-            'Public Transport', 'Car Maintenance', 'Healthcare', 'Insurance',
-            'Medicine', 'Doctor'
-        ],
-        'wants': [
-            'Shopping', 'Restaurants', 'Cafe', 'Dining', 'Entertainment',
-            'Movies', 'Concerts', 'Hobbies', 'Travel', 'Vacation', 'Luxury',
-            'Electronics', 'Clothing', 'Beauty', 'Gifts'
-        ],
-        'future': [
-            'Savings', 'Crypto', 'Bank', 'Personal', 'Investment', 'Stock', 
-            'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
-        ]
-    }
+            'needs': [
+                'Rent', 'Mortgage', 'Groceries', 'Utilities', 'Electricity', 
+                'Water', 'Gas', 'Internet', 'Phone', 'Transport', 'Fuel', 
+                'Public Transport', 'Car Maintenance', 'Healthcare', 'Insurance',
+                'Medicine', 'Doctor'
+            ],
+            'wants': [
+                'Shopping', 'Restaurants', 'Cafe', 'Dining', 'Entertainment',
+                'Movies', 'Concerts', 'Hobbies', 'Travel', 'Vacation', 'Luxury',
+                'Electronics', 'Clothing', 'Beauty', 'Gifts'
+            ],
+            'future': [
+                'Savings', 'Crypto', 'Bank', 'Personal', 'Investment', 'Stock', 
+                'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
+            ]
+        }
         self.translations = {
     'en': {
         'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
@@ -1330,21 +1330,38 @@ This will help me provide better financial recommendations!"""
                     transaction_type = "debt"
                 elif is_savings:
                     # Use protected savings categories
+                    user_lang = self.get_user_language(chat_id)
+                    
                     if user_lang == 'uk':
                         savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                        # Map display names to internal names
+                        savings_map = {
+                            "Кріпто": "Crypto",
+                            "Банк": "Bank", 
+                            "Особисте": "Personal",
+                            "Інвестиції": "Investment"
+                        }
                     else:
                         savings_cats = self.protected_savings_categories
+                        savings_map = {cat: cat for cat in self.protected_savings_categories}
                     
                     keyboard_rows = []
                     for i in range(0, len(savings_cats), 2):
                         row = []
                         for cat in savings_cats[i:i+2]:
-                            row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                            # Use the internal English name for callback_data
+                            internal_name = savings_map[cat]
+                            row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                    message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
+                    if user_lang == 'uk':
+                        message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
+                    else:
+                        message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
+                    self.send_message(chat_id, message, keyboard)
+
                 elif is_income:
                     category = "Salary"  # Default income category
                     transaction_type = "income"
