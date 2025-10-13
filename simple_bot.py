@@ -1448,7 +1448,7 @@ Let's build your financial health together! 💪"""
                         "category": category,
                         "description": text,
                         "type": transaction_type,
-                        "date": datetime.now().isoformat()
+                        "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
                     self.save_transactions()
@@ -2505,24 +2505,27 @@ def serve_mini_app():
         }
 
         // Format date as "Oct 11, 2:50 PM"
-        function formatDate(date) {
+        // Format date using browser's local timezone
+        function formatDate(dateString) {
+            if (!dateString) return 'Recent';
+            
+            const date = new Date(dateString);
+            
             if (isNaN(date.getTime())) {
                 return 'Recent';
             }
             
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[date.getMonth()];
-            const day = date.getDate();
-            
-            let hours = date.getHours();
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            
-            hours = hours % 12;
-            hours = hours ? hours : 12; // the hour '0' should be '12'
-            
-            return `${month} ${day}, ${hours}:${minutes} ${ampm}`;
-        }
+            // Use browser's local timezone
+            const options = { 
+                month: 'short', 
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            };
+    
+    return date.toLocaleDateString('en-US', options);
+}
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('en-US').format(amount);
