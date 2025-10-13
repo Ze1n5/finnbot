@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from flask import Flask, jsonify, request
 import threading
+import schedule
 
 load_dotenv()
 
@@ -52,6 +53,7 @@ class SimpleFinnBot:
         self.user_categories = {}  # {user_id: {category_name: [keywords]}}
         self.user_languages = {}  # {user_id: 'en' or 'uk'}
         self.load_user_languages()
+        self.daily_reminders = {}
         
         # Load existing data
         self.load_transactions()
@@ -137,6 +139,49 @@ Let's build your financial health together! 💪""",
         
         # Default to 'wants' for unknown categories
         return 'wants'
+    
+    def check_daily_reminders(self):
+        """Check and send daily reminders to active users"""
+        from datetime import datetime
+        
+        now = datetime.now()
+        current_hour = now.hour
+        today = now.date()
+        
+        for user_id in self.get_active_users():
+            user_id_str = str(user_id)
+            user_reminders = self.daily_reminders.get(user_id_str, {})
+            
+            # Lunch reminder (12:00)
+            if current_hour == 12 and user_reminders.get('lunch') != today:
+                self.send_reminder(user_id, 'lunch')
+                self.daily_reminders.setdefault(user_id_str, {})['lunch'] = today
+            
+            # Evening reminder (18:00)
+            elif current_hour == 18 and user_reminders.get('evening') != today:
+                self.send_reminder(user_id, 'evening')
+                self.daily_reminders.setdefault(user_id_str, {})['evening'] = today
+
+    def send_reminder(self, user_id, reminder_type):
+        """Send specific reminder type"""
+        user_lang = self.get_user_language(user_id)
+        
+        if user_lang == 'uk':
+            messages = {
+                'lunch': "🌞 *Обідній час*\nІдеальний час, щоб занотувати ваші ранкові транзакції!",
+                'evening': "🌆 *Вечірнє оновлення*\nЧас підбити підсумки дня!"
+            }
+        else:
+            messages = {
+                'lunch': "🌞 *Lunchtime Check-in*\nPerfect time to log your morning transactions!",
+                'evening': "🌆 *Evening Update*\nTime to wrap up your day!"
+            }
+        
+        self.send_message(user_id, messages[reminder_type], parse_mode='Markdown')
+
+    def get_active_users(self):
+        """Get list of users who have started the bot"""
+        return [int(user_id) for user_id in self.user_languages.keys() if user_id.isdigit()]
 
     def update_503020_totals(self, user_id, amount, bucket):
         """Update monthly totals for 50/30/20 tracking"""
@@ -2661,6 +2706,29 @@ def set_webhook():
             print(f"❌ Failed to set webhook: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
+
+def run_scheduler():
+    """Run the reminder scheduler in background"""
+    while True:
+        try:
+            schedule.run_pending()
+            time.sleep(60)  # Check every minute
+        except Exception as e:
+            print(f"❌ Scheduler error: {e}")
+            time.sleep(60)
+
+# Schedule the reminder checks
+schedule.every().day.at("12:00").do(lambda: bot_instance.check_daily_reminders())
+schedule.every().day.at("18:00").do(lambda: bot_instance.check_daily_reminders())
+
+print("✅ Scheduler set up for 12:00 and 18:00 reminders")
+
+# Start scheduler in background thread (only if not already running)
+if not hasattr(bot_instance, 'scheduler_started'):
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+    bot_instance.scheduler_started = True
+    print("🚀 Scheduler thread started")
 
 if __name__ == "__main__":
     if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
