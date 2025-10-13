@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from datetime import datetime
 from flask import Flask, jsonify, request
 import threading
-import schedule
 
 load_dotenv()
 
@@ -2707,6 +2706,7 @@ def set_webhook():
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
 
+import schedule
 def run_scheduler():
     """Run the reminder scheduler in background"""
     while True:
