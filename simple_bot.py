@@ -1360,6 +1360,7 @@ This will help me provide better financial recommendations!"""
                         message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
+                    
                     self.send_message(chat_id, message, keyboard)
 
                 elif is_income:
