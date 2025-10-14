@@ -6,7 +6,9 @@ from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
+from simple_bot import SimpleFinnBot
 
+bot_instance = SimpleFinnBot()
 # Initialize Flask app
 app = Flask(__name__)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -143,6 +145,8 @@ async def handle_text_message(update: Update, context: CallbackContext):
         
     except ValueError:
         await update.message.reply_text("Please provide a valid amount number!")
+
+
 
 # ========== WEB ENDPOINTS ==========
 
@@ -393,17 +397,16 @@ def start_bot():
 
 # ========== MAIN EXECUTION ==========
 
-if __name__ == '__main__':
-    # Railway uses PORT environment variable
-    port = int(os.environ.get('PORT', 8080))
+if __name__ == "__main__":
+    # Railway will set PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
     
-    # Don't start the bot in web environment - it causes issues
-    if BOT_TOKEN:
-        print("✅ Bot token found (bot disabled in web environment)")
-    else:
-        print("⚠️  Bot token not set")
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
+        print("❌ ERROR: Please set your actual bot token in the .env file")
+        exit(1)
     
-    # Start Flask app with production server
-    print(f"🌐 Starting production server on port {port}...")
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=port)
+    # Set webhook when starting
+    set_webhook()
+    
+    print(f"🚀 Starting FinnBot on port {port}...")
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
