@@ -7,11 +7,21 @@ from dotenv import load_dotenv
 from datetime import datetime
 from flask import Flask, jsonify, request
 import threading
+import atexit
+import signal
+
+PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
+
+def get_persistent_path(filename):
+    return os.path.join(PERSISTENT_DIR, filename)
+
+print(f"📁 Using persistent directory: {PERSISTENT_DIR}")
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
 
 # Initialize Flask app FIRST
 flask_app = Flask(__name__)
@@ -42,39 +52,38 @@ class SimpleFinnBot:
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
         }
         self.savings_category_translations = {
-        'en': {
-            'Crypto': 'Crypto',
-            'Bank': 'Bank', 
-            'Personal': 'Personal',
-            'Investment': 'Investment'
-        },
-        'uk': {
-            'Crypto': 'Кріпто',
-            'Bank': 'Банк',
-            'Personal': 'Особисте',
-            'Investment': 'Інвестиції'
+            'en': {
+                'Crypto': 'Crypto',
+                'Bank': 'Bank', 
+                'Personal': 'Personal',
+                'Investment': 'Investment'
+            },
+            'uk': {
+                'Crypto': 'Кріпто',
+                'Bank': 'Банк',
+                'Personal': 'Особисте',
+                'Investment': 'Інвестиції'
+            }
         }
-    }
         
-        # User-specific data
+        # User-specific data - THESE WILL NOW PERSIST
         self.learned_patterns = {}
         self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
         self.user_incomes = {}
         self.pending_income = set()
-        self.user_categories = {}  # {user_id: {category_name: [keywords]}}
-        self.user_languages = {}  # {user_id: 'en' or 'uk'}
-        self.load_user_languages()
+        self.user_categories = {}
+        self.user_languages = {}
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data
-        self.load_transactions()
-        self.load_incomes()
-        self.load_user_categories()
-        self.monthly_totals = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}}
-        self.monthly_percentages = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0}}
+        # Load existing data FROM PERSISTENT STORAGE
+        self.load_all_data()
+        
+        # Rest of your existing code...
+        self.monthly_totals = {}
+        self.monthly_percentages = {}
         self.current_month = datetime.now().strftime("%Y-%m")
         self.category_mapping = {
             'needs': [
@@ -92,6 +101,9 @@ class SimpleFinnBot:
                 'Savings', 'Crypto', 'Bank', 'Personal', 'Investment', 'Stock', 
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
+        }
+        self.translations = {
+            # ... your existing translations ...
         }
         self.translations = {
     'en': {
@@ -153,6 +165,88 @@ Let's build your financial health together! 💪""",
         
         # Default to 'wants' for unknown categories
         return 'wants'
+    
+    def load_all_data(self):
+        """Load all data from persistent storage"""
+        print("📂 Loading data from persistent storage...")
+        self.load_transactions()
+        self.load_incomes()
+        self.load_user_categories()
+        self.load_user_languages()
+
+    def load_transactions(self):
+        """Load transactions from persistent JSON file"""
+        try:
+            filepath = get_persistent_path("transactions.json")
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                
+                # Safely convert data to proper format
+                self.transactions = {}
+                for key, value in data.items():
+                    try:
+                        user_id = int(key)
+                        if isinstance(value, list):
+                            self.transactions[user_id] = value
+                        else:
+                            print(f"⚠️ Invalid data for user {user_id}, resetting")
+                            self.transactions[user_id] = []
+                    except (ValueError, TypeError):
+                        print(f"⚠️ Skipping invalid user ID: {key}")
+                
+                print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
+            else:
+                print("📂 No existing transactions file, starting fresh")
+                self.transactions = {}
+        except Exception as e:
+            print(f"❌ Error loading transactions: {e}")
+            self.transactions = {}
+
+    def load_incomes(self):
+        """Load user incomes from persistent JSON file"""
+        try:
+            filepath = get_persistent_path("incomes.json")
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    self.user_incomes = json.load(f)
+                print(f"💰 Loaded incomes for {len(self.user_incomes)} users from {filepath}")
+            else:
+                print("💰 No existing incomes file")
+                self.user_incomes = {}
+        except Exception as e:
+            print(f"❌ Error loading incomes: {e}")
+            self.user_incomes = {}
+
+    def load_user_categories(self):
+        """Load user categories from persistent JSON file"""
+        try:
+            filepath = get_persistent_path("user_categories.json")
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    self.user_categories = json.load(f)
+                print(f"🏷️ Loaded spending categories for {len(self.user_categories)} users from {filepath}")
+            else:
+                print("🏷️ No existing user categories file - starting fresh")
+                self.user_categories = {}
+        except Exception as e:
+            print(f"❌ Error loading user categories: {e}")
+            self.user_categories = {}
+
+    def load_user_languages(self):
+        """Load user language preferences from persistent JSON file"""
+        try:
+            filepath = get_persistent_path("user_languages.json")
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    self.user_languages = json.load(f)
+                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users from {filepath}")
+            else:
+                print("🌍 No existing user languages file")
+                self.user_languages = {}
+        except Exception as e:
+            print(f"❌ Error loading user languages: {e}")
+            self.user_languages = {}
     
     def check_daily_reminders(self):
         """Check and send daily reminders to active users"""
@@ -371,10 +465,12 @@ Let's build your financial health together! 💪""",
             print(f"❌ Error loading user languages: {e}")
 
     def save_user_languages(self):
-        """Save user language preferences"""
+        """Save user language preferences to persistent JSON file"""
         try:
-            with open("user_languages.json", "w") as f:
+            filepath = get_persistent_path("user_languages.json")
+            with open(filepath, "w") as f:
                 json.dump(self.user_languages, f, indent=2)
+            print(f"💾 Saved language preferences for {len(self.user_languages)} users to {filepath}")
         except Exception as e:
             print(f"❌ Error saving user languages: {e}")
 
@@ -406,11 +502,12 @@ Let's build your financial health together! 💪""",
             print(f"❌ Error loading incomes: {e}")
 
     def save_incomes(self):
-        """Save user incomes to JSON file"""
+        """Save user incomes to persistent JSON file"""
         try:
-            with open("incomes.json", "w") as f:
+            filepath = get_persistent_path("incomes.json")
+            with open(filepath, "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
-            print(f"💾 Saved incomes for {len(self.user_incomes)} users")
+            print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
             
             # Sync incomes to Railway
             for user_id, amount in self.user_incomes.items():
@@ -430,11 +527,12 @@ Let's build your financial health together! 💪""",
         return self.user_incomes.get(str(user_id))
 
     def save_transactions(self):
-        """Save transactions to JSON file (separated by user)"""
+        """Save transactions to persistent JSON file"""
         try:
-            with open("transactions.json", "w") as f:
+            filepath = get_persistent_path("transactions.json")
+            with open(filepath, "w") as f:
                 json.dump(self.transactions, f, indent=2)
-            print(f"💾 Saved transactions for {len(self.transactions)} users")
+            print(f"💾 Saved transactions for {len(self.transactions)} users to {filepath}")
         except Exception as e:
             print(f"❌ Error saving transactions: {e}")
 
@@ -468,21 +566,12 @@ Let's build your financial health together! 💪""",
             self.transactions = {}
 
     def save_user_transaction(self, user_id, transaction):
-        #Add transaction for a specific user and save to file
+        """Add transaction for a specific user and save to persistent storage"""
         if user_id not in self.transactions:
             self.transactions[user_id] = []
             
         self.transactions[user_id].append(transaction)
-        self.save_transactions()
-    
-        # Sync to Railway
-        """sync_to_railway({
-            'amount': transaction['amount'],
-            'description': transaction['description'],
-            'category': transaction['category'],
-            'timestamp': transaction['date'],
-            'type': transaction['type']
-        })"""
+        self.save_transactions() 
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -497,11 +586,12 @@ Let's build your financial health together! 💪""",
             print(f"❌ Error loading user categories: {e}")
 
     def save_user_categories(self):
-        """Save user categories to JSON file"""
+        """Save user categories to persistent JSON file"""
         try:
-            with open("user_categories.json", "w") as f:
+            filepath = get_persistent_path("user_categories.json")
+            with open(filepath, "w") as f:
                 json.dump(self.user_categories, f, indent=2)
-            print(f"💾 Saved spending categories for {len(self.user_categories)} users")
+            print(f"💾 Saved spending categories for {len(self.user_categories)} users to {filepath}")
         except Exception as e:
             print(f"❌ Error saving user categories: {e}")
 
@@ -2915,6 +3005,24 @@ def check_reminders_periodically():
             print(f"❌ Reminder error: {e}")
             time.sleep(3600)
 
+def save_all_data():
+    """Save all data before shutdown"""
+    print("💾 Saving all data before shutdown...")
+    try:
+        bot_instance.save_transactions()
+        bot_instance.save_incomes()
+        bot_instance.save_user_categories()
+        bot_instance.save_user_languages()
+        print("✅ All data saved successfully!")
+    except Exception as e:
+        print(f"❌ Error during shutdown save: {e}")
+
+# Register shutdown handlers to auto-save data
+atexit.register(save_all_data)
+import signal
+signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
+signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
+
 # Start the periodic checker
 if not hasattr(bot_instance, 'reminder_started'):
     reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
@@ -2923,7 +3031,7 @@ if not hasattr(bot_instance, 'reminder_started'):
     print("✅ Periodic reminder checker started")
 
 if __name__ == "__main__":
-    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
         print("❌ ERROR: Please set your actual bot token in the .env file")
         exit(1)
     

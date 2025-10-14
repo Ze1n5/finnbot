@@ -41,6 +41,20 @@ class SimpleFinnBot:
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
         }
+        self.savings_category_translations = {
+        'en': {
+            'Crypto': 'Crypto',
+            'Bank': 'Bank', 
+            'Personal': 'Personal',
+            'Investment': 'Investment'
+        },
+        'uk': {
+            'Crypto': 'Кріпто',
+            'Bank': 'Банк',
+            'Personal': 'Особисте',
+            'Investment': 'Інвестиції'
+        }
+    }
         
         # User-specific data
         self.learned_patterns = {}
@@ -52,54 +66,246 @@ class SimpleFinnBot:
         self.user_categories = {}  # {user_id: {category_name: [keywords]}}
         self.user_languages = {}  # {user_id: 'en' or 'uk'}
         self.load_user_languages()
+        self.daily_reminders = {}
+        self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
         # Load existing data
         self.load_transactions()
         self.load_incomes()
         self.load_user_categories()
+        self.monthly_totals = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}}
+        self.monthly_percentages = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0}}
+        self.current_month = datetime.now().strftime("%Y-%m")
+        self.category_mapping = {
+            'needs': [
+                'Rent', 'Mortgage', 'Groceries', 'Utilities', 'Electricity', 
+                'Water', 'Gas', 'Internet', 'Phone', 'Transport', 'Fuel', 
+                'Public Transport', 'Car Maintenance', 'Healthcare', 'Insurance',
+                'Medicine', 'Doctor'
+            ],
+            'wants': [
+                'Shopping', 'Restaurants', 'Cafe', 'Dining', 'Entertainment',
+                'Movies', 'Concerts', 'Hobbies', 'Travel', 'Vacation', 'Luxury',
+                'Electronics', 'Clothing', 'Beauty', 'Gifts'
+            ],
+            'future': [
+                'Savings', 'Crypto', 'Bank', 'Personal', 'Investment', 'Stock', 
+                'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
+            ]
+        }
         self.translations = {
     'en': {
-        'welcome': "👋 Hi, I'm *Finn* - your AI finance companion 💰\n\nLet's start our journey building your wealth by understanding your current situation.\n\n💼 *Please send me your current average income:*\n\nJust send me the amount, for example:  \n`30000`",
-        'income_prompt': "💼 *Update Your Monthly Income*\n\nEnter your new monthly income in UAH:\n\n*Example:*\n`20000` - for 20,000₴ per month\n`35000` - for 35,000₴ per month\n\nThis will help me provide better financial recommendations!",
-        'help_text': """💡 *Available Commands:*
-• `15.50 lunch` - Add expense
-• `+5000 salary` - Add income  
-• `-100 debt` - Add debt
-• `++200 savings` - Add savings
-• Use menu below for more options!""",
-        'income_set': "✅ *Income set:* {income:,.0f}₴ monthly",
-        'transaction_saved': "✅ {type} saved!\n💰 {amount_display}\n🏷️ {category}",
-        'no_transactions': "No transactions recorded yet.",
-        'balance': "Balance",
-        'income': "Income",
-        'expenses': "Expenses",
-        # ADD THESE NEW TRANSLATIONS:
-        'restart_confirm': "🔄 *Restart Bot*\n\nThis action will delete all your data including transactions, categories, and settings. This cannot be undone!\n\nAre you sure?",
-        'restart_success': "✅ *Bot restarted!* All data has been cleared. Let's start fresh!",
-        'restart_cancelled': "❌ Restart cancelled. Your data remains untouched."
+        'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
+
+Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
+
+🎯 *50/30/20 Breakdown:*
+• 🏠 *50% Needs* - Rent, food, utilities, transport
+• 🎉 *30% Wants* - Dining, entertainment, shopping  
+• 🏦 *20% Future* - Savings, debt repayment, investments
+
+🚀 *Quick Start:*
+`+5000 salary` - Add income
+`150 lunch` - Add expense  
+`++1000` - Add to savings
+`-200 loan` - Add debt
+
+Let's build your financial health together! 💪""",
+        # ... keep other English translations the same ...
     },
     'uk': {
-        'welcome': "👋 Привіт, я *Finn* - твій фінансовий помічник 💰\n\nПочнімо нашу подорож до фінансової свободи, розуміючи вашу поточну ситуацію.\n\n💼 *Будь ласка, надішліть мені ваш середній дохід:*\n\nПросто надішліть суму, наприклад:  \n`30000`",
-        'income_prompt': "💼 *Оновіть ваш місячний дохід*\n\nВведіть ваш новий місячний дохід в гривнях:\n\n*Приклад:*\n`20000` - для 20,000₴ на місяць\n`35000` - для 35,000₴ на місяць\n\nЦе допоможе мені надавати кращі рекомендації!",
-        'help_text': """💡 *Доступні команди:*
-• `15.50 обід` - Додати витрату
-• `+5000 зарплата` - Додати дохід  
-• `-100 борг` - Додати борг
-• `++200 заощадження` - Додати заощадження
-• Використовуйте меню нижче для більше опцій!""",
-        'income_set': "✅ *Дохід встановлено:* {income:,.0f}₴ на місяць",
-        'transaction_saved': "✅ {type} збережено!\n💰 {amount_display}\n🏷️ {category}",
-        'no_transactions': "Ще немає записаних транзакцій.",
-        'balance': "Баланс",
-        'income': "Дохід",
-        'expenses': "Витрати",
-        # ADD THESE NEW TRANSLATIONS:
-        'restart_confirm': "🔄 *Перезапуск бота*\n\nЦя дія видалить всі ваші дані, включаючи транзакції, категорії та налаштування. Цю дію не можна скасувати!\n\nВи впевнені?",
-        'restart_success': "✅ *Бота перезапущено!* Всі дані було очищено. Давайте почнемо знову!",
-        'restart_cancelled': "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+        'welcome': """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
+
+Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
+
+🎯 *Розподіл 50/30/20:*
+• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
+• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
+• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
+
+🚀 *Швидкий старт:*
+`+5000 зарплата` - Додати дохід
+`150 обід` - Додати витрату
+`++1000` - Додати до заощаджень
+`-200 кредит` - Додати борг
+
+Давайте будувати ваше фінансове здоров'я разом! 💪""",
+        # ... keep other Ukrainian translations the same ...
     }
 }
         
+    def categorize_transaction(self, category_name, description=""):
+        """Categorize transaction into needs/wants/future"""
+        category_lower = category_name.lower()
+        description_lower = description.lower()
+        
+        # Check category name first
+        for bucket, categories in self.category_mapping.items():
+            for cat in categories:
+                if cat.lower() in category_lower:
+                    return bucket
+        
+        # Check description if category is generic
+        for bucket, categories in self.category_mapping.items():
+            for cat in categories:
+                if cat.lower() in description_lower:
+                    return bucket
+        
+        # Default to 'wants' for unknown categories
+        return 'wants'
+    
+    def check_daily_reminders(self):
+        """Check and send daily reminders to active users"""
+        from datetime import datetime
+        
+        now = datetime.now()
+        current_hour = now.hour
+        today = now.date()
+        
+        for user_id in self.get_active_users():
+            user_id_str = str(user_id)
+            user_reminders = self.daily_reminders.get(user_id_str, {})
+            
+            # Lunch reminder (12:00)
+            if current_hour == 12 and user_reminders.get('lunch') != today:
+                self.send_reminder(user_id, 'lunch')
+                self.daily_reminders.setdefault(user_id_str, {})['lunch'] = today
+            
+            # Evening reminder (18:00)
+            elif current_hour == 18 and user_reminders.get('evening') != today:
+                self.send_reminder(user_id, 'evening')
+                self.daily_reminders.setdefault(user_id_str, {})['evening'] = today
+
+    def send_reminder(self, user_id, reminder_type):
+        """Send specific reminder type"""
+        user_lang = self.get_user_language(user_id)
+        
+        if user_lang == 'uk':
+            messages = {
+                'lunch': "🌞 *Обідній час*\nІдеальний час, щоб занотувати ваші ранкові транзакції!",
+                'evening': "🌆 *Вечірнє оновлення*\nЧас підбити підсумки дня!"
+            }
+        else:
+            messages = {
+                'lunch': "🌞 *Lunchtime Check-in*\nPerfect time to log your morning transactions!",
+                'evening': "🌆 *Evening Update*\nTime to wrap up your day!"
+            }
+        
+        self.send_message(user_id, messages[reminder_type], parse_mode='Markdown')
+
+    def get_active_users(self):
+        """Get list of users who have started the bot"""
+        return [int(user_id) for user_id in self.user_languages.keys() if user_id.isdigit()]
+
+    def update_503020_totals(self, user_id, amount, bucket):
+        """Update monthly totals for 50/30/20 tracking"""
+        user_id_str = str(user_id)
+        current_month = datetime.now().strftime("%Y-%m")
+        
+        # Initialize if new user or new month
+        if user_id_str not in self.monthly_totals:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+        
+        # Reset if new month
+        if hasattr(self, 'current_month') and current_month != self.current_month:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+            self.current_month = current_month
+        
+        # Update the bucket total
+        if bucket in self.monthly_totals[user_id_str]:
+            self.monthly_totals[user_id_str][bucket] += amount
+        
+        # Update percentages
+        self.calculate_503020_percentages(user_id_str)
+
+    def update_income_for_503020(self, user_id, amount):
+        """Update income for percentage calculations"""
+        user_id_str = str(user_id)
+        
+        if user_id_str not in self.monthly_totals:
+            self.monthly_totals[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}
+        
+        self.monthly_totals[user_id_str]['income'] += amount
+        self.calculate_503020_percentages(user_id_str)
+
+    def calculate_503020_percentages(self, user_id_str):
+        """Calculate current percentages for 50/30/20"""
+        if user_id_str not in self.monthly_totals:
+            return
+        
+        totals = self.monthly_totals[user_id_str]
+        income = totals['income']
+        
+        if income > 0:
+            self.monthly_percentages[user_id_str] = {
+                'needs': (totals['needs'] / income) * 100,
+                'wants': (totals['wants'] / income) * 100,
+                'future': (totals['future'] / income) * 100
+            }
+        else:
+            self.monthly_percentages[user_id_str] = {'needs': 0, 'wants': 0, 'future': 0}
+
+    def check_503020_limits(self, user_id):
+        """Check if user crossed any 50/30/20 limits and return messages"""
+        user_id_str = str(user_id)
+        
+        if user_id_str not in self.monthly_percentages:
+            return []
+        
+        current = self.monthly_percentages[user_id_str]
+        
+        # Store previous percentages (you might want to persist this)
+        previous = getattr(self, 'previous_percentages', {}).get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0})
+        
+        messages = []
+        user_lang = self.get_user_language(user_id)
+        
+        # Needs checks (45% and 50%)
+        if 45 <= current['needs'] < 50 and previous['needs'] < 45:
+            if user_lang == 'uk':
+                messages.append("🏠 *Потреби наближаються до ліміту*\n\nВи витратили 45% вашого доходу на потреби цього місяця.\n\nВи близько до рекомендованого ліміту 50%. Розгляньте перегляд ваших основних витрат.")
+            else:
+                messages.append("🏠 *Needs Approaching Limit*\n\nYou've spent 45% of your income on needs this month.\n\nYou're close to the 50% recommended limit. Consider reviewing your essential expenses.")
+        
+        elif current['needs'] >= 50 and previous['needs'] < 50:
+            if user_lang == 'uk':
+                messages.append(f"🚨 *Потреби перевищили бюджет*\n\nВи витратили {current['needs']:.1f}% на потреби - понад цільовий показник 50%.\n\nЦе може вплинути на ваші заощадження та витрати на спосіб життя. Давайте оптимізуємо!")
+            else:
+                messages.append(f"🚨 *Needs Over Budget*\n\nYou've spent {current['needs']:.1f}% on needs - over the 50% target.\n\nThis may impact your savings and lifestyle expenses. Let's optimize!")
+        
+        # Wants checks (27% and 30%)
+        if 27 <= current['wants'] < 30 and previous['wants'] < 27:
+            if user_lang == 'uk':
+                messages.append("🎉 *Бажання наближаються до ліміту*\n\nВи витратили 27% на бажання способу життя цього місяця.\n\nНаближається до ліміту 30%. Розгляньте темпу ваших дискреційних витрат.")
+            else:
+                messages.append("🎉 *Wants Approaching Limit*\n\nYou've spent 27% on lifestyle wants this month.\n\nApproaching the 30% limit. Consider pacing your discretionary spending.")
+        
+        elif current['wants'] >= 30 and previous['wants'] < 30:
+            if user_lang == 'uk':
+                messages.append(f"⚠️ *Бажання перевищили бюджет*\n\nВи витратили {current['wants']:.1f}% на бажання - понад цільовий показник 30%.\n\nЦе впливає на ваші майбутні заощадження. Час пріоритезувати!")
+            else:
+                messages.append(f"⚠️ *Wants Over Budget*\n\nYou've spent {current['wants']:.1f}% on wants - over the 30% target.\n\nThis affects your future savings. Time to prioritize!")
+        
+        # Future praise (20% and 25%)
+        if current['future'] >= 20 and previous['future'] < 20:
+            if user_lang == 'uk':
+                messages.append("🏆 *Майбутня увага досягнута!*\n\nВи виділили 20%+ на ваше майбутнє цього місяця!\n\nІдеальний баланс - ви будуєте фінансову безпеку, насолоджуючись життям сьогодні. 🎯")
+            else:
+                messages.append("🏆 *Future Focus Achieved!*\n\nYou've allocated 20%+ to your future this month!\n\nPerfect balance - you're building financial security while enjoying life today. 🎯")
+        
+        elif current['future'] >= 25 and previous['future'] < 25:
+            if user_lang == 'uk':
+                messages.append(f"🌟 *Фінансова зірка!*\n\n{current['future']:.1f}% на ваше майбутнє? Вражаюче!\n\nВи не просто зберігаєте - ви будуєте багатство та безпеку. Це фінансове здоров'я наступного рівня! 💪")
+            else:
+                messages.append(f"🌟 *Financial Rockstar!*\n\n{current['future']:.1f}% to your future? Outstanding!\n\nYou're not just saving - you're building wealth and security. This is next-level financial health! 💪")
+        
+        # Update previous percentages
+        if not hasattr(self, 'previous_percentages'):
+            self.previous_percentages = {}
+        self.previous_percentages[user_id_str] = current.copy()
+        
+        return messages
+
     def calculate_expression(self, text):
         """Calculate mathematical expressions with percentages"""
         try:
@@ -322,6 +528,11 @@ class SimpleFinnBot:
     def remove_user_category(self, user_id, category_name):
         """Remove a spending category from a user"""
         user_categories = self.get_user_categories(user_id)
+        
+        # Protect savings categories from deletion
+        if category_name in self.protected_savings_categories:
+            return False
+            
         if category_name in user_categories and category_name not in ["Food", "Other"]:
             del user_categories[category_name]
             self.save_user_categories()
@@ -333,13 +544,13 @@ class SimpleFinnBot:
         
         if user_lang == 'uk':
             keyboard = [
-                ["📊 Фінансовий звіт", "📋 Команди"],
+                ["📊 Фінансовий звіт", "📊 50/30/20 Status"],
                 ["🗑️ Видалити транзакцію", "🏷️ Керування категоріями"],
                 ["🔄 Перезапустити бота", "🌍 Мова"]
             ]
         else:
             keyboard = [
-                ["📊 Financial Summary", "📋 Commands"],
+                ["📊 Financial Summary", "📊 50/30/20 Status"],
                 ["🗑️ Delete Transaction", "🏷️ Manage Categories"], 
                 ["🔄 Restart Bot", "🌍 Language"]
             ]
@@ -352,54 +563,41 @@ class SimpleFinnBot:
         }
     
     def extract_amount(self, text):
-        # Check transaction type - order matters!
-        is_savings = '++' in text  # Check for savings FIRST
-        is_debt_return = '+-' in text  # +- for returning debt
-        is_savings_withdraw = '-+' in text  # -+ for withdrawing from savings
-        is_income = '+' in text and not is_savings and not is_debt_return and not is_savings_withdraw  # Single + but not others
-        is_debt = text.strip().startswith('-') and not is_savings_withdraw  # - for debt, but not -+
+    # Clean the text first
+        clean_text = text.strip()
+        print(f"🔍 DEBUG extract_amount: text='{clean_text}'")
         
-        print(f"🔍 DEBUG extract_amount: text='{text}'")
-        print(f"   is_income: {is_income}, is_debt: {is_debt}, is_savings: {is_savings}")
-        print(f"   is_debt_return: {is_debt_return}, is_savings_withdraw: {is_savings_withdraw}")
+        # Check transaction types in priority order
+        is_savings = '++' in clean_text
+        is_debt_return = '+-' in clean_text
+        is_savings_withdraw = '-+' in clean_text
+        is_income = '+' in clean_text and not any(x in clean_text for x in ['++', '+-', '-+'])
+        is_debt = clean_text.startswith('-') and not is_savings_withdraw
         
-        # Find amounts (including those with +, ++, +-, -+ or - signs)
-        amounts = re.findall(r'[+-]+\s*(\d+[.,]\d{1,2})|\b(\d+[.,]\d{1,2})\b', text)
+        print(f"   Transaction type detection:")
+        print(f"   - is_savings: {is_savings}")
+        print(f"   - is_income: {is_income}")
+        print(f"   - is_debt: {is_debt}")
+        print(f"   - is_debt_return: {is_debt_return}")
+        print(f"   - is_savings_withdraw: {is_savings_withdraw}")
+        
+        # Extract amount using regex that handles various formats
+        amount_pattern = r'[+-]*\s*(\d+(?:[.,]\d{1,2})?)'
+        amounts = re.findall(amount_pattern, clean_text)
+        
         if amounts:
-            flat_amounts = [amt for group in amounts for amt in group if amt]
-            if flat_amounts:
-                amounts_float = []
-                for amt in flat_amounts:
-                    try:
-                        clean_amt = amt.replace(',', '.')
-                        amounts_float.append(float(clean_amt))
-                    except ValueError:
-                        continue
-                if amounts_float:
-                    amount = max(amounts_float)
-                    print(f"   Extracted amount: {amount}")
+            # Get the first valid amount found
+            for amt_str in amounts:
+                try:
+                    # Clean the amount string
+                    clean_amt = amt_str.replace(',', '.').strip()
+                    amount = float(clean_amt)
+                    print(f"   ✅ Extracted amount: {amount}")
                     return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                except ValueError:
+                    continue
         
-        # If no amount found with pattern, check if the entire text is a number
-        try:
-            clean_text = text.strip().replace('+', '').replace('-', '')
-            amount = float(clean_text)
-            print(f"   Extracted amount (clean): {amount}")
-            return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
-        except ValueError:
-            pass
-        
-        # Find whole numbers within text
-        whole_numbers = re.findall(r'\b(\d+)\b', text)
-        if whole_numbers:
-            try:
-                amount = float(max(whole_numbers, key=lambda x: float(x)))
-                print(f"   Extracted amount (whole): {amount}")
-                return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
-            except ValueError:
-                pass
-        
-        print(f"   No amount found")
+        print(f"   ❌ No valid amount found")
         return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
 
     def guess_category(self, text, user_id):
@@ -691,6 +889,45 @@ class SimpleFinnBot:
             
             self.send_message(chat_id, confirmation_text, parse_mode='Markdown', keyboard=keyboard)
 
+        elif text == "/test_savings":
+            # Test the savings category feature directly
+            test_amount = 100
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                savings_map = {
+                    "Кріпто": "Crypto",
+                    "Банк": "Bank", 
+                    "Особисте": "Personal",
+                    "Інвестиції": "Investment"
+                }
+                message = f"🔧 Тест: Заощадження ++{test_amount}₴\nОберіть категорію:"
+            else:
+                savings_cats = self.protected_savings_categories
+                savings_map = {cat: cat for cat in self.protected_savings_categories}
+                message = f"🔧 Test: Savings ++{test_amount}₴\nSelect category:"
+            
+            keyboard_rows = []
+            for i in range(0, len(savings_cats), 2):
+                row = []
+                for cat in savings_cats[i:i+2]:
+                    internal_name = savings_map[cat]
+                    row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                keyboard_rows.append(row)
+            
+            keyboard = {"inline_keyboard": keyboard_rows}
+            
+            # Store test transaction
+            self.pending[chat_id] = {
+                'amount': test_amount, 
+                'text': "Test savings transaction", 
+                'category': "Savings",
+                'type': "savings"
+            }
+            
+            self.send_message(chat_id, message, keyboard)
+
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
 
@@ -738,11 +975,19 @@ This will help me provide better financial recommendations!"""
                 debt_returned = 0
                 expense_by_category = {}
                 
+                # ADD THIS: Savings by category tracking
+                savings_by_category = {}
+                
                 for transaction in user_transactions:
                     if transaction['type'] == 'income':
                         income += transaction['amount']
                     elif transaction['type'] == 'savings':
                         savings_deposits += transaction['amount']
+                        # Track savings by category
+                        category = transaction['category']
+                        if category not in savings_by_category:
+                            savings_by_category[category] = 0
+                        savings_by_category[category] += transaction['amount']
                     elif transaction['type'] == 'debt':
                         debt_incurred += abs(transaction['amount'])
                     elif transaction['type'] == 'debt_return':
@@ -761,6 +1006,7 @@ This will help me provide better financial recommendations!"""
                 net_debt = debt_incurred - debt_returned
                 net_flow = income - expenses - net_savings
                 
+                # ✅ FIX: Initialize summary_text variable
                 summary_text = "📊 *Financial Summary*\n\n"
                 
                 # CASH FLOW SECTION
@@ -791,11 +1037,92 @@ This will help me provide better financial recommendations!"""
                         percentage = (amount / expenses) * 100 if expenses > 0 else 0
                         summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
                 
+                # ✅ FIX: ADD THIS SECTION AFTER THE EXISTING SUMMARY SECTIONS:
+                # SAVINGS BY CATEGORY SECTION
+                if savings_by_category:
+                    summary_text += "\n🏦 *Savings by Category:*\n"
+                    for category, amount in sorted(savings_by_category.items(), key=lambda x: x[1], reverse=True):
+                        percentage = (amount / savings_deposits) * 100 if savings_deposits > 0 else 0
+                        summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
+                
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
-                # Handle income collection
-                # Handle income collection
-                # Handle income collection (only for initial setup)    
+        elif text == "📊 50/30/20 Status" or text == "📊 50/30/20 Status":
+            user_id_str = str(chat_id)
+            user_lang = self.get_user_language(chat_id)
+            
+            # Check if we have data for this user
+            if (user_id_str not in self.monthly_totals or 
+                user_id_str not in self.monthly_percentages or
+                self.monthly_totals[user_id_str]['income'] == 0):
+                
+                if user_lang == 'uk':
+                    self.send_message(chat_id, "📊 Ще немає даних для аналізу 50/30/20 цього місяця. Додайте доходи та витрати, щоб побачити статистику.")
+                else:
+                    self.send_message(chat_id, "📊 No data yet for 50/30/20 analysis this month. Add some income and expenses to see your statistics.")
+                return
+            
+            percentages = self.monthly_percentages.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0})
+            totals = self.monthly_totals.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0, 'income': 0})
+            
+            # Ensure we have valid percentages
+            needs_pct = percentages.get('needs', 0)
+            wants_pct = percentages.get('wants', 0) 
+            future_pct = percentages.get('future', 0)
+            
+            if user_lang == 'uk':
+                summary = f"""📊 *Статус 50/30/20*
+
+        🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+        🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+        🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+        💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
+
+        """
+                # Add status indicators
+                if needs_pct <= 50:
+                    summary += "✅ Потреби в межах цілі\n"
+                else:
+                    summary += "⚠️ Потреби перевищують ціль\n"
+                    
+                if wants_pct <= 30:
+                    summary += "✅ Бажання в межах цілі\n"
+                else:
+                    summary += "⚠️ Бажання перевищують ціль\n"
+                    
+                if future_pct >= 20:
+                    summary += "🎯 Майбутнє на цільовому рівні!"
+                else:
+                    summary += "💡 Можна покращити майбутнє"
+                    
+            else:
+                summary = f"""📊 *50/30/20 Status*
+
+        🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+        🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+        🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+        💰 Total Income: {totals.get('income', 0):,.0f}₴
+
+        """
+                # Add status indicators
+                if needs_pct <= 50:
+                    summary += "✅ Needs within target\n"
+                else:
+                    summary += "⚠️ Needs over target\n"
+                    
+                if wants_pct <= 30:
+                    summary += "✅ Wants within target\n"
+                else:
+                    summary += "⚠️ Wants over target\n"
+                    
+                if future_pct >= 20:
+                    summary += "🎯 Future on target!"
+                else:
+                    summary += "💡 Future can be improved"
+            
+            self.send_message(chat_id, summary, parse_mode='Markdown')  
      
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
@@ -866,18 +1193,36 @@ This will help me provide better financial recommendations!"""
         
         elif text == "🏷️ Manage Categories":
             user_categories = self.get_user_categories(chat_id)
-            categories_text = "🏷️ *Your Spending Categories*\n\n"
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                categories_text = "🏷️ *Ваші категорії витрат*\n\n"
+                categories_text += "*🔒 Захищені категорії заощаджень:*\n"
+                categories_text += "• Кріпто • Банк • Особисте • Інвестиції\n\n"
+                categories_text += "*Ваші категорії витрат:*\n"
+            else:
+                categories_text = "🏷️ *Your Spending Categories*\n\n"
+                categories_text += "*🔒 Protected Savings Categories:*\n"
+                categories_text += "• Crypto • Bank • Personal • Investment\n\n"
+                categories_text += "*Your Spending Categories:*\n"
+            
             for category, keywords in user_categories.items():
                 categories_text += f"• *{category}*"
                 if keywords:
                     categories_text += f" - {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
                 categories_text += "\n"
             
-            categories_text += "\n*Quick Commands:*\n"
-            categories_text += "• `+Food` - Add new category\n"
-            categories_text += "• `-Shopping` - Remove category\n"
-            categories_text += "• Categories are used to auto-categorize your expenses"
-            
+            if user_lang == 'uk':
+                categories_text += "\n*Швидкі команди:*\n"
+                categories_text += "• `+Їжа` - Додати нову категорію\n"
+                categories_text += "• `-Шопінг` - Видалити категорію\n"
+                categories_text += "• Захищені категорії не можна змінити"
+            else:
+                categories_text += "\n*Quick Commands:*\n"
+                categories_text += "• `+Food` - Add new category\n"
+                categories_text += "• `-Shopping` - Remove category\n"
+                categories_text += "• Protected categories cannot be modified"
+    
             self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         elif text.startswith("+") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
@@ -997,29 +1342,59 @@ This will help me provide better financial recommendations!"""
                         keyboard = {"inline_keyboard": keyboard_rows}
                         
                     else:
-                        # For other transaction types, just confirm
-                        if user_lang == 'uk':
-                            type_names = {
-                                'expense': 'Витрата',
-                                'savings': 'Заощадження', 
-                                'debt': 'Борг',
-                                'debt_return': 'Повернення боргу',
-                                'savings_withdraw': 'Зняття заощаджень'
-                            }
-                            message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
-                        else:
-                            type_names = {
-                                'expense': 'Expense',
-                                'savings': 'Savings',
-                                'debt': 'Debt',
-                                'debt_return': 'Debt Return', 
-                                'savings_withdraw': 'Savings Withdraw'
-                            }
-                            message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+                        # For savings transactions, show category selection
+                        if trans_type == 'savings':
+                            user_lang = self.get_user_language(chat_id)
+                            
+                            if user_lang == 'uk':
+                                savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                                savings_map = {
+                                    "Кріпто": "Crypto",
+                                    "Банк": "Bank", 
+                                    "Особисте": "Personal",
+                                    "Інвестиції": "Investment"
+                                }
+                            else:
+                                savings_cats = self.protected_savings_categories
+                                savings_map = {cat: cat for cat in self.protected_savings_categories}
+                            
+                            keyboard_rows = []
+                            for i in range(0, len(savings_cats), 2):
+                                row = []
+                                for cat in savings_cats[i:i+2]:
+                                    internal_name = savings_map[cat]
+                                    row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                                keyboard_rows.append(row)
+                            
+                            keyboard = {"inline_keyboard": keyboard_rows}
+                            
+                            if user_lang == 'uk':
+                                message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nОберіть категорію заощаджень:"
+                            else:
+                                message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nSelect savings category:"
                         
-                        keyboard = {"inline_keyboard": [[
-                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
-                        ]]}
+                        else:
+                            # For other transaction types, just confirm
+                            if user_lang == 'uk':
+                                type_names = {
+                                    'expense': 'Витрата',
+                                    'debt': 'Борг',
+                                    'debt_return': 'Повернення боргу',
+                                    'savings_withdraw': 'Зняття заощаджень'
+                                }
+                                message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
+                            else:
+                                type_names = {
+                                    'expense': 'Expense',
+                                    'debt': 'Debt',
+                                    'debt_return': 'Debt Return', 
+                                    'savings_withdraw': 'Savings Withdraw'
+                                }
+                                message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+
+                            keyboard = {"inline_keyboard": [[
+                                {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
+                            ]]}
                     
                     self.send_message(chat_id, message, keyboard)
                     return
@@ -1030,6 +1405,13 @@ This will help me provide better financial recommendations!"""
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
+            print(f"🔍 DEBUG process_message - Transaction analysis:")
+            print(f"   Amount: {amount}")
+            print(f"   Is savings: {is_savings}")
+            print(f"   Is income: {is_income}")
+            print(f"   Is debt: {is_debt}")
+            print(f"   Chat ID in pending: {chat_id in self.pending}")
+            print(f"   Delete mode: {self.delete_mode.get(chat_id, False)}")
         
             if amount is not None:
                 # Determine transaction type and category
@@ -1043,8 +1425,57 @@ This will help me provide better financial recommendations!"""
                     category = "Debt"
                     transaction_type = "debt"
                 elif is_savings:
-                    category = "Savings"
-                    transaction_type = "savings"
+                    print(f"🔍 DEBUG: Processing SAVINGS transaction - amount: {amount}")
+                    
+                    # Use protected savings categories
+                    user_lang = self.get_user_language(chat_id)
+                    print(f"🔍 DEBUG: User language: {user_lang}")
+                    
+                    if user_lang == 'uk':
+                        savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                        savings_map = {
+                            "Кріпто": "Crypto",
+                            "Банк": "Bank", 
+                            "Особисте": "Personal",
+                            "Інвестиції": "Investment"
+                        }
+                    else:
+                        savings_cats = self.protected_savings_categories
+                        savings_map = {cat: cat for cat in self.protected_savings_categories}
+                    
+                    print(f"🔍 DEBUG: Savings categories: {savings_cats}")
+                    
+                    # Create inline keyboard
+                    keyboard_rows = []
+                    for i in range(0, len(savings_cats), 2):
+                        row = []
+                        for cat in savings_cats[i:i+2]:
+                            # Use the internal English name for callback_data
+                            internal_name = savings_map[cat]
+                            row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                        keyboard_rows.append(row)
+                    
+                    keyboard = {"inline_keyboard": keyboard_rows}
+                    
+                    # ✅ CRITICAL: Store the pending transaction BEFORE sending the message
+                    self.pending[chat_id] = {
+                        'amount': amount, 
+                        'text': text, 
+                        'category': "Savings",  # Default category
+                        'type': "savings"
+                    }
+                    
+                    if user_lang == 'uk':
+                        message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
+                    else:
+                        message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
+                    
+                    print(f"🔍 DEBUG: Sending savings category selection message with keyboard")
+                    self.send_message(chat_id, message, keyboard)
+                    
+                    # ✅ IMPORTANT: Return to prevent further processing
+                    return
+
                 elif is_income:
                     category = "Salary"  # Default income category
                     transaction_type = "income"
@@ -1091,11 +1522,6 @@ This will help me provide better financial recommendations!"""
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                elif is_savings:
-                    message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nIs this correct?"
-                    keyboard = {"inline_keyboard": [[
-                        {"text": "✅ Confirm Savings", "callback_data": "cat_Savings"}
-                    ]]}
                 else:
                     message = f"💰 Expense: -{amount:,.0f}₴\n🏷️ Category: {category}\n📝 Description: {text}\n\nSelect correct category:"
                     # Get user's spending categories for the keyboard
@@ -1149,49 +1575,39 @@ This will help me provide better financial recommendations!"""
             self.set_user_language(chat_id, language)
             
             if language == 'uk':
-                welcome_text = """👋 Вітаю! Я *Finn* - ваш особистий фінансовий помічник! 💰
+                welcome_text = """
+Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
+Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
 
-        Разом ми будемо відстежувати ваші фінанси, аналізувати витрати та будувати фінансову свободу.
+🎯 *Розподіл 50/30/20:*
+• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
+• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
+• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
 
-        🚀 *Що я можу для вас зробити:*
-        • 📊 Відстежувати доходи та витрати
-        • 🏦 Допомагати з заощадженнями
-        • 💳 Керувати боргами
-        • 📈 Аналізувати фінансові звички
-        • 🎯 Надавати персоналізовані рекомендації
+🚀 *Швидкий старт:*
+`+5000 зарплата` - Додати дохід
+`150 обід` - Додати витрату
+`++1000` - Додати до заощаджень
+`-200 кредит` - Додати борг
 
-        💡 *Ваш середній дохід буде автоматично розраховано* на основі введених вами доходів, що дозволить нам створити оптимальну фінансову стратегію!
-
-        🎯 *Давайте почнемо!* Просто додайте вашу першу транзакцію:
-
-        💵 *Дохід:* `+5000 зарплата`
-        🛒 *Витрати:* `150 обід` 
-        🏦 *Заощадження:* `++1000`
-        💳 *Борг:* `-200 кредит`
-
-        Або використовуйте меню нижче для більше можливостей!"""
+Давайте будувати ваше фінансове здоров'я разом! 💪"""
             else:
-                welcome_text = """👋 Welcome! I'm *Finn* - your personal finance assistant! 💰
+                welcome_text = """
+Hi! I'm *Finn* - your AI finance assistant 🤖💰
+Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
 
-        Together we'll track your finances, analyze spending, and build towards financial freedom.
+🎯 *50/30/20 Breakdown:*
+• 🏠 *50% Needs* - Rent, food, utilities, transport
+• 🎉 *30% Wants* - Dining, entertainment, shopping  
+• 🏦 *20% Future* - Savings, debt repayment, investments
 
-        🚀 *What I can do for you:*
-        • 📊 Track income and expenses
-        • 🏦 Help with savings
-        • 💳 Manage debts
-        • 📈 Analyze financial habits
-        • 🎯 Provide personalized recommendations
+🚀 *Quick Start:*
+`+5000 salary` - Add income
+`150 lunch` - Add expense  
+`++1000` - Add to savings
+`-200 loan` - Add debt
 
-        💡 *Your average income will be automatically calculated* based on your entered income transactions, allowing us to create an optimal financial strategy!
-
-        🎯 *Let's get started!* Just add your first transaction:
-
-        💵 *Income:* `+5000 salary`
-        🛒 *Expenses:* `150 lunch`
-        🏦 *Savings:* `++1000`
-        💳 *Debt:* `-200 loan`
-
-        Or use the menu below for more options!"""
+Let's build your financial health together! 💪"""
             
             self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
@@ -1234,7 +1650,7 @@ This will help me provide better financial recommendations!"""
                         "category": category,
                         "description": text,
                         "type": transaction_type,
-                        "date": datetime.now().isoformat()
+                        "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
                     self.save_transactions()
@@ -1255,6 +1671,20 @@ This will help me provide better financial recommendations!"""
                     traceback.print_exc()
                 
                 user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+
+                # Update 50/30/20 tracking
+                bucket = self.categorize_transaction(category, text)
+
+                # For income transactions, update income total
+                if transaction_type == 'income':
+                    self.update_income_for_503020(chat_id, amount)
+                else:
+                    self.update_503020_totals(chat_id, amount, bucket)
+
+                # Check for 50/30/20 limit crossings
+                limit_messages = self.check_503020_limits(chat_id)
+                for message in limit_messages:
+                    self.send_message(chat_id, message, parse_mode='Markdown')
                 
                 if transaction_type == 'income':
                     # Send savings recommendation
@@ -1444,6 +1874,35 @@ def webhook():
         threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
         
         return jsonify({"status": "success"}), 200
+    
+@flask_app.route('/debug-categories')
+def debug_categories():
+    """Debug route to check if categories are working"""
+    try:
+        return jsonify({
+            "protected_categories": bot_instance.protected_savings_categories,
+            "user_languages": bot_instance.user_languages,
+            "pending_transactions": len(bot_instance.pending),
+            "transactions_count": len(bot_instance.transactions)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/debug-bot-state')
+def debug_bot_state():
+    """Debug route to check bot internal state"""
+    try:
+        return jsonify({
+            "bot_initialized": bool(bot_instance),
+            "protected_categories": bot_instance.protected_savings_categories,
+            "pending_transactions": dict(bot_instance.pending),
+            "user_languages": bot_instance.user_languages,
+            "transactions_count": len(bot_instance.transactions),
+            "income_categories": bot_instance.income_categories,
+            "category_mapping": bot_instance.category_mapping
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     
 @flask_app.route('/debug-webhook')
 def debug_webhook():
@@ -2277,24 +2736,27 @@ def serve_mini_app():
         }
 
         // Format date as "Oct 11, 2:50 PM"
-        function formatDate(date) {
+        // Format date using browser's local timezone
+        function formatDate(dateString) {
+            if (!dateString) return 'Recent';
+            
+            const date = new Date(dateString);
+            
             if (isNaN(date.getTime())) {
                 return 'Recent';
             }
             
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[date.getMonth()];
-            const day = date.getDate();
-            
-            let hours = date.getHours();
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            const ampm = hours >= 12 ? 'PM' : 'AM';
-            
-            hours = hours % 12;
-            hours = hours ? hours : 12; // the hour '0' should be '12'
-            
-            return `${month} ${day}, ${hours}:${minutes} ${ampm}`;
-        }
+            // Use browser's local timezone
+            const options = { 
+                month: 'short', 
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            };
+    
+    return date.toLocaleDateString('en-US', options);
+}
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('en-US').format(amount);
@@ -2431,8 +2893,37 @@ def set_webhook():
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
 
+def check_reminders_periodically():
+    """Check every hour if it's time for reminders"""
+    while True:
+        try:
+            now = datetime.now()
+            current_hour = now.hour
+            
+            # Only check at 12:00 and 18:00
+            if current_hour in [12, 18]:
+                print(f"🕐 It's {current_hour}:00, checking reminders...")
+                bot_instance.check_daily_reminders()
+                
+                # Sleep for 1 hour to avoid sending multiple times
+                time.sleep(3600)
+            else:
+                # Sleep for 1 hour and check again
+                time.sleep(3600)
+                
+        except Exception as e:
+            print(f"❌ Reminder error: {e}")
+            time.sleep(3600)
+
+# Start the periodic checker
+if not hasattr(bot_instance, 'reminder_started'):
+    reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
+    reminder_thread.start()
+    bot_instance.reminder_started = True
+    print("✅ Periodic reminder checker started")
+
 if __name__ == "__main__":
-    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
         print("❌ ERROR: Please set your actual bot token in the .env file")
         exit(1)
     
