@@ -1001,9 +1001,43 @@ This will help me provide better financial recommendations!"""
                             expense_by_category[category] = 0
                         expense_by_category[category] += transaction['amount']
                 
-                # ... your existing summary calculations ...
+                # CALCULATE NET AMOUNTS
+                net_savings = savings_deposits - savings_withdrawn
+                net_debt = debt_incurred - debt_returned
+                net_flow = income - expenses - net_savings
                 
-                # ADD THIS SECTION AFTER THE EXISTING SUMMARY SECTIONS:
+                # ✅ FIX: Initialize summary_text variable
+                summary_text = "📊 *Financial Summary*\n\n"
+                
+                # CASH FLOW SECTION
+                summary_text += "💸 *Cash Flow Analysis:*\n"
+                summary_text += f"   Income: {income:,.0f}₴\n"
+                summary_text += f"   Expenses: {expenses:,.0f}₴\n"
+                summary_text += f"   Savings: {net_savings:,.0f}₴\n"
+                summary_text += f"   ─────────────────\n"
+                summary_text += f"   Net Cash Flow: {net_flow:,.0f}₴\n\n"
+                
+                # SAVINGS SECTION
+                summary_text += "🏦 *Savings Account:*\n"
+                summary_text += f"   Deposited: {savings_deposits:,.0f}₴\n"
+                summary_text += f"   Net Savings: {net_savings:,.0f}₴\n\n"
+                
+                # DEBT SECTION (only show if there's debt activity)
+                if debt_incurred > 0 or debt_returned > 0:
+                    summary_text += "💳 *Debt Account:*\n"
+                    summary_text += f"   Incurred: {debt_incurred:,.0f}₴\n"
+                    if debt_returned > 0:
+                        summary_text += f"   Returned: {debt_returned:,.0f}₴\n"
+                    summary_text += f"   Net Debt: {net_debt:,.0f}₴\n\n"
+                
+                # EXPENSES BY CATEGORY
+                if expense_by_category:
+                    summary_text += "📋 *Expenses by Category:*\n"
+                    for category, amount in sorted(expense_by_category.items(), key=lambda x: x[1], reverse=True):
+                        percentage = (amount / expenses) * 100 if expenses > 0 else 0
+                        summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
+                
+                # ✅ FIX: ADD THIS SECTION AFTER THE EXISTING SUMMARY SECTIONS:
                 # SAVINGS BY CATEGORY SECTION
                 if savings_by_category:
                     summary_text += "\n🏦 *Savings by Category:*\n"
@@ -1012,7 +1046,6 @@ This will help me provide better financial recommendations!"""
                         summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
                 
                 self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-                # Handle income collection (only for initial setup)
 
         elif text == "📊 50/30/20 Status" or text == "📊 50/30/20 Status":
             user_id_str = str(chat_id)
