@@ -2291,7 +2291,7 @@ def serve_mini_app():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Budget Tracker</title>
+    <title>FinnBot - Finance Tracker</title>
     <style>
         * {
             margin: 0;
@@ -2307,6 +2307,7 @@ def serve_mini_app():
             display: flex;
             justify-content: center;
             min-height: 100vh;
+            overflow: hidden;
         }
         
         .container {
@@ -2321,11 +2322,62 @@ def serve_mini_app():
             flex-direction: column;
         }
         
+        /* Tab Header */
+        .tab-header {
+            display: flex;
+            background-color: #2c2c2e;
+            border-bottom: 1px solid #3a3a3c;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 16px;
+            text-align: center;
+            background: none;
+            border: none;
+            color: #8e8e93;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button.active {
+            color: #0a84ff;
+            border-bottom: 2px solid #0a84ff;
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .tab-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+        }
+        
+        .tab-panel.hidden {
+            transform: translateX(100%);
+        }
+        
+        .tab-panel.active {
+            transform: translateX(0);
+        }
+        
+        /* Balance Tab */
         .balance-section {
-            padding: 40px 20px 24px;
+            padding: 20px 0;
             text-align: center;
             border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
         }
         
         .balance-label {
@@ -2342,9 +2394,8 @@ def serve_mini_app():
         
         .summary-section {
             display: flex;
-            padding: 20px;
+            padding: 20px 0;
             border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
         }
         
         .summary-item {
@@ -2376,23 +2427,14 @@ def serve_mini_app():
         }
         
         .transactions-section {
-            padding: 20px;
-            background-color: #1c1c1e;
-            flex-grow: 1;
-            overflow-y: auto;
+            padding: 20px 0;
         }
         
-        .transactions-header {
+        .section-header {
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 16px;
             color: #ffffff;
-        }
-        
-        .transaction-container {
-            position: relative;
-            overflow: hidden;
-            border-bottom: 1px solid #2c2c2e;
         }
         
         .transaction-item {
@@ -2400,14 +2442,7 @@ def serve_mini_app():
             justify-content: space-between;
             align-items: flex-start;
             padding: 12px 0;
-            background-color: #1c1c1e;
-            position: relative;
-            transition: transform 0.3s ease;
-            width: 100%;
-        }
-        
-        .transaction-item.swiping {
-            transition: none;
+            border-bottom: 1px solid #2c2c2e;
         }
         
         .transaction-info {
@@ -2446,27 +2481,29 @@ def serve_mini_app():
             min-width: 80px;
         }
         
-        .delete-action {
-            position: absolute;
-            right: -80px;
-            top: 0;
-            bottom: 0;
-            width: 80px;
-            background-color: #ff453a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            transition: right 0.3s ease;
+        /* Savings & Debts Tabs */
+        .amount-display {
+            text-align: center;
+            padding: 60px 20px;
         }
         
-        .delete-action.visible {
-            right: 0;
+        .amount-label {
+            font-size: 18px;
+            color: #8e8e93;
+            margin-bottom: 16px;
         }
         
-        .delete-text {
-            font-size: 14px;
+        .amount-value {
+            font-size: 48px;
+            font-weight: 700;
+        }
+        
+        .savings-color {
+            color: #0a84ff;
+        }
+        
+        .debts-color {
+            color: #ff453a;
         }
         
         .loading {
@@ -2483,56 +2520,136 @@ def serve_mini_app():
         
         .swipe-hint {
             text-align: center;
-            padding: 10px 20px;
+            padding: 20px;
             color: #8e8e93;
             font-size: 12px;
-            border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="balance-section">
-            <div class="balance-label">Balance</div>
-            <div class="balance-amount" id="balance-amount">0</div>
+        <!-- Tab Header -->
+        <div class="tab-header">
+            <button class="tab-button active" onclick="switchTab('balance')">Balance</button>
+            <button class="tab-button" onclick="switchTab('savings')">Savings</button>
+            <button class="tab-button" onclick="switchTab('debts')">Debts</button>
         </div>
         
-        <div class="summary-section">
-            <div class="summary-item">
-                <div class="summary-label">Income</div>
-                <div class="summary-amount income-amount" id="income-amount">0</div>
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <!-- Balance Tab -->
+            <div class="tab-panel active" id="balance-tab">
+                <div class="balance-section">
+                    <div class="balance-label">Net Balance</div>
+                    <div class="balance-amount" id="balance-amount">0</div>
+                </div>
+                
+                <div class="summary-section">
+                    <div class="summary-item">
+                        <div class="summary-label">Income</div>
+                        <div class="summary-amount income-amount" id="income-amount">0</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Spending</div>
+                        <div class="summary-amount spending-amount" id="spending-amount">0</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Savings</div>
+                        <div class="summary-amount savings-amount" id="savings-amount">0</div>
+                    </div>
+                </div>
+                
+                <div class="transactions-section">
+                    <div class="section-header">Recent Transactions</div>
+                    <div id="transactions-list">
+                        <div class="loading">Loading transactions...</div>
+                    </div>
+                </div>
+                
+                <div class="swipe-hint">
+                    💡 Swipe left/right to switch between tabs
+                </div>
             </div>
-            <div class="summary-item">
-                <div class="summary-label">Spending</div>
-                <div class="summary-amount spending-amount" id="spending-amount">0</div>
+            
+            <!-- Savings Tab -->
+            <div class="tab-panel hidden" id="savings-tab">
+                <div class="amount-display">
+                    <div class="amount-label">Total Savings</div>
+                    <div class="amount-value savings-color" id="total-savings">0</div>
+                </div>
+                <div class="swipe-hint">
+                    💡 Swipe left/right to switch between tabs
+                </div>
             </div>
-            <div class="summary-item">
-                <div class="summary-label">Savings</div>
-                <div class="summary-amount savings-amount" id="savings-amount">0</div>
-            </div>
-        </div>
-        
-        <div class="swipe-hint">
-            💡 Swipe left on any transaction to delete
-        </div>
-        
-        <div class="transactions-section" id="transactions-section">
-            <div class="transactions-header">Transactions</div>
-            <div id="transactions-list">
-                <div class="loading">Loading transactions...</div>
+            
+            <!-- Debts Tab -->
+            <div class="tab-panel hidden" id="debts-tab">
+                <div class="amount-display">
+                    <div class="amount-label">Total Debt</div>
+                    <div class="amount-value debts-color" id="total-debts">0</div>
+                </div>
+                <div class="swipe-hint">
+                    💡 Swipe left/right to switch between tabs
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        let currentPage = 1;
-        let isLoading = false;
-        let hasMoreTransactions = true;
-        const transactionsPerPage = 10;
-        let touchStartX = 0;
-        let currentSwipeElement = null;
-        let swipeThreshold = 50;
+        let currentTab = 'balance';
+        let startX = 0;
+        let currentX = 0;
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            
+            // Update panels
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.remove('active');
+                panel.classList.add('hidden');
+            });
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            currentTab = tabName;
+        }
+
+        // Swipe functionality
+        document.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            currentX = e.touches[0].clientX;
+        });
+
+        document.addEventListener('touchend', () => {
+            const diff = startX - currentX;
+            const swipeThreshold = 50;
+            
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0 && currentTab !== 'debts') {
+                    // Swipe left - go to next tab
+                    const tabs = ['balance', 'savings', 'debts'];
+                    const currentIndex = tabs.indexOf(currentTab);
+                    if (currentIndex < tabs.length - 1) {
+                        switchTab(tabs[currentIndex + 1]);
+                    }
+                } else if (diff < 0 && currentTab !== 'balance') {
+                    // Swipe right - go to previous tab
+                    const tabs = ['balance', 'savings', 'debts'];
+                    const currentIndex = tabs.indexOf(currentTab);
+                    if (currentIndex > 0) {
+                        switchTab(tabs[currentIndex - 1]);
+                    }
+                }
+            }
+        });
 
         // Fetch real data from your API
         async function loadFinancialData() {
@@ -2545,66 +2662,48 @@ def serve_mini_app():
                 
                 console.log('📊 API Response:', data);
                 
-                // Update the UI with real data
+                // Update Balance Tab
                 document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
                 document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
                 document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
                 document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
                 
-            } catch (error) {
-                console.error('Error loading financial data:', error);
-                document.getElementById('balance-amount').textContent = '0';
-                document.getElementById('income-amount').textContent = '0';
-                document.getElementById('spending-amount').textContent = '0';
-                document.getElementById('savings-amount').textContent = '0';
-            }
-        }
-
-        // Load transactions with pagination
-        async function loadTransactions(page = 1) {
-            if (isLoading) return;
-            
-            isLoading = true;
-            
-            try {
-                const response = await fetch(`/api/transactions?page=${page}&limit=${transactionsPerPage}`);
-                if (!response.ok) {
-                    throw new Error('API response not ok');
-                }
-                const data = await response.json();
+                // Update Savings Tab
+                document.getElementById('total-savings').textContent = formatCurrency(data.savings || 0);
                 
+                // Update Debts Tab (you'll need to calculate this from your data)
+                const totalDebts = calculateTotalDebts(data.transactions || []);
+                document.getElementById('total-debts').textContent = formatCurrency(totalDebts);
+                
+                // Update transactions list
                 const transactionsList = document.getElementById('transactions-list');
-                
-                // Remove loading message on first load
-                if (page === 1) {
-                    transactionsList.innerHTML = '';
-                }
-                
                 if (data.transactions && data.transactions.length > 0) {
+                    transactionsList.innerHTML = '';
                     data.transactions.forEach(transaction => {
-                        const transactionElement = createTransactionElement(transaction);
+                        const transactionElement = document.createElement('div');
+                        transactionElement.className = 'transaction-item';
+                        
+                        const isIncome = transaction.amount > 0;
+                        const amountClass = isIncome ? 'income-amount' : 'spending-amount';
+                        const amountDisplay = isIncome ? 
+                            `+${formatCurrency(transaction.amount)}` : 
+                            `-${formatCurrency(Math.abs(transaction.amount))}`;
+                        
+                        transactionElement.innerHTML = `
+                            <div class="transaction-info">
+                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                                <div class="transaction-details">
+                                    <div class="transaction-name">${transaction.name || 'Transaction'}</div>
+                                    <div class="transaction-date">${formatDate(new Date())}</div>
+                                </div>
+                            </div>
+                            <div class="transaction-amount ${amountClass}">
+                                ${amountDisplay}₴
+                            </div>
+                        `;
                         transactionsList.appendChild(transactionElement);
                     });
-                    
-                    // Check if there are more transactions
-                    hasMoreTransactions = data.has_more || false;
-                    
-                    // Remove loading indicator if it exists
-                    const existingLoader = document.getElementById('loading-indicator');
-                    if (existingLoader) {
-                        existingLoader.remove();
-                    }
-                    
-                    // Add loading indicator if there are more transactions
-                    if (hasMoreTransactions) {
-                        const loadingIndicator = document.createElement('div');
-                        loadingIndicator.className = 'loading';
-                        loadingIndicator.id = 'loading-indicator';
-                        loadingIndicator.textContent = 'Loading more transactions...';
-                        transactionsList.appendChild(loadingIndicator);
-                    }
-                } else if (page === 1) {
-                    // No transactions at all
+                } else {
                     transactionsList.innerHTML = `
                         <div class="no-transactions">
                             <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
@@ -2614,266 +2713,47 @@ def serve_mini_app():
                     `;
                 }
                 
-                currentPage = page;
-                
             } catch (error) {
-                console.error('Error loading transactions:', error);
-                if (page === 1) {
-                    document.getElementById('transactions-list').innerHTML = 
-                        '<div class="loading">Failed to load transactions</div>';
-                }
-            } finally {
-                isLoading = false;
+                console.error('Error loading financial data:', error);
+                // Set defaults on error
+                document.getElementById('balance-amount').textContent = '0';
+                document.getElementById('income-amount').textContent = '0';
+                document.getElementById('spending-amount').textContent = '0';
+                document.getElementById('savings-amount').textContent = '0';
+                document.getElementById('total-savings').textContent = '0';
+                document.getElementById('total-debts').textContent = '0';
+                document.getElementById('transactions-list').innerHTML = '<div class="loading">Failed to load transactions</div>';
             }
         }
 
-        // Create transaction element with swipe functionality
-        function createTransactionElement(transaction) {
-            const container = document.createElement('div');
-            container.className = 'transaction-container';
-            
-            const transactionElement = document.createElement('div');
-            transactionElement.className = 'transaction-item';
-            
-            // Delete action panel
-            const deleteAction = document.createElement('div');
-            deleteAction.className = 'delete-action';
-            deleteAction.innerHTML = '<div class="delete-text">DELETE</div>';
-            
-            // Determine transaction type and amount display
-            const isIncome = transaction.type === 'income';
-            const isSavings = transaction.type === 'savings';
-            const isDebt = transaction.type === 'debt';
-            const isDebtReturn = transaction.type === 'debt_return';
-            const isSavingsWithdraw = transaction.type === 'savings_withdraw';
-            
-            const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-            
-            // FIXED: Expenses, debt returns, and savings withdrawals should show negative
-            let amountDisplay;
-            if (isIncome || isDebt) {
-                amountDisplay = `+${formatCurrency(transaction.amount)}`;
-            } else {
-                amountDisplay = `-${formatCurrency(transaction.amount)}`;
-            }
-            
-            // Format date
-            const transactionDate = new Date(transaction.timestamp || transaction.date);
-            const formattedDate = formatDate(transactionDate);
-            
-            transactionElement.innerHTML = `
-                <div class="transaction-info">
-                    <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">${transaction.display_name || transaction.name || 'Transaction'}</div>
-                        <div class="transaction-date">${formattedDate}</div>
-                    </div>
-                </div>
-                <div class="transaction-amount ${amountClass}">
-                    ${amountDisplay}₴
-                </div>
-            `;
-            
-            container.appendChild(transactionElement);
-            container.appendChild(deleteAction);
-            
-            // Add swipe functionality
-            addSwipeListeners(container, transactionElement, deleteAction, transaction);
-            
-            return container;
-        }
-
-        // Add swipe functionality to transaction
-        function addSwipeListeners(container, transactionElement, deleteAction, transaction) {
-            let startX = 0;
-            let currentX = 0;
-            let isSwiping = false;
-            
-            transactionElement.addEventListener('touchstart', (e) => {
-                startX = e.touches[0].clientX;
-                currentX = startX;
-                isSwiping = true;
-                transactionElement.classList.add('swiping');
-                
-                // Reset other swiped elements
-                resetOtherSwipes(container);
-            });
-            
-            transactionElement.addEventListener('touchmove', (e) => {
-                if (!isSwiping) return;
-                
-                currentX = e.touches[0].clientX;
-                const diff = startX - currentX;
-                
-                // Only allow left swipe (positive diff)
-                if (diff > 0) {
-                    transactionElement.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
-                    
-                    // Show delete action when threshold is reached
-                    if (diff > swipeThreshold) {
-                        deleteAction.classList.add('visible');
-                    } else {
-                        deleteAction.classList.remove('visible');
-                    }
+        function calculateTotalDebts(transactions) {
+            // Simple debt calculation - you might want to adjust this based on your data structure
+            let totalDebt = 0;
+            transactions.forEach(transaction => {
+                if (transaction.amount < 0) {
+                    totalDebt += Math.abs(transaction.amount);
                 }
             });
-            
-            transactionElement.addEventListener('touchend', () => {
-                if (!isSwiping) return;
-                
-                const diff = startX - currentX;
-                isSwiping = false;
-                transactionElement.classList.remove('swiping');
-                
-                // If swiped beyond threshold, keep it open, otherwise reset
-                if (diff > swipeThreshold) {
-                    transactionElement.style.transform = 'translateX(-80px)';
-                    deleteAction.classList.add('visible');
-                    
-                    // Add click listener to delete action
-                    const deleteHandler = () => {
-                        deleteTransaction(transaction, container);
-                        deleteAction.removeEventListener('click', deleteHandler);
-                    };
-                    deleteAction.addEventListener('click', deleteHandler);
-                } else {
-                    resetSwipe(transactionElement, deleteAction);
-                }
-            });
-            
-            // Reset on click/tap
-            transactionElement.addEventListener('click', () => {
-                resetSwipe(transactionElement, deleteAction);
-            });
+            return totalDebt;
         }
-
-        // Reset swipe position
-        function resetSwipe(transactionElement, deleteAction) {
-            transactionElement.style.transform = 'translateX(0)';
-            deleteAction.classList.remove('visible');
-        }
-
-        // Reset other swiped elements
-        function resetOtherSwipes(currentContainer) {
-            const allContainers = document.querySelectorAll('.transaction-container');
-            allContainers.forEach(container => {
-                if (container !== currentContainer) {
-                    const transactionEl = container.querySelector('.transaction-item');
-                    const deleteEl = container.querySelector('.delete-action');
-                    resetSwipe(transactionEl, deleteEl);
-                }
-            });
-        }
-
-        // Delete transaction
-        async function deleteTransaction(transaction, container) {
-            if (!confirm('Are you sure you want to delete this transaction?')) {
-                resetSwipe(container.querySelector('.transaction-item'), container.querySelector('.delete-action'));
-                return;
-            }
-            
-            try {
-                // Show loading state
-                container.style.opacity = '0.5';
-                
-                // Here you would call your backend API to delete the transaction
-                // For now, we'll just remove it from the frontend and reload data
-                console.log('Deleting transaction:', transaction);
-                
-                // Remove from UI immediately
-                container.style.transition = 'opacity 0.3s ease';
-                container.style.opacity = '0';
-                setTimeout(() => {
-                    container.remove();
-                }, 300);
-                
-                // Reload financial data to update balances
-                await loadFinancialData();
-                
-                // Show success message
-                showNotification('Transaction deleted successfully');
-                
-            } catch (error) {
-                console.error('Error deleting transaction:', error);
-                showNotification('Error deleting transaction', true);
-                container.style.opacity = '1';
-            }
-        }
-
-        // Show notification
-        function showNotification(message, isError = false) {
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background-color: ${isError ? '#ff453a' : '#30d158'};
-                color: white;
-                padding: 12px 20px;
-                border-radius: 8px;
-                font-weight: 600;
-                z-index: 1000;
-                animation: slideDown 0.3s ease;
-            `;
-            
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
-        }
-
-        // Format date as "Oct 11, 2:50 PM"
-        // Format date using browser's local timezone
-        function formatDate(dateString) {
-            if (!dateString) return 'Recent';
-            
-            const date = new Date(dateString);
-            
-            if (isNaN(date.getTime())) {
-                return 'Recent';
-            }
-            
-            // Use browser's local timezone
-            const options = { 
-                month: 'short', 
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            };
-    
-    return date.toLocaleDateString('en-US', options);
-}
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('en-US').format(amount);
         }
 
-        // Infinite scroll handler
-        function handleScroll() {
-            const transactionsSection = document.getElementById('transactions-section');
-            const scrollTop = transactionsSection.scrollTop;
-            const scrollHeight = transactionsSection.scrollHeight;
-            const clientHeight = transactionsSection.clientHeight;
-            
-            // Load more when 100px from bottom
-            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreTransactions && !isLoading) {
-                loadTransactions(currentPage + 1);
-            }
+        function formatDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
         }
 
-        // Initialize everything when page loads
+        // Load data when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            // Load financial data and first page of transactions
             loadFinancialData();
-            loadTransactions(1);
-            
-            // Add scroll event listener for infinite scroll
-            const transactionsSection = document.getElementById('transactions-section');
-            transactionsSection.addEventListener('scroll', handleScroll);
         });
     </script>
 </body>
