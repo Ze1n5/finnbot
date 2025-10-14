@@ -563,54 +563,41 @@ Let's build your financial health together! 💪""",
         }
     
     def extract_amount(self, text):
-        # Check transaction type - order matters!
-        is_savings = '++' in text  # Check for savings FIRST
-        is_debt_return = '+-' in text  # +- for returning debt
-        is_savings_withdraw = '-+' in text  # -+ for withdrawing from savings
-        is_income = '+' in text and not is_savings and not is_debt_return and not is_savings_withdraw  # Single + but not others
-        is_debt = text.strip().startswith('-') and not is_savings_withdraw  # - for debt, but not -+
+    # Clean the text first
+        clean_text = text.strip()
+        print(f"🔍 DEBUG extract_amount: text='{clean_text}'")
         
-        print(f"🔍 DEBUG extract_amount: text='{text}'")
-        print(f"   is_income: {is_income}, is_debt: {is_debt}, is_savings: {is_savings}")
-        print(f"   is_debt_return: {is_debt_return}, is_savings_withdraw: {is_savings_withdraw}")
+        # Check transaction types in priority order
+        is_savings = '++' in clean_text
+        is_debt_return = '+-' in clean_text
+        is_savings_withdraw = '-+' in clean_text
+        is_income = '+' in clean_text and not any(x in clean_text for x in ['++', '+-', '-+'])
+        is_debt = clean_text.startswith('-') and not is_savings_withdraw
         
-        # Find amounts (including those with +, ++, +-, -+ or - signs)
-        amounts = re.findall(r'[+-]+\s*(\d+[.,]\d{1,2})|\b(\d+[.,]\d{1,2})\b', text)
+        print(f"   Transaction type detection:")
+        print(f"   - is_savings: {is_savings}")
+        print(f"   - is_income: {is_income}")
+        print(f"   - is_debt: {is_debt}")
+        print(f"   - is_debt_return: {is_debt_return}")
+        print(f"   - is_savings_withdraw: {is_savings_withdraw}")
+        
+        # Extract amount using regex that handles various formats
+        amount_pattern = r'[+-]*\s*(\d+(?:[.,]\d{1,2})?)'
+        amounts = re.findall(amount_pattern, clean_text)
+        
         if amounts:
-            flat_amounts = [amt for group in amounts for amt in group if amt]
-            if flat_amounts:
-                amounts_float = []
-                for amt in flat_amounts:
-                    try:
-                        clean_amt = amt.replace(',', '.')
-                        amounts_float.append(float(clean_amt))
-                    except ValueError:
-                        continue
-                if amounts_float:
-                    amount = max(amounts_float)
-                    print(f"   Extracted amount: {amount}")
+            # Get the first valid amount found
+            for amt_str in amounts:
+                try:
+                    # Clean the amount string
+                    clean_amt = amt_str.replace(',', '.').strip()
+                    amount = float(clean_amt)
+                    print(f"   ✅ Extracted amount: {amount}")
                     return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                except ValueError:
+                    continue
         
-        # If no amount found with pattern, check if the entire text is a number
-        try:
-            clean_text = text.strip().replace('+', '').replace('-', '')
-            amount = float(clean_text)
-            print(f"   Extracted amount (clean): {amount}")
-            return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
-        except ValueError:
-            pass
-        
-        # Find whole numbers within text
-        whole_numbers = re.findall(r'\b(\d+)\b', text)
-        if whole_numbers:
-            try:
-                amount = float(max(whole_numbers, key=lambda x: float(x)))
-                print(f"   Extracted amount (whole): {amount}")
-                return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
-            except ValueError:
-                pass
-        
-        print(f"   No amount found")
+        print(f"   ❌ No valid amount found")
         return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
 
     def guess_category(self, text, user_id):
@@ -901,6 +888,45 @@ Let's build your financial health together! 💪""",
                 }
             
             self.send_message(chat_id, confirmation_text, parse_mode='Markdown', keyboard=keyboard)
+
+        elif text == "/test_savings":
+            # Test the savings category feature directly
+            test_amount = 100
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                savings_map = {
+                    "Кріпто": "Crypto",
+                    "Банк": "Bank", 
+                    "Особисте": "Personal",
+                    "Інвестиції": "Investment"
+                }
+                message = f"🔧 Тест: Заощадження ++{test_amount}₴\nОберіть категорію:"
+            else:
+                savings_cats = self.protected_savings_categories
+                savings_map = {cat: cat for cat in self.protected_savings_categories}
+                message = f"🔧 Test: Savings ++{test_amount}₴\nSelect category:"
+            
+            keyboard_rows = []
+            for i in range(0, len(savings_cats), 2):
+                row = []
+                for cat in savings_cats[i:i+2]:
+                    internal_name = savings_map[cat]
+                    row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                keyboard_rows.append(row)
+            
+            keyboard = {"inline_keyboard": keyboard_rows}
+            
+            # Store test transaction
+            self.pending[chat_id] = {
+                'amount': test_amount, 
+                'text': "Test savings transaction", 
+                'category': "Savings",
+                'type': "savings"
+            }
+            
+            self.send_message(chat_id, message, keyboard)
 
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
@@ -1316,6 +1342,13 @@ This will help me provide better financial recommendations!"""
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
+            print(f"🔍 DEBUG process_message - Transaction analysis:")
+            print(f"   Amount: {amount}")
+            print(f"   Is savings: {is_savings}")
+            print(f"   Is income: {is_income}")
+            print(f"   Is debt: {is_debt}")
+            print(f"   Chat ID in pending: {chat_id in self.pending}")
+            print(f"   Delete mode: {self.delete_mode.get(chat_id, False)}")
         
             if amount is not None:
                 # Determine transaction type and category
@@ -1329,12 +1362,14 @@ This will help me provide better financial recommendations!"""
                     category = "Debt"
                     transaction_type = "debt"
                 elif is_savings:
+                    print(f"🔍 DEBUG: Processing SAVINGS transaction - amount: {amount}")
+                    
                     # Use protected savings categories
                     user_lang = self.get_user_language(chat_id)
+                    print(f"🔍 DEBUG: User language: {user_lang}")
                     
                     if user_lang == 'uk':
                         savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
-                        # Map display names to internal names
                         savings_map = {
                             "Кріпто": "Crypto",
                             "Банк": "Bank", 
@@ -1345,33 +1380,39 @@ This will help me provide better financial recommendations!"""
                         savings_cats = self.protected_savings_categories
                         savings_map = {cat: cat for cat in self.protected_savings_categories}
                     
+                    print(f"🔍 DEBUG: Savings categories: {savings_cats}")
+                    
+                    # Create inline keyboard
                     keyboard_rows = []
                     for i in range(0, len(savings_cats), 2):
                         row = []
                         for cat in savings_cats[i:i+2]:
-                            # Use the internal English name for callback_data
                             internal_name = savings_map[cat]
                             row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                    # ✅ CRITICAL FIX: Store the pending transaction BEFORE sending the message
+                    # Store pending transaction
                     self.pending[chat_id] = {
                         'amount': amount, 
                         'text': text, 
-                        'category': "Savings",  # Default category
+                        'category': "Savings",  # Temporary category
                         'type': "savings"
                     }
                     
+                    print(f"🔍 DEBUG: Stored pending transaction: {self.pending[chat_id]}")
+                    
+                    # Create message
                     if user_lang == 'uk':
                         message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
+                    print(f"🔍 DEBUG: Sending category selection message")
                     self.send_message(chat_id, message, keyboard)
                     
-                    # ✅ ADD THIS: Return after sending the category selection to prevent duplicate processing
+                    # CRITICAL: Return to prevent further processing
                     return
 
                 elif is_income:
@@ -1782,6 +1823,22 @@ def debug_categories():
             "user_languages": bot_instance.user_languages,
             "pending_transactions": len(bot_instance.pending),
             "transactions_count": len(bot_instance.transactions)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/debug-bot-state')
+def debug_bot_state():
+    """Debug route to check bot internal state"""
+    try:
+        return jsonify({
+            "bot_initialized": bool(bot_instance),
+            "protected_categories": bot_instance.protected_savings_categories,
+            "pending_transactions": dict(bot_instance.pending),
+            "user_languages": bot_instance.user_languages,
+            "transactions_count": len(bot_instance.transactions),
+            "income_categories": bot_instance.income_categories,
+            "category_mapping": bot_instance.category_mapping
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
