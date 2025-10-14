@@ -7,12 +7,96 @@ from dotenv import load_dotenv
 from datetime import datetime
 from flask import Flask, jsonify, request
 import threading
+import sqlite3  # ADD THIS IMPORT
+
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# ADD DATABASE MANAGER CLASS HERE
+class DatabaseManager:
+    def __init__(self):
+        self.PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
+        self.db_path = os.path.join(self.PERSISTENT_DIR, "finnbot.db")
+        self.init_db()
+    
+    def get_connection(self):
+        """Get database connection"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # This enables column access by name
+        return conn
+    
+    def init_db(self):
+        """Initialize database tables"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Transactions table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                description TEXT,
+                type TEXT NOT NULL CHECK(type IN ('expense', 'income', 'savings', 'debt', 'debt_return', 'savings_withdraw')),
+                date TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Incomes table (monthly income)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS incomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                amount REAL NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # User categories table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('expense', 'income')),
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, category, type)
+            )
+        ''')
+        
+        # User languages table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_languages (
+                user_id INTEGER PRIMARY KEY,
+                language TEXT NOT NULL DEFAULT 'en',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Monthly totals for 50/30/20 tracking
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS monthly_totals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                month TEXT NOT NULL,
+                needs REAL DEFAULT 0,
+                wants REAL DEFAULT 0,
+                future REAL DEFAULT 0,
+                income REAL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, month)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print(f"✅ Database initialized at: {self.db_path}")
 # Initialize Flask app FIRST
 flask_app = Flask(__name__)
 
@@ -36,6 +120,9 @@ def sync_to_railway(transaction_data):
 
 class SimpleFinnBot:
     def __init__(self):
+        # Initialize database
+        self.db = DatabaseManager()
+        
         # Income categories (shared for all users)
         self.income_categories = {
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
@@ -56,25 +143,27 @@ class SimpleFinnBot:
         }
     }
         
-        # User-specific data
+        # User-specific data (we'll keep these for temporary state)
         self.learned_patterns = {}
-        self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
-        self.user_incomes = {}
         self.pending_income = set()
-        self.user_categories = {}  # {user_id: {category_name: [keywords]}}
-        self.user_languages = {}  # {user_id: 'en' or 'uk'}
-        self.load_user_languages()
-        self.daily_reminders = {}
-        self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data
-        self.load_transactions()
-        self.load_incomes()
-        self.load_user_categories()
-        self.monthly_totals = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0, 'income': 0}}
-        self.monthly_percentages = {}  # {user_id: {'needs': 0, 'wants': 0, 'future': 0}}
+        # REMOVE THESE FILE-BASED ATTRIBUTES:
+        # self.transactions = {}           # ← REMOVE
+        # self.user_incomes = {}           # ← REMOVE  
+        # self.user_categories = {}        # ← REMOVE
+        # self.user_languages = {}         # ← REMOVE
+        
+        # REMOVE THESE FILE LOADING CALLS:
+        # self.load_user_languages()       # ← REMOVE
+        # self.load_transactions()         # ← REMOVE
+        # self.load_incomes()              # ← REMOVE
+        # self.load_user_categories()      # ← REMOVE
+        
+        # Keep these for 50/30/20 tracking (we'll update these methods later)
+        self.monthly_totals = {}  
+        self.monthly_percentages = {}  
         self.current_month = datetime.now().strftime("%Y-%m")
         self.category_mapping = {
             'needs': [
@@ -354,190 +443,183 @@ Let's build your financial health together! 💪""",
             print(f"❌ Calculation error: {e}")
             return None, f"❌ Calculation error: {str(e)}"
         
+        # === TRANSACTIONS ===
     def get_user_transactions(self, user_id):
-        """Get transactions for a specific user"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-        return self.transactions[user_id]
-    
-    def load_user_languages(self):
-        """Load user language preferences"""
-        try:
-            if os.path.exists("user_languages.json"):
-                with open("user_languages.json", "r") as f:
-                    self.user_languages = json.load(f)
-                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users")
-        except Exception as e:
-            print(f"❌ Error loading user languages: {e}")
-
-    def save_user_languages(self):
-        """Save user language preferences"""
-        try:
-            with open("user_languages.json", "w") as f:
-                json.dump(self.user_languages, f, indent=2)
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
-
-    def get_user_language(self, user_id):
-        """Get user's preferred language, default to English"""
-        return self.user_languages.get(str(user_id), 'en')
-
-    def set_user_language(self, user_id, language_code):
-        """Set user's preferred language"""
-        self.user_languages[str(user_id)] = language_code
-        self.save_user_languages()
+        """Get transactions for a specific user from database"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
         
-        def get_user_transactions(self, user_id):
-            """Get transactions for a specific user"""
-            if user_id not in self.transactions:
-                self.transactions[user_id] = []
-            return self.transactions[user_id]
-
-    def load_incomes(self):
-        """Load user incomes from JSON file"""
-        try:
-            if os.path.exists("incomes.json"):
-                with open("incomes.json", "r") as f:
-                    self.user_incomes = json.load(f)
-                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
-            else:
-                print("💰 No existing incomes file")
-        except Exception as e:
-            print(f"❌ Error loading incomes: {e}")
-
-    def save_incomes(self):
-        """Save user incomes to JSON file"""
-        try:
-            with open("incomes.json", "w") as f:
-                json.dump(self.user_incomes, f, indent=2)
-            print(f"💾 Saved incomes for {len(self.user_incomes)} users")
-            
-            # Sync incomes to Railway
-            for user_id, amount in self.user_incomes.items():
-                sync_to_railway({
-                    'amount': amount,
-                    'description': 'Monthly Income',
-                    'timestamp': datetime.now().isoformat(),
-                    'type': 'income',
-                    'user_id': user_id
-                })
-                
-        except Exception as e:
-            print(f"❌ Error saving incomes: {e}")
-
-    def get_user_income(self, user_id):
-        """Get monthly income for a specific user"""
-        return self.user_incomes.get(str(user_id))
-
-    def save_transactions(self):
-        """Save transactions to JSON file (separated by user)"""
-        try:
-            with open("transactions.json", "w") as f:
-                json.dump(self.transactions, f, indent=2)
-            print(f"💾 Saved transactions for {len(self.transactions)} users")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
-
-    def load_transactions(self):
-        """Load transactions from JSON file (separated by user)"""
-        try:
-            if os.path.exists("transactions.json"):
-                with open("transactions.json", "r") as f:
-                    data = json.load(f)
-                
-                # Safely convert data to proper format
-                self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        # Ensure value is a list of transactions
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users")
-            else:
-                print("📂 No existing transactions file, starting fresh")
-                self.transactions = {}
-        except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
-            self.transactions = {}
-
-    def save_user_transaction(self, user_id, transaction):
-        #Add transaction for a specific user and save to file
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-            
-        self.transactions[user_id].append(transaction)
-        self.save_transactions()
+        cursor.execute('''
+            SELECT * FROM transactions 
+            WHERE user_id = ? 
+            ORDER BY date DESC 
+            LIMIT 1000
+        ''', (user_id,))
+        
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return transactions
     
+    def save_user_transaction(self, user_id, transaction):
+        """Add transaction for a specific user to database"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO transactions (user_id, amount, category, description, type, date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id, 
+            transaction['amount'], 
+            transaction['category'], 
+            transaction['description'], 
+            transaction['type'], 
+            transaction['date']
+        ))
+        
+        conn.commit()
+        transaction_id = cursor.lastrowid
+        conn.close()
+        
         # Sync to Railway
-        """sync_to_railway({
+        sync_to_railway({
             'amount': transaction['amount'],
             'description': transaction['description'],
             'category': transaction['category'],
             'timestamp': transaction['date'],
             'type': transaction['type']
-        })"""
+        })
+        
+        return transaction_id
 
-    def load_user_categories(self):
-        """Load user categories from JSON file"""
-        try:
-            if os.path.exists("user_categories.json"):
-                with open("user_categories.json", "r") as f:
-                    self.user_categories = json.load(f)
-                print(f"🏷️ Loaded spending categories for {len(self.user_categories)} users")
-            else:
-                print("🏷️ No existing user categories file - starting fresh")
-        except Exception as e:
-            print(f"❌ Error loading user categories: {e}")
+    # === INCOMES ===
+    def get_user_income(self, user_id):
+        """Get monthly income for a specific user"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT amount FROM incomes WHERE user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result['amount'] if result else None
 
-    def save_user_categories(self):
-        """Save user categories to JSON file"""
-        try:
-            with open("user_categories.json", "w") as f:
-                json.dump(self.user_categories, f, indent=2)
-            print(f"💾 Saved spending categories for {len(self.user_categories)} users")
-        except Exception as e:
-            print(f"❌ Error saving user categories: {e}")
+    def save_user_income(self, user_id, amount):
+        """Save user income to database"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO incomes (user_id, amount, updated_at)
+            VALUES (?, ?, ?)
+        ''', (user_id, amount, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+        
+        # Sync to Railway
+        sync_to_railway({
+            'amount': amount,
+            'description': 'Monthly Income',
+            'timestamp': datetime.now().isoformat(),
+            'type': 'income',
+            'user_id': user_id
+        })
 
+    # === LANGUAGES ===
+    def get_user_language(self, user_id):
+        """Get user's preferred language, default to English"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT language FROM user_languages WHERE user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result['language'] if result else 'en'
+
+    def set_user_language(self, user_id, language_code):
+        """Set user's preferred language"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO user_languages (user_id, language, updated_at)
+            VALUES (?, ?, ?)
+        ''', (user_id, language_code, datetime.now().isoformat()))
+        
+        conn.commit()
+        conn.close()
+
+    # === CATEGORIES ===
     def get_user_categories(self, user_id):
         """Get spending categories for a specific user"""
-        user_id_str = str(user_id)
-        if user_id_str not in self.user_categories:
-            # Initialize with default categories for new user
-            self.user_categories[user_id_str] = {
-                "Other": []
-            }
-            self.save_user_categories()
-        return self.user_categories[user_id_str]
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT category FROM user_categories 
+            WHERE user_id = ? AND type = 'expense'
+            ORDER BY category
+        ''', (user_id,))
+        
+        categories = [row['category'] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Always include "Other" category
+        if "Other" not in categories:
+            categories.append("Other")
+            
+        return categories
 
     def add_user_category(self, user_id, category_name):
         """Add a new spending category for a user"""
-        user_categories = self.get_user_categories(user_id)
-        if category_name not in user_categories:
-            user_categories[category_name] = []
-            self.save_user_categories()
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT OR IGNORE INTO user_categories (user_id, category, type)
+                VALUES (?, ?, 'expense')
+            ''', (user_id, category_name))
+            
+            conn.commit()
             return True
-        return False
+        except Exception as e:
+            print(f"Error adding category: {e}")
+            return False
+        finally:
+            conn.close()
 
     def remove_user_category(self, user_id, category_name):
         """Remove a spending category from a user"""
-        user_categories = self.get_user_categories(user_id)
-        
         # Protect savings categories from deletion
         if category_name in self.protected_savings_categories:
             return False
             
-        if category_name in user_categories and category_name not in ["Food", "Other"]:
-            del user_categories[category_name]
-            self.save_user_categories()
-            return True
-        return False
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                DELETE FROM user_categories 
+                WHERE user_id = ? AND category = ? AND type = 'expense'
+            ''', (user_id, category_name))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            print(f"Error removing category: {e}")
+            return False
+        finally:
+            conn.close()
 
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
@@ -1255,12 +1337,13 @@ This will help me provide better financial recommendations!"""
                 if income <= 0:
                     error_msg = "❌ Будь ласка, введіть позитивну суму для вашого доходу." if user_lang == 'uk' else "❌ Please enter a positive amount for your income."
                     self.send_message(chat_id, error_msg)
-                    return  # Exit after error
+                    return
                 
-                # Save the income
-                self.user_incomes[str(chat_id)] = income
-                self.save_incomes()
-                self.pending_income.discard(chat_id)  # Use discard instead of remove to avoid errors
+                # Save the income using new database method
+                self.save_user_income(chat_id, income)
+                self.pending_income.discard(chat_id)
+                
+                # ... rest of your success message code ...
                 
                 # Welcome message with next steps
                 if user_lang == 'uk':
@@ -1641,34 +1724,26 @@ Let's build your financial health together! 💪"""
                     for word in words:
                         self.learned_patterns[word] = category
                 
-                # Add transaction for specific user
+                # Add transaction to database
                 try:
-                    user_transactions = self.get_user_transactions(chat_id)
                     transaction = {
-                        "id": len(user_transactions) + 1,
                         "amount": amount,
                         "category": category,
                         "description": text,
                         "type": transaction_type,
                         "date": datetime.now().astimezone().isoformat()
                     }
-                    user_transactions.append(transaction)
-                    self.save_transactions()
-                    print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
                     
-                    # Sync to Railway
-                    sync_to_railway({
-                        'amount': amount,
-                        'description': text,
-                        'category': category,
-                        'timestamp': datetime.now().isoformat(),
-                        'type': transaction_type
-                    })
+                    # Use the new database method
+                    transaction_id = self.save_user_transaction(chat_id, transaction)
+                    print(f"✅ Saved {transaction_type} transaction for user {chat_id}, ID: {transaction_id}")
                     
                 except Exception as e:
                     print(f"❌ Error saving transaction: {e}")
                     import traceback
                     traceback.print_exc()
+                
+                # ... rest of your existing code for 50/30/20 tracking and messages ...
                 
                 user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
 
@@ -1941,118 +2016,125 @@ def health_check():
 @flask_app.route('/api/financial-data')
 def api_financial_data():
     try:
-        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
+        print("🧮 CALCULATING FINANCIAL DATA FROM DATABASE...")
         
         if not bot_instance:
             return jsonify({'error': 'Bot not initialized'}), 500
         
-        # Get transactions from the bot instance
-        all_transactions = bot_instance.transactions
-        print(f"📊 Total users with transactions: {len(all_transactions)}")
+        # Get transactions from database
+        conn = bot_instance.db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get ALL transactions for calculation
+        cursor.execute('''
+            SELECT amount, type FROM transactions 
+            ORDER BY date DESC
+        ''')
+        
+        all_transactions = cursor.fetchall()
+        conn.close()
+        
+        print(f"📊 Total transactions in database: {len(all_transactions)}")
         
         # Initialize totals
         balance = 0
         total_income = 0
         total_expenses = 0
         total_savings = 0
-        transaction_count = 0
+        transaction_count = len(all_transactions)
         recent_transactions = []
 
-        # Process ALL transactions for calculation
-        if isinstance(all_transactions, dict):
-            for user_id, user_transactions in all_transactions.items():
-                if isinstance(user_transactions, list):
-                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
-                    
-                    # Calculate totals from ALL transactions
-                    for transaction in user_transactions:
-                        if isinstance(transaction, dict):
-                            amount = float(transaction.get('amount', 0))
-                            trans_type = transaction.get('type', 'expense')
-                            description = transaction.get('description', 'Unknown')
-                            
-                            print(f"   📝 {trans_type}: {amount} - {description}")
-                            
-                            # CORRECTED BALANCE CALCULATION
-                            if trans_type == 'income':
-                                balance += amount
-                                total_income += amount
-                            elif trans_type == 'expense':
-                                balance -= amount
-                                total_expenses += amount
-                            elif trans_type == 'savings':
-                                balance -= amount  # Money moved to savings
-                                total_savings += amount
-                            elif trans_type == 'debt':
-                                balance += amount  # You receive money as debt
-                            elif trans_type == 'debt_return':
-                                balance -= amount  # You pay back debt
-                            elif trans_type == 'savings_withdraw':
-                                balance += amount  # You take money from savings
-                                total_savings -= amount
-                            
-                            transaction_count += 1
-                    
-                    # Get recent transactions for display (last 5)
-                    for transaction in user_transactions[-5:]:
-                        if isinstance(transaction, dict):
-                            amount = float(transaction.get('amount', 0))
-                            trans_type = transaction.get('type', 'expense')
-                            description = transaction.get('description', 'Unknown')
-                            category = transaction.get('category', 'Other')
-                            
-                            # Determine emoji and display format
-                            emoji = "💰"
-                            display_name = description
-                            
-                            if trans_type == 'income':
-                                emoji = "💵"
-                                # For income, show category instead of description
-                                display_name = category
-                            elif trans_type == 'expense':
-                                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                                    emoji = "🏠"
-                                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                                    emoji = "🍕"
-                                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                                    emoji = "🚗"
-                                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
-                                    emoji = "🛍️"
-                                else:
-                                    emoji = "🛒"
-                            elif trans_type == 'savings':
-                                emoji = "🏦"
-                                display_name = "Savings"
-                            elif trans_type == 'debt':
-                                emoji = "💳"
-                                display_name = "Debt"
-                            elif trans_type == 'debt_return':
-                                emoji = "🔙"
-                                display_name = "Debt Return"
-                            elif trans_type == 'savings_withdraw':
-                                emoji = "📥"
-                                display_name = "Savings Withdraw"
-                            
-                            # Truncate long descriptions
-                            if len(display_name) > 25:
-                                display_name = display_name[:22] + "..."
-                            
-                            recent_transactions.append({
-                                "emoji": emoji,
-                                "name": display_name,
-                                "amount": amount  # Use original amount, let frontend handle sign
-                            })
-
-        # Use total_savings for savings display
-        actual_savings = total_savings
+        # Calculate totals from ALL transactions
+        for transaction in all_transactions:
+            amount = transaction['amount']
+            trans_type = transaction['type']
+            
+            # CORRECTED BALANCE CALCULATION
+            if trans_type == 'income':
+                balance += amount
+                total_income += amount
+            elif trans_type == 'expense':
+                balance -= amount
+                total_expenses += amount
+            elif trans_type == 'savings':
+                balance -= amount  # Money moved to savings
+                total_savings += amount
+            elif trans_type == 'debt':
+                balance += amount  # You receive money as debt
+            elif trans_type == 'debt_return':
+                balance -= amount  # You pay back debt
+            elif trans_type == 'savings_withdraw':
+                balance += amount  # You take money from savings
+                total_savings -= amount
         
+        # Get recent transactions for display (last 5)
+        conn = bot_instance.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT amount, type, description, category, date 
+            FROM transactions 
+            ORDER BY date DESC 
+            LIMIT 5
+        ''')
+        
+        recent_db_transactions = cursor.fetchall()
+        conn.close()
+        
+        for transaction in recent_db_transactions:
+            amount = transaction['amount']
+            trans_type = transaction['type']
+            description = transaction['description']
+            category = transaction['category']
+            
+            # Determine emoji and display format (same as before)
+            emoji = "💰"
+            display_name = description
+            
+            if trans_type == 'income':
+                emoji = "💵"
+                display_name = category
+            elif trans_type == 'expense':
+                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                    emoji = "🏠"
+                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                    emoji = "🍕"
+                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                    emoji = "🚗"
+                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                    emoji = "🛍️"
+                else:
+                    emoji = "🛒"
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = "Savings"
+            elif trans_type == 'debt':
+                emoji = "💳"
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+            
+            # Truncate long descriptions
+            if len(display_name) > 25:
+                display_name = display_name[:22] + "..."
+            
+            recent_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "amount": amount
+            })
+
         # FINAL VERIFICATION
         print("=" * 50)
-        print(f"✅ FINAL CALCULATION:")
+        print(f"✅ DATABASE CALCULATION:")
         print(f"   Balance: {balance}")
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
-        print(f"   Total Savings: {actual_savings}")
+        print(f"   Total Savings: {total_savings}")
         print(f"   Transaction Count: {transaction_count}")
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
@@ -2061,7 +2143,7 @@ def api_financial_data():
             'balance': balance,
             'income': total_income,
             'spending': total_expenses,
-            'savings': actual_savings,
+            'savings': total_savings,
             'transactions': recent_transactions,
             'transaction_count': transaction_count
         }
@@ -2069,10 +2151,10 @@ def api_financial_data():
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ CRITICAL ERROR: {e}")
+        print(f"❌ DATABASE ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Calculation error'}), 500
+        return jsonify({'error': 'Database calculation error'}), 500
     
 
 @flask_app.route('/api/transactions')
