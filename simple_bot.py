@@ -1387,32 +1387,30 @@ This will help me provide better financial recommendations!"""
                     for i in range(0, len(savings_cats), 2):
                         row = []
                         for cat in savings_cats[i:i+2]:
+                            # Use the internal English name for callback_data
                             internal_name = savings_map[cat]
                             row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                    # Store pending transaction
+                    # ✅ CRITICAL: Store the pending transaction BEFORE sending the message
                     self.pending[chat_id] = {
                         'amount': amount, 
                         'text': text, 
-                        'category': "Savings",  # Temporary category
+                        'category': "Savings",  # Default category
                         'type': "savings"
                     }
                     
-                    print(f"🔍 DEBUG: Stored pending transaction: {self.pending[chat_id]}")
-                    
-                    # Create message
                     if user_lang == 'uk':
                         message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
-                    print(f"🔍 DEBUG: Sending category selection message")
+                    print(f"🔍 DEBUG: Sending savings category selection message with keyboard")
                     self.send_message(chat_id, message, keyboard)
                     
-                    # CRITICAL: Return to prevent further processing
+                    # ✅ IMPORTANT: Return to prevent further processing
                     return
 
                 elif is_income:
