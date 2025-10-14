@@ -2291,93 +2291,33 @@ def serve_mini_app():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinnBot - Finance Tracker</title>
+    <title>Balance Tracker</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         body {
-            background-color: #000000;
-            color: #ffffff;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-            overflow: hidden;
+            background-color: #f5f5f7;
+            padding: 20px;
+            color: #1d1d1f;
         }
         
         .container {
-            width: 100%;
             max-width: 400px;
-            background-color: #1c1c1e;
-            border-radius: 0;
-            box-shadow: none;
-            overflow: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            margin: 0 auto;
         }
         
-        /* Tab Header */
-        .tab-header {
-            display: flex;
-            background-color: #2c2c2e;
-            border-bottom: 1px solid #3a3a3c;
-        }
-        
-        .tab-button {
-            flex: 1;
-            padding: 16px;
+        .balance-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             text-align: center;
-            background: none;
-            border: none;
-            color: #8e8e93;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        .tab-button.active {
-            color: #0a84ff;
-            border-bottom: 2px solid #0a84ff;
-        }
-        
-        /* Tab Content */
-        .tab-content {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .tab-panel {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            padding: 20px;
-            overflow-y: auto;
-            transition: transform 0.3s ease;
-        }
-        
-        .tab-panel.hidden {
-            transform: translateX(100%);
-        }
-        
-        .tab-panel.active {
-            transform: translateX(0);
-        }
-        
-        /* Balance Tab */
-        .balance-section {
-            padding: 20px 0;
-            text-align: center;
-            border-bottom: 1px solid #2c2c2e;
         }
         
         .balance-label {
@@ -2388,373 +2328,221 @@ def serve_mini_app():
         
         .balance-amount {
             font-size: 36px;
-            font-weight: 700;
-            color: #ffffff;
-        }
-        
-        .summary-section {
-            display: flex;
-            padding: 20px 0;
-            border-bottom: 1px solid #2c2c2e;
-        }
-        
-        .summary-item {
-            flex: 1;
-            text-align: center;
-        }
-        
-        .summary-label {
-            font-size: 14px;
-            color: #8e8e93;
-            margin-bottom: 4px;
-        }
-        
-        .summary-amount {
-            font-size: 20px;
             font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        .income-expense {
+            display: flex;
+            justify-content: space-around;
+        }
+        
+        .income, .expense {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
         .income-amount {
-            color: #30d158;
-        }
-        
-        .spending-amount {
-            color: #ff453a;
-        }
-        
-        .savings-amount {
-            color: #0a84ff;
-        }
-        
-        .transactions-section {
-            padding: 20px 0;
-        }
-        
-        .section-header {
+            color: #34c759;
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 16px;
-            color: #ffffff;
         }
         
-        .transaction-item {
+        .expense-amount {
+            color: #ff3b30;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .income-label, .expense-label {
+            font-size: 14px;
+            color: #8e8e93;
+            margin-top: 4px;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e5e5ea;
+            margin: 20px 0;
+        }
+        
+        .transactions {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .transaction {
+            padding: 16px 20px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            padding: 12px 0;
-            border-bottom: 1px solid #2c2c2e;
+            align-items: center;
+            border-bottom: 1px solid #f2f2f7;
+        }
+        
+        .transaction:last-child {
+            border-bottom: none;
         }
         
         .transaction-info {
-            display: flex;
-            align-items: flex-start;
             flex: 1;
         }
         
-        .transaction-emoji {
-            font-size: 20px;
-            margin-right: 12px;
-            width: 24px;
-            text-align: center;
-            margin-top: 2px;
-        }
-        
-        .transaction-details {
-            flex: 1;
-        }
-        
-        .transaction-name {
+        .transaction-title {
             font-size: 16px;
-            color: #ffffff;
+            font-weight: 500;
             margin-bottom: 4px;
         }
         
         .transaction-date {
-            font-size: 12px;
+            font-size: 14px;
             color: #8e8e93;
         }
         
         .transaction-amount {
             font-size: 16px;
-            font-weight: 400;
-            text-align: right;
-            min-width: 80px;
+            font-weight: 500;
         }
         
-        /* Savings & Debts Tabs */
-        .amount-display {
-            text-align: center;
-            padding: 60px 20px;
+        .amount-negative {
+            color: #ff3b30;
         }
         
-        .amount-label {
-            font-size: 18px;
-            color: #8e8e93;
-            margin-bottom: 16px;
-        }
-        
-        .amount-value {
-            font-size: 48px;
-            font-weight: 700;
-        }
-        
-        .savings-color {
-            color: #0a84ff;
-        }
-        
-        .debts-color {
-            color: #ff453a;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #8e8e93;
-        }
-        
-        .no-transactions {
-            text-align: center;
-            padding: 40px 20px;
-            color: #8e8e93;
-        }
-        
-        .swipe-hint {
-            text-align: center;
-            padding: 20px;
-            color: #8e8e93;
-            font-size: 12px;
+        .amount-positive {
+            color: #34c759;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Tab Header -->
-        <div class="tab-header">
-            <button class="tab-button active" onclick="switchTab('balance')">Balance</button>
-            <button class="tab-button" onclick="switchTab('savings')">Savings</button>
-            <button class="tab-button" onclick="switchTab('debts')">Debts</button>
+        <div class="balance-card">
+            <div class="balance-label">Balance</div>
+            <div class="balance-amount">₹10,000</div>
+            <div class="income-expense">
+                <div class="expense">
+                    <div class="expense-amount">-1,200</div>
+                    <div class="expense-label">Spending</div>
+                </div>
+                <div class="income">
+                    <div class="income-amount">+3,000</div>
+                    <div class="income-label">Income</div>
+                </div>
+            </div>
         </div>
         
-        <!-- Tab Content -->
-        <div class="tab-content">
-            <!-- Balance Tab -->
-            <div class="tab-panel active" id="balance-tab">
-                <div class="balance-section">
-                    <div class="balance-label">Net Balance</div>
-                    <div class="balance-amount" id="balance-amount">0</div>
+        <div class="transactions">
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Food</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
                 </div>
-                
-                <div class="summary-section">
-                    <div class="summary-item">
-                        <div class="summary-label">Income</div>
-                        <div class="summary-amount income-amount" id="income-amount">0</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Spending</div>
-                        <div class="summary-amount spending-amount" id="spending-amount">0</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Savings</div>
-                        <div class="summary-amount savings-amount" id="savings-amount">0</div>
-                    </div>
-                </div>
-                
-                <div class="transactions-section">
-                    <div class="section-header">Recent Transactions</div>
-                    <div id="transactions-list">
-                        <div class="loading">Loading transactions...</div>
-                    </div>
-                </div>
-                
-                <div class="swipe-hint">
-                    💡 Swipe left/right to switch between tabs
-                </div>
+                <div class="transaction-amount amount-negative">-1,000</div>
             </div>
             
-            <!-- Savings Tab -->
-            <div class="tab-panel hidden" id="savings-tab">
-                <div class="amount-display">
-                    <div class="amount-label">Total Savings</div>
-                    <div class="amount-value savings-color" id="total-savings">0</div>
-                </div>
-                <div class="swipe-hint">
-                    💡 Swipe left/right to switch between tabs
-                </div>
-            </div>
+            <div class="divider"></div>
             
-            <!-- Debts Tab -->
-            <div class="tab-panel hidden" id="debts-tab">
-                <div class="amount-display">
-                    <div class="amount-label">Total Debt</div>
-                    <div class="amount-value debts-color" id="total-debts">0</div>
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Salary</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
                 </div>
-                <div class="swipe-hint">
-                    💡 Swipe left/right to switch between tabs
-                </div>
+                <div class="transaction-amount amount-positive">+1,000</div>
             </div>
         </div>
     </div>
 
     <script>
-        let currentTab = 'balance';
-        let startX = 0;
-        let currentX = 0;
-
-        // Tab switching
-        function switchTab(tabName) {
-            // Update buttons
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
-            
-            // Update panels
-            document.querySelectorAll('.tab-panel').forEach(panel => {
-                panel.classList.remove('active');
-                panel.classList.add('hidden');
-            });
-            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-            
-            currentTab = tabName;
-        }
-
-        // Swipe functionality
-        document.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-        });
-
-        document.addEventListener('touchmove', (e) => {
-            currentX = e.touches[0].clientX;
-        });
-
-        document.addEventListener('touchend', () => {
-            const diff = startX - currentX;
-            const swipeThreshold = 50;
-            
-            if (Math.abs(diff) > swipeThreshold) {
-                if (diff > 0 && currentTab !== 'debts') {
-                    // Swipe left - go to next tab
-                    const tabs = ['balance', 'savings', 'debts'];
-                    const currentIndex = tabs.indexOf(currentTab);
-                    if (currentIndex < tabs.length - 1) {
-                        switchTab(tabs[currentIndex + 1]);
-                    }
-                } else if (diff < 0 && currentTab !== 'balance') {
-                    // Swipe right - go to previous tab
-                    const tabs = ['balance', 'savings', 'debts'];
-                    const currentIndex = tabs.indexOf(currentTab);
-                    if (currentIndex > 0) {
-                        switchTab(tabs[currentIndex - 1]);
-                    }
-                }
+        // Sample transaction data - in a real app, this would come from a database
+        const transactions = [
+            {
+                id: 1,
+                title: "Food",
+                amount: -1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "expense"
+            },
+            {
+                id: 2,
+                title: "Salary",
+                amount: 1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "income"
             }
-        });
-
-        // Fetch real data from your API
-        async function loadFinancialData() {
-            try {
-                const response = await fetch('/api/financial-data');
-                if (!response.ok) {
-                    throw new Error('API response not ok');
-                }
-                const data = await response.json();
-                
-                console.log('📊 API Response:', data);
-                
-                // Update Balance Tab
-                document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
-                document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
-                document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
-                document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
-                
-                // Update Savings Tab
-                document.getElementById('total-savings').textContent = formatCurrency(data.savings || 0);
-                
-                // Update Debts Tab (you'll need to calculate this from your data)
-                const totalDebts = calculateTotalDebts(data.transactions || []);
-                document.getElementById('total-debts').textContent = formatCurrency(totalDebts);
-                
-                // Update transactions list
-                const transactionsList = document.getElementById('transactions-list');
-                if (data.transactions && data.transactions.length > 0) {
-                    transactionsList.innerHTML = '';
-                    data.transactions.forEach(transaction => {
-                        const transactionElement = document.createElement('div');
-                        transactionElement.className = 'transaction-item';
-                        
-                        const isIncome = transaction.amount > 0;
-                        const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-                        const amountDisplay = isIncome ? 
-                            `+${formatCurrency(transaction.amount)}` : 
-                            `-${formatCurrency(Math.abs(transaction.amount))}`;
-                        
-                        transactionElement.innerHTML = `
-                            <div class="transaction-info">
-                                <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                                <div class="transaction-details">
-                                    <div class="transaction-name">${transaction.name || 'Transaction'}</div>
-                                    <div class="transaction-date">${formatDate(new Date())}</div>
-                                </div>
-                            </div>
-                            <div class="transaction-amount ${amountClass}">
-                                ${amountDisplay}₴
-                            </div>
-                        `;
-                        transactionsList.appendChild(transactionElement);
-                    });
-                } else {
-                    transactionsList.innerHTML = `
-                        <div class="no-transactions">
-                            <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
-                            <div>No transactions yet</div>
-                            <div style="font-size: 12px; margin-top: 8px;">Start adding transactions in the bot</div>
-                        </div>
-                    `;
-                }
-                
-            } catch (error) {
-                console.error('Error loading financial data:', error);
-                // Set defaults on error
-                document.getElementById('balance-amount').textContent = '0';
-                document.getElementById('income-amount').textContent = '0';
-                document.getElementById('spending-amount').textContent = '0';
-                document.getElementById('savings-amount').textContent = '0';
-                document.getElementById('total-savings').textContent = '0';
-                document.getElementById('total-debts').textContent = '0';
-                document.getElementById('transactions-list').innerHTML = '<div class="loading">Failed to load transactions</div>';
-            }
-        }
-
-        function calculateTotalDebts(transactions) {
-            // Simple debt calculation - you might want to adjust this based on your data structure
-            let totalDebt = 0;
+        ];
+        
+        // Calculate balance, income, and spending
+        function calculateFinances() {
+            let balance = 10000; // Starting balance
+            let income = 0;
+            let spending = 0;
+            
             transactions.forEach(transaction => {
-                if (transaction.amount < 0) {
-                    totalDebt += Math.abs(transaction.amount);
+                if (transaction.amount > 0) {
+                    income += transaction.amount;
+                } else {
+                    spending += Math.abs(transaction.amount);
                 }
             });
-            return totalDebt;
+            
+            // Update UI
+            document.querySelector('.balance-amount').textContent = `₹${balance.toLocaleString()}`;
+            document.querySelector('.income-amount').textContent = `+${income.toLocaleString()}`;
+            document.querySelector('.expense-amount').textContent = `-${spending.toLocaleString()}`;
         }
-
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-US').format(amount);
-        }
-
+        
+        // Format date for display
         function formatDate(date) {
-            return date.toLocaleDateString('en-US', { 
+            const options = { 
                 month: 'short', 
-                day: 'numeric',
+                day: 'numeric', 
+                year: 'numeric',
                 hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
+                minute: 'numeric'
+            };
+            return date.toLocaleDateString('en-US', options);
+        }
+        
+        // Render transactions
+        function renderTransactions() {
+            const transactionsContainer = document.querySelector('.transactions');
+            
+            // Clear existing transactions (except the first one which is our template)
+            while (transactionsContainer.children.length > 2) {
+                transactionsContainer.removeChild(transactionsContainer.lastChild);
+            }
+            
+            // Add transactions
+            transactions.forEach(transaction => {
+                const transactionEl = document.createElement('div');
+                transactionEl.className = 'transaction';
+                
+                transactionEl.innerHTML = `
+                    <div class="transaction-info">
+                        <div class="transaction-title">${transaction.title}</div>
+                        <div class="transaction-date">${formatDate(transaction.date)}</div>
+                    </div>
+                    <div class="transaction-amount ${transaction.amount > 0 ? 'amount-positive' : 'amount-negative'}">
+                        ${transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                    </div>
+                `;
+                
+                // Insert before the divider (which is the second child)
+                transactionsContainer.insertBefore(transactionEl, transactionsContainer.children[1]);
+                
+                // Add divider if it's not the last transaction
+                if (transactions.indexOf(transaction) < transactions.length - 1) {
+                    const divider = document.createElement('div');
+                    divider.className = 'divider';
+                    transactionsContainer.insertBefore(divider, transactionsContainer.children[2]);
+                }
             });
         }
-
-        // Load data when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            loadFinancialData();
-        });
+        
+        // Initialize the app
+        calculateFinances();
+        renderTransactions();
     </script>
 </body>
 </html>
