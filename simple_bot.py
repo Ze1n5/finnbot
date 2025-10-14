@@ -1309,29 +1309,59 @@ This will help me provide better financial recommendations!"""
                         keyboard = {"inline_keyboard": keyboard_rows}
                         
                     else:
-                        # For other transaction types, just confirm
-                        if user_lang == 'uk':
-                            type_names = {
-                                'expense': 'Витрата',
-                                'savings': 'Заощадження', 
-                                'debt': 'Борг',
-                                'debt_return': 'Повернення боргу',
-                                'savings_withdraw': 'Зняття заощаджень'
-                            }
-                            message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
-                        else:
-                            type_names = {
-                                'expense': 'Expense',
-                                'savings': 'Savings',
-                                'debt': 'Debt',
-                                'debt_return': 'Debt Return', 
-                                'savings_withdraw': 'Savings Withdraw'
-                            }
-                            message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+                        # For savings transactions, show category selection
+                        if trans_type == 'savings':
+                            user_lang = self.get_user_language(chat_id)
+                            
+                            if user_lang == 'uk':
+                                savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                                savings_map = {
+                                    "Кріпто": "Crypto",
+                                    "Банк": "Bank", 
+                                    "Особисте": "Personal",
+                                    "Інвестиції": "Investment"
+                                }
+                            else:
+                                savings_cats = self.protected_savings_categories
+                                savings_map = {cat: cat for cat in self.protected_savings_categories}
+                            
+                            keyboard_rows = []
+                            for i in range(0, len(savings_cats), 2):
+                                row = []
+                                for cat in savings_cats[i:i+2]:
+                                    internal_name = savings_map[cat]
+                                    row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                                keyboard_rows.append(row)
+                            
+                            keyboard = {"inline_keyboard": keyboard_rows}
+                            
+                            if user_lang == 'uk':
+                                message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nОберіть категорію заощаджень:"
+                            else:
+                                message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nSelect savings category:"
                         
-                        keyboard = {"inline_keyboard": [[
-                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
-                        ]]}
+                        else:
+                            # For other transaction types, just confirm
+                            if user_lang == 'uk':
+                                type_names = {
+                                    'expense': 'Витрата',
+                                    'debt': 'Борг',
+                                    'debt_return': 'Повернення боргу',
+                                    'savings_withdraw': 'Зняття заощаджень'
+                                }
+                                message = f"🧮 Розрахунок: {text}\n💰 Результат: {symbol}{amount:,.0f}₴\n\nЦе правильно?"
+                            else:
+                                type_names = {
+                                    'expense': 'Expense',
+                                    'debt': 'Debt',
+                                    'debt_return': 'Debt Return', 
+                                    'savings_withdraw': 'Savings Withdraw'
+                                }
+                                message = f"🧮 Calculation: {text}\n💰 Result: {symbol}{amount:,.0f}₴\n\nIs this correct?"
+
+                            keyboard = {"inline_keyboard": [[
+                                {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": f"cat_{type_names[trans_type]}"}
+                            ]]}
                     
                     self.send_message(chat_id, message, keyboard)
                     return
