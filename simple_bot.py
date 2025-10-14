@@ -2969,7 +2969,11 @@ def test_api():
 
 # Set webhook on startup
 def set_webhook():
-    """Set Telegram webhook URL"""
+    """Set Telegram webhook URL only if token is available"""
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
+        print("❌ Cannot set webhook - bot token not configured")
+        return
+    
     try:
         webhook_url = "https://finnbot-production.up.railway.app/webhook"
         response = requests.post(

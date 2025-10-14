@@ -149,7 +149,9 @@ async def handle_text_message(update: Update, context: CallbackContext):
 
 
 # ========== WEB ENDPOINTS ==========
-
+@flask_app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "message": "Server is running"})
 # Serve mini app main page
 # Simple mini app
 @app.route('/mini-app')
@@ -401,12 +403,17 @@ if __name__ == "__main__":
     # Railway will set PORT environment variable
     port = int(os.environ.get("PORT", 8080))
     
+    # Check for bot token but don't exit - just warn
     if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-        print("❌ ERROR: Please set your actual bot token in the .env file")
-        exit(1)
-    
-    # Set webhook when starting
-    set_webhook()
+        print("❌ WARNING: Bot token not set. Telegram bot features will not work.")
+        print("💡 Please set BOT_TOKEN environment variable on Railway")
+    else:
+        # Only set webhook if token is available
+        set_webhook()
+        print("✅ Bot token found - Telegram bot is active")
     
     print(f"🚀 Starting FinnBot on port {port}...")
+    print(f"📊 Data persistence: Active (using {PERSISTENT_DIR}/ directory)")
+    print(f"👤 Loaded data: {len(bot_instance.transactions)} users, {sum(len(t) for t in bot_instance.transactions.values())} transactions")
+    
     flask_app.run(host='0.0.0.0', port=port, debug=False)
