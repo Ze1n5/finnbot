@@ -5,9 +5,7 @@ import threading
 import atexit
 import signal
 from datetime import datetime
-from flask import Flask, jsonify, request, send_from_directory
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
+from flask import Flask, jsonify, request
 from simple_bot import SimpleFinnBot
 
 # ========== PERSISTENT STORAGE SETUP ==========
@@ -22,6 +20,27 @@ print(f"🎯 FORCING persistent directory: {PERSISTENT_DIR}")
 # ========== FLASK APP INITIALIZATION ==========
 app = Flask(__name__)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
+
+# ========== BOT INSTANCE INITIALIZATION ==========
+bot_instance = SimpleFinnBot()
+
+# ========== SHUTDOWN HANDLER ==========
+def save_all_data():
+    """Save all data before shutdown"""
+    print("💾 Saving all data before shutdown...")
+    try:
+        bot_instance.save_transactions()
+        bot_instance.save_incomes()
+        bot_instance.save_user_categories()
+        bot_instance.save_user_languages()
+        print("✅ All data saved successfully!")
+    except Exception as e:
+        print(f"❌ Error during shutdown save: {e}")
+
+# Register shutdown handlers
+atexit.register(save_all_data)
+signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
+signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
 
 # ========== WEB ENDPOINTS ==========
 @app.route('/health')
@@ -38,103 +57,271 @@ def debug_storage():
     }
     return jsonify(storage_info)
 
+@app.route('/webhook', methods=['POST', 'GET'])
+def webhook():
+    """Receive updates from Telegram for SimpleFinnBot"""
+    if request.method == 'GET':
+        return jsonify({"status": "healthy", "message": "Webhook endpoint active"})
+    
+    if request.method == 'POST':
+        update_data = request.get_json()
+        print(f"📨 Received webhook update")
+        
+        # Process the update in a separate thread to avoid timeout
+        threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
+        
+        return jsonify({"status": "success"}), 200
+
 @app.route('/api/financial-data')
 def api_financial_data():
     try:
-        # Read from persistent storage
-        transactions_file = get_persistent_path("transactions.json")
-        incomes_file = get_persistent_path("incomes.json")
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
         
-        # Calculate totals from persistent files
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions from the bot instance
+        all_transactions = bot_instance.transactions
+        print(f"📊 Total users with transactions: {len(all_transactions)}")
+        
+        # Initialize totals
+        balance = 0
         total_income = 0
         total_expenses = 0
-        balance = 0
-        
-        try:
-            with open(incomes_file, 'r') as f:
-                incomes_data = json.load(f)
-                if isinstance(incomes_data, list):
-                    total_income = sum(item.get('amount', 0) for item in incomes_data if isinstance(item, dict))
-                elif isinstance(incomes_data, dict):
-                    total_income = sum(incomes_data.values())
-        except:
-            pass
-            
-        try:
-            with open(transactions_file, 'r') as f:
-                transactions = json.load(f)
-                if isinstance(transactions, list):
-                    total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-                elif isinstance(transactions, dict):
-                    # Handle user-based transaction structure
-                    all_transactions = []
-                    for user_transactions in transactions.values():
-                        if isinstance(user_transactions, list):
-                            all_transactions.extend(user_transactions)
-                    total_expenses = sum(t.get('amount', 0) for t in all_transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-        except:
-            pass
-            
-        balance = total_income + total_expenses
-        
-        # Get recent transactions for display
+        total_savings = 0
+        transaction_count = 0
         recent_transactions = []
-        try:
-            with open(transactions_file, 'r') as f:
-                transactions_data = json.load(f)
-                
-                if isinstance(transactions_data, list):
-                    recent_data = transactions_data[-5:]  # Last 5 transactions
-                elif isinstance(transactions_data, dict):
-                    # Get all transactions and sort by date
-                    all_transactions = []
-                    for user_transactions in transactions_data.values():
-                        if isinstance(user_transactions, list):
-                            all_transactions.extend(user_transactions)
-                    # Sort by timestamp if available, otherwise take last ones
-                    recent_data = all_transactions[-5:]
-                else:
-                    recent_data = []
-                    
-                for transaction in recent_data:
-                    if isinstance(transaction, dict):
-                        amount = transaction.get('amount', 0)
-                        description = transaction.get('description', 'Unknown')
-                        category = transaction.get('category', 'Other')
-                        
-                        # Determine emoji
-                        emoji = "💰"
-                        if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                            emoji = "🏠"
-                        elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                            emoji = "🍕"
-                        elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                            emoji = "🚗"
-                        elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
-                            emoji = "🛍️"
-                            
-                        recent_transactions.append({
-                            "emoji": emoji,
-                            "name": description,
-                            "amount": amount
-                        })
-        except:
-            pass
 
+        # Process ALL transactions for calculation
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
+                    
+                    # Calculate totals from ALL transactions
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            
+                            print(f"   📝 {trans_type}: {amount} - {description}")
+                            
+                            # CORRECTED BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                            elif trans_type == 'savings':
+                                balance -= amount  # Money moved to savings
+                                total_savings += amount
+                            elif trans_type == 'debt':
+                                balance += amount  # You receive money as debt
+                            elif trans_type == 'debt_return':
+                                balance -= amount  # You pay back debt
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount  # You take money from savings
+                                total_savings -= amount
+                            
+                            transaction_count += 1
+                    
+                    # Get recent transactions for display (last 5)
+                    for transaction in user_transactions[-5:]:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            category = transaction.get('category', 'Other')
+                            
+                            # Determine emoji and display format
+                            emoji = "💰"
+                            display_name = description
+                            
+                            if trans_type == 'income':
+                                emoji = "💵"
+                                # For income, show category instead of description
+                                display_name = category
+                            elif trans_type == 'expense':
+                                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                                    emoji = "🏠"
+                                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                                    emoji = "🍕"
+                                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                                    emoji = "🚗"
+                                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                                    emoji = "🛍️"
+                                else:
+                                    emoji = "🛒"
+                            elif trans_type == 'savings':
+                                emoji = "🏦"
+                                display_name = "Savings"
+                            elif trans_type == 'debt':
+                                emoji = "💳"
+                                display_name = "Debt"
+                            elif trans_type == 'debt_return':
+                                emoji = "🔙"
+                                display_name = "Debt Return"
+                            elif trans_type == 'savings_withdraw':
+                                emoji = "📥"
+                                display_name = "Savings Withdraw"
+                            
+                            # Truncate long descriptions
+                            if len(display_name) > 25:
+                                display_name = display_name[:22] + "..."
+                            
+                            recent_transactions.append({
+                                "emoji": emoji,
+                                "name": display_name,
+                                "amount": amount  # Use original amount, let frontend handle sign
+                            })
+
+        # Use total_savings for savings display
+        actual_savings = total_savings
+        
+        # FINAL VERIFICATION
+        print("=" * 50)
+        print(f"✅ FINAL CALCULATION:")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income: {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {actual_savings}")
+        print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
+        print("=" * 50)
+        
         response_data = {
             'balance': balance,
             'income': total_income,
-            'spending': abs(total_expenses),
-            'savings': 0,  # You can calculate this if you have savings data
+            'spending': total_expenses,
+            'savings': actual_savings,
             'transactions': recent_transactions,
-            'transaction_count': len(recent_transactions)
+            'transaction_count': transaction_count
         }
         
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"❌ Error in financial data API: {e}")
+        print(f"❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
+
+@app.route('/api/transactions')
+def api_transactions():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        all_transactions = bot_instance.transactions
+        all_transactions_list = []
+        
+        # Collect all transactions from all users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            # Add user_id to transaction for uniqueness
+                            transaction_with_user = transaction.copy()
+                            transaction_with_user['user_id'] = user_id
+                            all_transactions_list.append(transaction_with_user)
+        
+        # Sort by date (newest first)
+        all_transactions_list.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_transactions = all_transactions_list[start_idx:end_idx]
+        
+        # Format transactions for display
+        formatted_transactions = []
+        for transaction in paginated_transactions:
+            amount = float(transaction.get('amount', 0))
+            trans_type = transaction.get('type', 'expense')
+            description = transaction.get('description', 'Unknown')
+            category = transaction.get('category', 'Other')
+            timestamp = transaction.get('date', '')
+            
+            # Determine emoji and display name
+            emoji = "💰"
+            display_name = ""
+            
+            if trans_type == 'income':
+                emoji = "💵"
+                # For income: show category in brackets
+                display_name = f"{category}"
+            elif trans_type == 'expense':
+                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                    emoji = "🏠"
+                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                    emoji = "🍕"
+                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                    emoji = "🚗"
+                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                    emoji = "🛍️"
+                else:
+                    emoji = "🛒"
+                
+                # For expenses: extract the actual description (remove numbers and symbols)
+                # The description might be "100 food" - we want just "food"
+                clean_description = description
+                
+                # Remove numbers and currency symbols
+                clean_description = re.sub(r'[\d+.,₴]', '', clean_description).strip()
+                
+                # Remove common transaction symbols
+                clean_description = re.sub(r'[+-]+', '', clean_description).strip()
+                
+                # If we have a meaningful description after cleaning
+                if clean_description and clean_description.lower() != category:
+                    display_name = f"{category} {clean_description}"
+                else:
+                    display_name = f"{category}"
+                    
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = "Savings"
+            elif trans_type == 'debt':
+                emoji = "💳"
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+            
+            # Truncate long descriptions
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
+            
+            formatted_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "display_name": display_name,
+                "amount": amount,
+                "timestamp": timestamp,
+                "type": trans_type
+            })
+        
+        has_more = len(all_transactions_list) > end_idx
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'has_more': has_more,
+            'current_page': page,
+            'total_transactions': len(all_transactions_list)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in transactions API: {e}")
+        return jsonify({'error': 'Failed to load transactions'}), 500
 
 # Serve mini app main page
 @app.route('/mini-app')
@@ -407,203 +594,23 @@ def serve_mini_app():
 </body>
 </html>"""
 
-# ========== BOT INSTANCE INITIALIZATION ==========
-bot_instance = SimpleFinnBot()
-
-# ========== SHUTDOWN HANDLER ==========
-def save_all_data():
-    """Save all data before shutdown"""
-    print("💾 Saving all data before shutdown...")
-    try:
-        bot_instance.save_transactions()
-        bot_instance.save_incomes()
-        bot_instance.save_user_categories()
-        bot_instance.save_user_languages()
-        print("✅ All data saved successfully!")
-    except Exception as e:
-        print(f"❌ Error during shutdown save: {e}")
-
-# Register shutdown handlers
-atexit.register(save_all_data)
-signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
-signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
-
-# ========== TELEGRAM BOT SETUP ==========
-
-async def setup_bot():
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Add handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("summary", summary_command))
-    application.add_handler(CommandHandler("categories", categories_command))
-    application.add_handler(CommandHandler("addcategory", add_category_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
-    
-    print("🤖 Bot setup complete - ready to start polling...")
-    return application
-
-def start_bot():
-    try:
-        print("🚀 Starting Telegram bot...")
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        application = loop.run_until_complete(setup_bot())
-        application.run_polling()
-    except Exception as e:
-        print(f"❌ Error starting bot: {e}")
-
-# Your existing command functions
-async def start_command(update: Update, context: CallbackContext):
-    # This will be your Railway URL - we'll get it after deployment
-    web_app_url = "https://finnbot-production.up.railway.app/mini-app"    
-    keyboard = [
-        [InlineKeyboardButton("📊 Open Financial Dashboard", web_app=WebAppInfo(url=web_app_url))]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "Welcome to FinnBot! Your personal finance assistant. 📈\n\n"
-        "Use /addcategory to create spending categories\n"
-        "Use /summary to see your financial overview\n"
-        "Or tap below to open your dashboard:",
-        reply_markup=reply_markup
-    )
-
-async def help_command(update: Update, context: CallbackContext):
-    help_text = """
-🤖 **FinnBot Commands:**
-
-/start - Start the bot and see dashboard
-/help - Show this help message
-/summary - Get financial summary
-/categories - View spending categories
-/addcategory - Add new spending category
-
-**How to use:**
-1. First, use /addcategory to create spending categories
-2. Then just send messages like:
-   - "Lunch 150₴" 
-   - "Salary 5000₴"
-   - "Groceries 300₴ Food"
-3. Use /summary to see your finances
-"""
-    await update.message.reply_text(help_text)
-
-async def summary_command(update: Update, context: CallbackContext):
-    try:
-        incomes_file = get_persistent_path("incomes.json")
-        transactions_file = get_persistent_path("transactions.json")
-        
-        with open(incomes_file, 'r') as f:
-            incomes = json.load(f)
-    except:
-        incomes = []
-    
-    try:
-        with open(transactions_file, 'r') as f:
-            transactions = json.load(f)
-    except:
-        transactions = []
-    
-    total_income = sum(item.get('amount', 0) for item in incomes if isinstance(item, dict))
-    total_expenses = sum(t.get('amount', 0) for t in transactions if isinstance(t, dict) and t.get('amount', 0) < 0)
-    balance = total_income + total_expenses
-    
-    summary_text = f"""
-💼 **Financial Summary**
-
-💰 Total Income: {total_income}₴
-💸 Total Expenses: {abs(total_expenses)}₴
-🏦 Current Balance: {balance}₴
-📊 Total Transactions: {len(transactions)}
-"""
-    await update.message.reply_text(summary_text)
-
-async def categories_command(update: Update, context: CallbackContext):
-    try:
-        categories_file = get_persistent_path("user_categories.json")
-        with open(categories_file, 'r') as f:
-            categories = json.load(f)
-    except:
-        categories = []
-    
-    if not categories:
-        await update.message.reply_text("No categories yet. Use /addcategory to create some!")
-        return
-    
-    categories_text = "📁 **Your Categories:**\n" + "\n".join([f"• {cat}" for cat in categories])
-    await update.message.reply_text(categories_text)
-
-async def add_category_command(update: Update, context: CallbackContext):
-    if not context.args:
-        await update.message.reply_text("Usage: /addcategory <category_name>")
-        return
-    
-    category = ' '.join(context.args)
-    
-    try:
-        categories_file = get_persistent_path("user_categories.json")
-        with open(categories_file, 'r') as f:
-            categories = json.load(f)
-    except:
-        categories = []
-    
-    if category not in categories:
-        categories.append(category)
-        with open(categories_file, 'w') as f:
-            json.dump(categories, f)
-        await update.message.reply_text(f"✅ Category '{category}' added!")
-    else:
-        await update.message.reply_text(f"ℹ️ Category '{category}' already exists!")
-
-async def handle_text_message(update: Update, context: CallbackContext):
-    user_message = update.message.text
-    
-    parts = user_message.split()
-    if len(parts) < 2:
-        await update.message.reply_text("Please send in format: <amount> <description>")
-        return
-    
-    try:
-        amount = float(parts[0])
-        description = ' '.join(parts[1:])
-        
-        transaction = {
-            'amount': amount,
-            'description': description,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        try:
-            transactions_file = get_persistent_path("transactions.json")
-            with open(transactions_file, 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = []
-        
-        transactions.append(transaction)
-        
-        with open(transactions_file, 'w') as f:
-            json.dump(transactions, f)
-        
-        await update.message.reply_text(f"✅ Recorded: {description} - {amount}₴")
-        
-    except ValueError:
-        await update.message.reply_text("Please provide a valid amount number!")
-
 def set_webhook():
-    """Set Telegram webhook URL only if token is available"""
+    """Set Telegram webhook URL for SimpleFinnBot"""
     if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
         print("❌ Cannot set webhook - bot token not configured")
         return
     
     try:
         webhook_url = "https://finnbot-production.up.railway.app/webhook"
-        # You might need to implement webhook logic here
-        print(f"✅ Webhook would be set to: {webhook_url}")
+        import requests
+        response = requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook",
+            json={"url": webhook_url}
+        )
+        if response.status_code == 200:
+            print("✅ Webhook set successfully!")
+        else:
+            print(f"❌ Failed to set webhook: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"❌ Error setting webhook: {e}")
 
@@ -624,9 +631,6 @@ if __name__ == "__main__":
     
     print(f"🚀 Starting FinnBot on port {port}...")
     print(f"🎯 Persistent directory: {PERSISTENT_DIR}")
-    
-    # Start bot in a separate thread
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
+    print(f"📊 Loaded data: {len(bot_instance.transactions)} users")
     
     app.run(host='0.0.0.0', port=port, debug=False)
