@@ -22,7 +22,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-
 # Initialize Flask app FIRST
 flask_app = Flask(__name__)
 
@@ -66,9 +65,9 @@ class SimpleFinnBot:
             }
         }
         
-        # User-specific data - THESE WILL NOW PERSIST
+        # User-specific data
         self.learned_patterns = {}
-        self.onboarding_state = {}  # Track where user is in onboarding
+        self.onboarding_state = {}
         self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
@@ -79,10 +78,10 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data FROM PERSISTENT STORAGE
+        # Load existing data
         self.load_all_data()
         
-        # Rest of your existing code...
+        # 50/30/20 tracking
         self.monthly_totals = {}
         self.monthly_percentages = {}
         self.current_month = datetime.now().strftime("%Y-%m")
@@ -103,50 +102,7 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
-        self.translations = {
-            # ... your existing translations ...
-        }
-        self.translations = {
-    'en': {
-        'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
 
-Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
-
-🎯 *50/30/20 Breakdown:*
-• 🏠 *50% Needs* - Rent, food, utilities, transport
-• 🎉 *30% Wants* - Dining, entertainment, shopping  
-• 🏦 *20% Future* - Savings, debt repayment, investments
-
-🚀 *Quick Start:*
-`+5000 salary` - Add income
-`150 lunch` - Add expense  
-`++1000` - Add to savings
-`-200 loan` - Add debt
-
-Let's build your financial health together! 💪""",
-        # ... keep other English translations the same ...
-    },
-    'uk': {
-        'welcome': """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
-
-Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
-
-🎯 *Розподіл 50/30/20:*
-• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
-• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
-• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
-
-🚀 *Швидкий старт:*
-`+5000 зарплата` - Додати дохід
-`150 обід` - Додати витрату
-`++1000` - Додати до заощаджень
-`-200 кредит` - Додати борг
-
-Давайте будувати ваше фінансове здоров'я разом! 💪""",
-        # ... keep other Ukrainian translations the same ...
-    }
-}
-        
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
         data = {
@@ -863,9 +819,7 @@ Let's build your financial health together! 💪""",
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
         print(f"📨 Processing message from {chat_id}: '{text}'")
-        print(f"🔍 DEBUG - pending_income: {chat_id in self.pending_income}")
-        print(f"🔍 DEBUG - delete_mode: {self.delete_mode.get(chat_id, False)}")
-        print(f"📨 Processing message from {chat_id}: {text}")
+
         
         # Handle delete mode first if active
         if self.delete_mode.get(chat_id):
@@ -956,7 +910,7 @@ Let's build your financial health together! 💪""",
                 user_lang = self.get_user_language(chat_id)
                 
                 if state == 'awaiting_balance':
-                    # Save initial balance as a transaction
+                    # Save initial balance
                     if amount > 0:
                         transaction = {
                             "id": 1,
@@ -986,8 +940,8 @@ Let's build your financial health together! 💪""",
                     # Save initial debt
                     if amount > 0:
                         transaction = {
-                            "id": 2 if amount > 0 else 1,  # Adjust ID based on previous transactions
-                            "amount": -amount,  # Negative for debt
+                            "id": len(self.get_user_transactions(chat_id)) + 1,
+                            "amount": -amount,
                             "category": "Initial Debt",
                             "description": "Starting debt balance",
                             "type": "debt",
@@ -1013,9 +967,9 @@ Let's build your financial health together! 💪""",
                     # Save initial savings
                     if amount > 0:
                         transaction = {
-                            "id": 3 if amount > 0 else 2,  # Adjust ID
+                            "id": len(self.get_user_transactions(chat_id)) + 1,
                             "amount": amount,
-                            "category": "Bank",  # Default savings category
+                            "category": "Bank",
                             "description": "Starting savings balance",
                             "type": "savings",
                             "date": datetime.now().astimezone().isoformat()
@@ -1776,10 +1730,10 @@ This will help me provide better financial recommendations!"""
         
         print(f"🔍 DEBUG: Received callback - data: '{data}', chat_id: {chat_id}")
         
-        # Answer the callback query first to remove loading state
+        # Answer the callback query first
         self.answer_callback(query["id"])
 
-        # ✅ ADD ONBOARDING HANDLERS HERE ✅
+        # ONBOARDING HANDLERS
         if data.startswith("onboard_lang_"):
             language = data[13:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
@@ -1793,25 +1747,38 @@ This will help me provide better financial recommendations!"""
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
             
-            # Send welcome image first
-            welcome_image_url = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/images/welcome.jpg"
+            # Send welcome image
+            welcome_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/welcome.jpg"
             
             user_lang = self.get_user_language(chat_id)
             if user_lang == 'uk':
                 image_caption = "👋 *Ласкаво просимо до Finn!*"
+                welcome_msg = """Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
+
+*Крок 1/4: Поточний баланс*
+
+Скільки готівки у вас є зараз? (в гривнях)
+
+💡 *Введіть суму:*
+`5000` - якщо у вас 5,000₴
+`0` - якщо готівки немає"""
             else:
                 image_caption = "👋 *Welcome to Finn!*"
+                welcome_msg = """Let's create your financial profile. This will just take a minute!
+
+*Step 1/4: Current Balance*
+
+How much cash do you have right now? (in UAH)
+
+💡 *Enter amount:*
+`5000` - if you have 5,000₴
+`0` - if no cash"""
             
             # Send the welcome image
             self.send_photo_from_url(chat_id, welcome_image_url, image_caption)
             
-            # Then send the onboarding message
-            if user_lang == 'uk':
-                welcome_msg = """Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!..."""
-            else:
-                welcome_msg = """Let's create your financial profile. This will just take a minute!..."""
-            
-            # Set onboarding state and continue with balance question
+            # Wait a moment then send the balance question
+            time.sleep(1)
             self.onboarding_state[chat_id] = 'awaiting_balance'
             self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
 
@@ -1823,23 +1790,23 @@ This will help me provide better financial recommendations!"""
             if user_lang == 'uk':
                 debt_msg = """✅ *Баланс збережено!*
 
-    *Крок 2/4: Борги*
+*Крок 2/4: Борги*
 
-    Чи є у вас борги? (кредити, позики тощо)
+Чи є у вас борги? (кредити, позики тощо)
 
-    💡 *Введіть загальну суму боргів:*
-    `10000` - якщо винен 10,000₴
-    `0` - якщо боргів немає"""
+💡 *Введіть загальну суму боргів:*
+`10000` - якщо винен 10,000₴
+`0` - якщо боргів немає"""
             else:
                 debt_msg = """✅ *Balance saved!*
 
-    *Step 2/4: Debts*
+*Step 2/4: Debts*
 
-    Do you have any debts? (loans, credits, etc.)
+Do you have any debts? (loans, credits, etc.)
 
-    💡 *Enter total debt amount:*
-    `10000` - if you owe 10,000₴
-    `0` - if no debts"""
+💡 *Enter total debt amount:*
+`10000` - if you owe 10,000₴
+`0` - if no debts"""
             
             self.onboarding_state[chat_id] = 'awaiting_debt'
             self.send_message(chat_id, debt_msg, parse_mode='Markdown')
@@ -1852,23 +1819,23 @@ This will help me provide better financial recommendations!"""
             if user_lang == 'uk':
                 savings_msg = """✅ *Борги збережено!*
 
-    *Крок 3/4: Заощадження*
+*Крок 3/4: Заощадження*
 
-    Чи є у вас заощадження? (банк, крипто, інвестиції)
+Чи є у вас заощадження? (банк, крипто, інвестиції)
 
-    💡 *Введіть загальну суму заощаджень:*
-    `15000` - якщо маєте 15,000₴
-    `0` - якщо заощаджень немає"""
+💡 *Введіть загальну суму заощаджень:*
+`15000` - якщо маєте 15,000₴
+`0` - якщо заощаджень немає"""
             else:
                 savings_msg = """✅ *Debts saved!*
 
-    *Step 3/4: Savings*
+*Step 3/4: Savings*
 
-    Do you have any savings? (bank, crypto, investments)
+Do you have any savings? (bank, crypto, investments)
 
-    💡 *Enter total savings amount:*
-    `15000` - if you have 15,000₴ saved
-    `0` - if no savings"""
+💡 *Enter total savings amount:*
+`15000` - if you have 15,000₴ saved
+`0` - if no savings"""
             
             self.onboarding_state[chat_id] = 'awaiting_savings'
             self.send_message(chat_id, savings_msg, parse_mode='Markdown')
@@ -1881,27 +1848,27 @@ This will help me provide better financial recommendations!"""
             if user_lang == 'uk':
                 complete_msg = """🎉 *Профіль створено!*
 
-    Тепер ви готові до роботи з Finn! 
+Тепер ви готові до роботи з Finn! 
 
-    🚀 *Швидкий старт:*
-    `150 обід` - Додати витрату
-    `+5000 зарплата` - Додати дохід
-    `++1000` - Додати заощадження
-    `-200 кредит` - Додати борг
+🚀 *Швидкий старт:*
+`150 обід` - Додати витрату
+`+5000 зарплата` - Додати дохід
+`++1000` - Додати заощадження
+`-200 кредит` - Додати борг
 
-    💡 Почніть відстежувати транзакції або використовуйте меню!"""
+💡 Почніть відстежувати транзакції або використовуйте меню!"""
             else:
                 complete_msg = """🎉 *Profile Created!*
 
-    You're now ready to use Finn!
+You're now ready to use Finn!
 
-    🚀 *Quick Start:*
-    `150 lunch` - Add expense
-    `+5000 salary` - Add income
-    `++1000` - Add savings  
-    `-200 loan` - Add debt
+🚀 *Quick Start:*
+`150 lunch` - Add expense
+`+5000 salary` - Add income
+`++1000` - Add savings  
+`-200 loan` - Add debt
 
-    💡 Start tracking transactions or use the menu!"""
+💡 Start tracking transactions or use the menu!"""
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
@@ -2907,9 +2874,7 @@ if __name__ == "__main__":
     # Set webhook when starting
     set_webhook()
     
-    # Start Flask app - Railway will handle the production server
+    # Start Flask app
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting webhook server on port {port}...")
-    
-    # Use Flask's built-in server (Railway handles production serving)
     flask_app.run(host='0.0.0.0', port=port, debug=False)
