@@ -1567,6 +1567,22 @@ This will help me provide better financial recommendations!"""
                     # Calculation error
                     self.send_message(chat_id, result[1])
                     return
+                
+            else:
+                self.send_message(chat_id, """🤔 Oops! Let me help you format that correctly:
+                                 
+🛒 10 - Expense (lunch, shopping, etc.)
+                                 
+💰 +100 - Income (salary, business, etc.) 
+                                  
+🏦 ++100 - Savings (put money aside)
+                                 
+💳 -100 - Debt (borrowed money)
+                                 
+🔙 +-100 - Returned debt (paying back)
+                                 
+📥 -+100 - Savings withdrawal (taking from savings)
+""")
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
@@ -1705,22 +1721,6 @@ This will help me provide better financial recommendations!"""
                 
                 # SEND THE MESSAGE
                 self.send_message(chat_id, message, keyboard)
-            
-            else:
-                self.send_message(chat_id, """🤔 Oops! Let me help you format that correctly:
-                                 
-🛒 10 - Expense (lunch, shopping, etc.)
-                                 
-💰 +100 - Income (salary, business, etc.) 
-                                  
-🏦 ++100 - Savings (put money aside)
-                                 
-💳 -100 - Debt (borrowed money)
-                                 
-🔙 +-100 - Returned debt (paying back)
-                                 
-📥 -+100 - Savings withdrawal (taking from savings)
-""")
 
     def process_callback(self, query):
         """Process callback from webhook"""
@@ -1752,9 +1752,9 @@ This will help me provide better financial recommendations!"""
             
             user_lang = self.get_user_language(chat_id)
             if user_lang == 'uk':
-                image_caption = "👋 *Ласкаво просимо до Finn!*"
-                welcome_msg = """Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
+                image_caption = """👋 *Ласкаво просимо до Finn!*"
 
+Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
 *Крок 1/4: Поточний баланс*
 
 Скільки готівки у вас є зараз? (в гривнях)
@@ -1764,8 +1764,8 @@ This will help me provide better financial recommendations!"""
 `0` - якщо готівки немає"""
             else:
                 image_caption = """👋 *Hi! I'm Finn!*
-                Let's create your financial profile. This will just take a minute!
 
+Let's create your financial profile. This will just take a minute!
 *Step 1/4: Current Balance*
 
 How much cash do you have right now? (in UAH)
