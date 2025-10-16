@@ -1793,38 +1793,27 @@ This will help me provide better financial recommendations!"""
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
             
-            # Send welcome message and ask for current balance
+            # Send welcome image first
+            welcome_image_url = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO_NAME/main/images/welcome.jpg"
+            
             user_lang = self.get_user_language(chat_id)
-            
             if user_lang == 'uk':
-                welcome_msg = """👋 *Ласкаво просимо до Finn!*
-
-    Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
-
-    *Крок 1/4: Поточний баланс*
-
-    Скільки готівки у вас є зараз? (в гривнях)
-
-    💡 *Введіть суму:*
-    `5000` - якщо у вас 5,000₴
-    `0` - якщо готівки немає"""
+                image_caption = "👋 *Ласкаво просимо до Finn!*"
             else:
-                welcome_msg = """👋 *Welcome to Finn!*
-
-    Let's create your financial profile. This will just take a minute!
-
-    *Step 1/4: Current Balance*
-
-    How much cash do you have right now? (in UAH)
-
-    💡 *Enter amount:*
-    `5000` - if you have 5,000₴
-    `0` - if no cash"""
+                image_caption = "👋 *Welcome to Finn!*"
             
-            # Set onboarding state
+            # Send the welcome image
+            self.send_photo_from_url(chat_id, welcome_image_url, image_caption)
+            
+            # Then send the onboarding message
+            if user_lang == 'uk':
+                welcome_msg = """Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!..."""
+            else:
+                welcome_msg = """Let's create your financial profile. This will just take a minute!..."""
+            
+            # Set onboarding state and continue with balance question
             self.onboarding_state[chat_id] = 'awaiting_balance'
             self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
-            return
 
         # Handle balance confirmation
         elif data == "confirm_balance":
