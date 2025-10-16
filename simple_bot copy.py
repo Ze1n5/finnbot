@@ -22,7 +22,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-
 # Initialize Flask app FIRST
 flask_app = Flask(__name__)
 
@@ -66,8 +65,9 @@ class SimpleFinnBot:
             }
         }
         
-        # User-specific data - THESE WILL NOW PERSIST
+        # User-specific data
         self.learned_patterns = {}
+        self.onboarding_state = {}
         self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
@@ -78,10 +78,10 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data FROM PERSISTENT STORAGE
+        # Load existing data
         self.load_all_data()
         
-        # Rest of your existing code...
+        # 50/30/20 tracking
         self.monthly_totals = {}
         self.monthly_percentages = {}
         self.current_month = datetime.now().strftime("%Y-%m")
@@ -102,50 +102,24 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
-        self.translations = {
-            # ... your existing translations ...
+
+    def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
+        """Send photo from a public URL"""
+        data = {
+            "chat_id": chat_id,
+            "photo": photo_url
         }
-        self.translations = {
-    'en': {
-        'welcome': """Hi! I'm *Finn* - your AI finance assistant 🤖💰
-
-Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
-
-🎯 *50/30/20 Breakdown:*
-• 🏠 *50% Needs* - Rent, food, utilities, transport
-• 🎉 *30% Wants* - Dining, entertainment, shopping  
-• 🏦 *20% Future* - Savings, debt repayment, investments
-
-🚀 *Quick Start:*
-`+5000 salary` - Add income
-`150 lunch` - Add expense  
-`++1000` - Add to savings
-`-200 loan` - Add debt
-
-Let's build your financial health together! 💪""",
-        # ... keep other English translations the same ...
-    },
-    'uk': {
-        'welcome': """Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
-
-Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
-
-🎯 *Розподіл 50/30/20:*
-• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
-• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
-• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
-
-🚀 *Швидкий старт:*
-`+5000 зарплата` - Додати дохід
-`150 обід` - Додати витрату
-`++1000` - Додати до заощаджень
-`-200 кредит` - Додати борг
-
-Давайте будувати ваше фінансове здоров'я разом! 💪""",
-        # ... keep other Ukrainian translations the same ...
-    }
-}
         
+        if caption:
+            data["caption"] = caption
+            data["parse_mode"] = "Markdown"
+        
+        if keyboard:
+            data["reply_markup"] = json.dumps(keyboard)
+        
+        response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
+        return response
+
     def categorize_transaction(self, category_name, description=""):
         """Categorize transaction into needs/wants/future"""
         category_lower = category_name.lower()
@@ -845,9 +819,7 @@ Let's build your financial health together! 💪""",
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
         print(f"📨 Processing message from {chat_id}: '{text}'")
-        print(f"🔍 DEBUG - pending_income: {chat_id in self.pending_income}")
-        print(f"🔍 DEBUG - delete_mode: {self.delete_mode.get(chat_id, False)}")
-        print(f"📨 Processing message from {chat_id}: {text}")
+
         
         # Handle delete mode first if active
         if self.delete_mode.get(chat_id):
@@ -907,20 +879,123 @@ Let's build your financial health together! 💪""",
             return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
-        if text == "/start":
+        elif text == "/start":
             user_name = msg["chat"].get("first_name", "there")
             
-            # Show language selection first
+            # Send welcome image first
+            welcome_image_url = "https://github.com/Ze1n5/finnbot/blob/3d177fe8ea8057ec09103540ff71154e1b21c8fc/Images/welcome.jpg"
+            welcome_caption = f"👋 Welcome {user_name}! I'm Finn - your AI finance assistant 🤖💰\n\nLet's set up your financial profile."
+            
+            # Send the photo
+            self.send_photo_from_url(chat_id, welcome_image_url, welcome_caption)
+            
+            # Then show language selection (after a short delay)
+            time.sleep(1)  # Optional: wait 1 second before showing language selection
+            
             keyboard = {
                 "inline_keyboard": [
-                    [{"text": "🇺🇸 English", "callback_data": "start_lang_en"}],
-                    [{"text": "🇺🇦 Українська", "callback_data": "start_lang_uk"}]
+                    [{"text": "🇺🇸 English", "callback_data": "onboard_lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "onboard_lang_uk"}]
                 ]
             }
             
-            welcome_text = f"👋 Welcome {user_name}! Let's set up your language first.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
+            language_text = "Please choose your language / Будь ласка, оберіть вашу мову:"
+            self.send_message(chat_id, language_text, keyboard)
+
+        if chat_id in self.onboarding_state:
+            state = self.onboarding_state[chat_id]
             
-            self.send_message(chat_id, welcome_text, keyboard)
+            try:
+                amount = float(text)
+                user_lang = self.get_user_language(chat_id)
+                
+                if state == 'awaiting_balance':
+                    # Save initial balance
+                    if amount > 0:
+                        transaction = {
+                            "id": 1,
+                            "amount": amount,
+                            "category": "Initial Balance",
+                            "description": "Starting cash balance",
+                            "type": "income",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"💵 Початковий баланс: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"💵 Starting balance: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_balance"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+                elif state == 'awaiting_debt':
+                    # Save initial debt
+                    if amount > 0:
+                        transaction = {
+                            "id": len(self.get_user_transactions(chat_id)) + 1,
+                            "amount": -amount,
+                            "category": "Initial Debt",
+                            "description": "Starting debt balance",
+                            "type": "debt",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"💳 Початковий борг: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"💳 Starting debt: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_debt"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+                elif state == 'awaiting_savings':
+                    # Save initial savings
+                    if amount > 0:
+                        transaction = {
+                            "id": len(self.get_user_transactions(chat_id)) + 1,
+                            "amount": amount,
+                            "category": "Bank",
+                            "description": "Starting savings balance",
+                            "type": "savings",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"🏦 Початкові заощадження: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"🏦 Starting savings: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_savings"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+            except ValueError:
+                user_lang = self.get_user_language(chat_id)
+                error_msg = "❌ Будь ласка, введіть число" if user_lang == 'uk' else "❌ Please enter a number"
+                self.send_message(chat_id, error_msg)
+            return
+
 
         elif text == "🌍 Language":
             # Show language selection keyboard
@@ -1492,6 +1567,53 @@ This will help me provide better financial recommendations!"""
                     # Calculation error
                     self.send_message(chat_id, result[1])
                     return
+                else:
+                    # ADD THIS: Show formatting help only for unrecognized transaction formats
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    if user_lang == 'uk':
+                        help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
+
+            🛒 10 - Витрата (обід, шопінг тощо)
+                                            
+            💰 +100 - Дохід (зарплата, бізнес тощо) 
+                                            
+            🏦 ++100 - Заощадження (відкласти гроші)
+                                            
+            💳 -100 - Борг (позичені гроші)
+                                            
+            🔙 +-100 - Повернення боргу (повернення)
+                                            
+            📥 -+100 - Зняття заощаджень (зняття з заощаджень)
+
+            💡 *Приклади:*
+            `150 обід` - Витрата на обід
+            `+5000 зарплата` - Дохід
+            `++1000` - Заощадження
+            `-200 кредит` - Борг"""
+                    else:
+                        help_text = """🤔 Oops! Let me help you format that correctly:
+                                            
+            🛒 10 - Expense (lunch, shopping, etc.)
+                                            
+            💰 +100 - Income (salary, business, etc.) 
+                                            
+            🏦 ++100 - Savings (put money aside)
+                                            
+            💳 -100 - Debt (borrowed money)
+                                            
+            🔙 +-100 - Returned debt (paying back)
+                                            
+            📥 -+100 - Savings withdrawal (taking from savings)
+
+            💡 *Examples:*
+            `150 lunch` - Expense for lunch
+            `+5000 salary` - Income  
+            `++1000` - Savings
+            `-200 loan` - Debt"""
+
+                    self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    return
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
@@ -1630,22 +1752,6 @@ This will help me provide better financial recommendations!"""
                 
                 # SEND THE MESSAGE
                 self.send_message(chat_id, message, keyboard)
-            
-            else:
-                self.send_message(chat_id, """🤔 Oops! Let me help you format that correctly:
-                                 
-🛒 10 - Expense (lunch, shopping, etc.)
-                                 
-💰 +100 - Income (salary, business, etc.) 
-                                  
-🏦 ++100 - Savings (put money aside)
-                                 
-💳 -100 - Debt (borrowed money)
-                                 
-🔙 +-100 - Returned debt (paying back)
-                                 
-📥 -+100 - Savings withdrawal (taking from savings)
-""")
 
     def process_callback(self, query):
         """Process callback from webhook"""
@@ -1655,62 +1761,151 @@ This will help me provide better financial recommendations!"""
         
         print(f"🔍 DEBUG: Received callback - data: '{data}', chat_id: {chat_id}")
         
-        # Answer the callback query first to remove loading state
+        # Answer the callback query first
         self.answer_callback(query["id"])
 
-            # NEW: Handle start language selection
-        # NEW: Handle start language selection
-        if data.startswith("start_lang_"):
-            language = data[11:]  # 'en' or 'uk'
+        # ONBOARDING HANDLERS
+        if data.startswith("onboard_lang_"):
+            language = data[13:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
             
-            if language == 'uk':
-                welcome_text = """
-Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
-Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
-
-🎯 *Розподіл 50/30/20:*
-• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
-• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
-• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
-
-🚀 *Швидкий старт:*
-`+5000 зарплата` - Додати дохід
-`150 обід` - Додати витрату
-`++1000` - Додати до заощаджень
-`-200 кредит` - Додати борг
-
-Давайте будувати ваше фінансове здоров'я разом! 💪"""
-            else:
-                welcome_text = """
-Hi! I'm *Finn* - your AI finance assistant 🤖💰
-Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
-
-🎯 *50/30/20 Breakdown:*
-• 🏠 *50% Needs* - Rent, food, utilities, transport
-• 🎉 *30% Wants* - Dining, entertainment, shopping  
-• 🏦 *20% Future* - Savings, debt repayment, investments
-
-🚀 *Quick Start:*
-`+5000 salary` - Add income
-`150 lunch` - Add expense  
-`++1000` - Add to savings
-`-200 loan` - Add debt
-
-Let's build your financial health together! 💪"""
-            
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-            
-            # Delete the language selection message
+            # Delete language selection message
             try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
                     "message_id": message_id
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
             
-            return
+            # Send welcome image
+            welcome_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/welcome.jpg"
+            
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                image_caption = """👋 *Ласкаво просимо до Finn!*"
+
+Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
+*Крок 1/4: Поточний баланс*
+
+Скільки готівки у вас є зараз? (в гривнях)
+
+💡 *Введіть суму:*
+`5000` - якщо у вас 5,000₴
+`0` - якщо готівки немає"""
+            else:
+                image_caption = """👋 *Hi! I'm Finn!*
+
+Let's create your financial profile. This will just take a minute!
+*Step 1/4: Current Balance*
+
+How much cash do you have right now? (in UAH)
+
+💡 *Enter amount:*
+`5000` - if you have 5,000₴
+`0` - if no cash"""
+            
+            # Send the welcome image
+            self.send_photo_from_url(chat_id, welcome_image_url, image_caption)
+            
+            # Wait a moment then send the balance question
+            time.sleep(1)
+            self.onboarding_state[chat_id] = 'awaiting_balance'
+            self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
+
+        # Handle balance confirmation
+        elif data == "confirm_balance":
+            # Move to debt question
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                debt_msg = """✅ *Баланс збережено!*
+
+*Крок 2/4: Борги*
+
+Чи є у вас борги? (кредити, позики тощо)
+
+💡 *Введіть загальну суму боргів:*
+`10000` - якщо винен 10,000₴
+`0` - якщо боргів немає"""
+            else:
+                debt_msg = """✅ *Balance saved!*
+
+*Step 2/4: Debts*
+
+Do you have any debts? (loans, credits, etc.)
+
+💡 *Enter total debt amount:*
+`10000` - if you owe 10,000₴
+`0` - if no debts"""
+            
+            self.onboarding_state[chat_id] = 'awaiting_debt'
+            self.send_message(chat_id, debt_msg, parse_mode='Markdown')
+
+        # Handle debt confirmation  
+        elif data == "confirm_debt":
+            # Move to savings question
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                savings_msg = """✅ *Борги збережено!*
+
+*Крок 3/4: Заощадження*
+
+Чи є у вас заощадження? (банк, крипто, інвестиції)
+
+💡 *Введіть загальну суму заощаджень:*
+`15000` - якщо маєте 15,000₴
+`0` - якщо заощаджень немає"""
+            else:
+                savings_msg = """✅ *Debts saved!*
+
+*Step 3/4: Savings*
+
+Do you have any savings? (bank, crypto, investments)
+
+💡 *Enter total savings amount:*
+`15000` - if you have 15,000₴ saved
+`0` - if no savings"""
+            
+            self.onboarding_state[chat_id] = 'awaiting_savings'
+            self.send_message(chat_id, savings_msg, parse_mode='Markdown')
+
+        # Handle savings confirmation
+        elif data == "confirm_savings":
+            # Complete onboarding
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                complete_msg = """🎉 *Профіль створено!*
+
+Тепер ви готові до роботи з Finn! 
+
+🚀 *Швидкий старт:*
+`150 обід` - Додати витрату
+`+5000 зарплата` - Додати дохід
+`++1000` - Додати заощадження
+`-200 кредит` - Додати борг
+
+💡 Почніть відстежувати транзакції або використовуйте меню!"""
+            else:
+                complete_msg = """🎉 *Profile Created!*
+
+You're now ready to use Finn!
+
+🚀 *Quick Start:*
+`150 lunch` - Add expense
+`+5000 salary` - Add income
+`++1000` - Add savings  
+`-200 loan` - Add debt
+
+💡 Start tracking transactions or use the menu!"""
+            
+            # Clear onboarding state
+            if chat_id in self.onboarding_state:
+                del self.onboarding_state[chat_id]
+            
+            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         
         if data.startswith("cat_"):
@@ -2291,41 +2486,33 @@ def serve_mini_app():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Budget Tracker</title>
+    <title>Balance Tracker</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         body {
-            background-color: #000000;
-            color: #ffffff;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
+            background-color: #f5f5f7;
+            padding: 20px;
+            color: #1d1d1f;
         }
         
         .container {
-            width: 100%;
             max-width: 400px;
-            background-color: #1c1c1e;
-            border-radius: 0;
-            box-shadow: none;
-            overflow: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            margin: 0 auto;
         }
         
-        .balance-section {
-            padding: 40px 20px 24px;
+        .balance-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             text-align: center;
-            border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
         }
         
         .balance-label {
@@ -2336,545 +2523,221 @@ def serve_mini_app():
         
         .balance-amount {
             font-size: 36px;
-            font-weight: 700;
-            color: #ffffff;
-        }
-        
-        .summary-section {
-            display: flex;
-            padding: 20px;
-            border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
-        }
-        
-        .summary-item {
-            flex: 1;
-            text-align: center;
-        }
-        
-        .summary-label {
-            font-size: 14px;
-            color: #8e8e93;
-            margin-bottom: 4px;
-        }
-        
-        .summary-amount {
-            font-size: 20px;
             font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        .income-expense {
+            display: flex;
+            justify-content: space-around;
+        }
+        
+        .income, .expense {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
         .income-amount {
-            color: #30d158;
-        }
-        
-        .spending-amount {
-            color: #ff453a;
-        }
-        
-        .savings-amount {
-            color: #0a84ff;
-        }
-        
-        .transactions-section {
-            padding: 20px;
-            background-color: #1c1c1e;
-            flex-grow: 1;
-            overflow-y: auto;
-        }
-        
-        .transactions-header {
+            color: #34c759;
             font-size: 18px;
             font-weight: 600;
-            margin-bottom: 16px;
-            color: #ffffff;
         }
         
-        .transaction-container {
-            position: relative;
+        .expense-amount {
+            color: #ff3b30;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .income-label, .expense-label {
+            font-size: 14px;
+            color: #8e8e93;
+            margin-top: 4px;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e5e5ea;
+            margin: 20px 0;
+        }
+        
+        .transactions {
+            background: white;
+            border-radius: 16px;
             overflow: hidden;
-            border-bottom: 1px solid #2c2c2e;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
         
-        .transaction-item {
+        .transaction {
+            padding: 16px 20px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            padding: 12px 0;
-            background-color: #1c1c1e;
-            position: relative;
-            transition: transform 0.3s ease;
-            width: 100%;
+            align-items: center;
+            border-bottom: 1px solid #f2f2f7;
         }
         
-        .transaction-item.swiping {
-            transition: none;
+        .transaction:last-child {
+            border-bottom: none;
         }
         
         .transaction-info {
-            display: flex;
-            align-items: flex-start;
             flex: 1;
         }
         
-        .transaction-emoji {
-            font-size: 20px;
-            margin-right: 12px;
-            width: 24px;
-            text-align: center;
-            margin-top: 2px;
-        }
-        
-        .transaction-details {
-            flex: 1;
-        }
-        
-        .transaction-name {
+        .transaction-title {
             font-size: 16px;
-            color: #ffffff;
+            font-weight: 500;
             margin-bottom: 4px;
         }
         
         .transaction-date {
-            font-size: 12px;
+            font-size: 14px;
             color: #8e8e93;
         }
         
         .transaction-amount {
             font-size: 16px;
-            font-weight: 400;
-            text-align: right;
-            min-width: 80px;
+            font-weight: 500;
         }
         
-        .delete-action {
-            position: absolute;
-            right: -80px;
-            top: 0;
-            bottom: 0;
-            width: 80px;
-            background-color: #ff453a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            transition: right 0.3s ease;
+        .amount-negative {
+            color: #ff3b30;
         }
         
-        .delete-action.visible {
-            right: 0;
-        }
-        
-        .delete-text {
-            font-size: 14px;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 20px;
-            color: #8e8e93;
-        }
-        
-        .no-transactions {
-            text-align: center;
-            padding: 40px 20px;
-            color: #8e8e93;
-        }
-        
-        .swipe-hint {
-            text-align: center;
-            padding: 10px 20px;
-            color: #8e8e93;
-            font-size: 12px;
-            border-bottom: 1px solid #2c2c2e;
-            background-color: #1c1c1e;
+        .amount-positive {
+            color: #34c759;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="balance-section">
+        <div class="balance-card">
             <div class="balance-label">Balance</div>
-            <div class="balance-amount" id="balance-amount">0</div>
-        </div>
-        
-        <div class="summary-section">
-            <div class="summary-item">
-                <div class="summary-label">Income</div>
-                <div class="summary-amount income-amount" id="income-amount">0</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Spending</div>
-                <div class="summary-amount spending-amount" id="spending-amount">0</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Savings</div>
-                <div class="summary-amount savings-amount" id="savings-amount">0</div>
+            <div class="balance-amount">₹10,000</div>
+            <div class="income-expense">
+                <div class="expense">
+                    <div class="expense-amount">-1,200</div>
+                    <div class="expense-label">Spending</div>
+                </div>
+                <div class="income">
+                    <div class="income-amount">+3,000</div>
+                    <div class="income-label">Income</div>
+                </div>
             </div>
         </div>
         
-        <div class="swipe-hint">
-            💡 Swipe left on any transaction to delete
-        </div>
-        
-        <div class="transactions-section" id="transactions-section">
-            <div class="transactions-header">Transactions</div>
-            <div id="transactions-list">
-                <div class="loading">Loading transactions...</div>
+        <div class="transactions">
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Food</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
+                </div>
+                <div class="transaction-amount amount-negative">-1,000</div>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Salary</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
+                </div>
+                <div class="transaction-amount amount-positive">+1,000</div>
             </div>
         </div>
     </div>
 
     <script>
-        let currentPage = 1;
-        let isLoading = false;
-        let hasMoreTransactions = true;
-        const transactionsPerPage = 10;
-        let touchStartX = 0;
-        let currentSwipeElement = null;
-        let swipeThreshold = 50;
-
-        // Fetch real data from your API
-        async function loadFinancialData() {
-            try {
-                const response = await fetch('/api/financial-data');
-                if (!response.ok) {
-                    throw new Error('API response not ok');
-                }
-                const data = await response.json();
-                
-                console.log('📊 API Response:', data);
-                
-                // Update the UI with real data
-                document.getElementById('balance-amount').textContent = formatCurrency(data.balance || 0);
-                document.getElementById('income-amount').textContent = formatCurrency(data.income || 0);
-                document.getElementById('spending-amount').textContent = formatCurrency(data.spending || 0);
-                document.getElementById('savings-amount').textContent = formatCurrency(data.savings || 0);
-                
-            } catch (error) {
-                console.error('Error loading financial data:', error);
-                document.getElementById('balance-amount').textContent = '0';
-                document.getElementById('income-amount').textContent = '0';
-                document.getElementById('spending-amount').textContent = '0';
-                document.getElementById('savings-amount').textContent = '0';
+        // Sample transaction data - in a real app, this would come from a database
+        const transactions = [
+            {
+                id: 1,
+                title: "Food",
+                amount: -1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "expense"
+            },
+            {
+                id: 2,
+                title: "Salary",
+                amount: 1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "income"
             }
-        }
-
-        // Load transactions with pagination
-        async function loadTransactions(page = 1) {
-            if (isLoading) return;
+        ];
+        
+        // Calculate balance, income, and spending
+        function calculateFinances() {
+            let balance = 10000; // Starting balance
+            let income = 0;
+            let spending = 0;
             
-            isLoading = true;
-            
-            try {
-                const response = await fetch(`/api/transactions?page=${page}&limit=${transactionsPerPage}`);
-                if (!response.ok) {
-                    throw new Error('API response not ok');
-                }
-                const data = await response.json();
-                
-                const transactionsList = document.getElementById('transactions-list');
-                
-                // Remove loading message on first load
-                if (page === 1) {
-                    transactionsList.innerHTML = '';
-                }
-                
-                if (data.transactions && data.transactions.length > 0) {
-                    data.transactions.forEach(transaction => {
-                        const transactionElement = createTransactionElement(transaction);
-                        transactionsList.appendChild(transactionElement);
-                    });
-                    
-                    // Check if there are more transactions
-                    hasMoreTransactions = data.has_more || false;
-                    
-                    // Remove loading indicator if it exists
-                    const existingLoader = document.getElementById('loading-indicator');
-                    if (existingLoader) {
-                        existingLoader.remove();
-                    }
-                    
-                    // Add loading indicator if there are more transactions
-                    if (hasMoreTransactions) {
-                        const loadingIndicator = document.createElement('div');
-                        loadingIndicator.className = 'loading';
-                        loadingIndicator.id = 'loading-indicator';
-                        loadingIndicator.textContent = 'Loading more transactions...';
-                        transactionsList.appendChild(loadingIndicator);
-                    }
-                } else if (page === 1) {
-                    // No transactions at all
-                    transactionsList.innerHTML = `
-                        <div class="no-transactions">
-                            <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
-                            <div>No transactions yet</div>
-                            <div style="font-size: 12px; margin-top: 8px;">Start adding transactions in the bot</div>
-                        </div>
-                    `;
-                }
-                
-                currentPage = page;
-                
-            } catch (error) {
-                console.error('Error loading transactions:', error);
-                if (page === 1) {
-                    document.getElementById('transactions-list').innerHTML = 
-                        '<div class="loading">Failed to load transactions</div>';
-                }
-            } finally {
-                isLoading = false;
-            }
-        }
-
-        // Create transaction element with swipe functionality
-        function createTransactionElement(transaction) {
-            const container = document.createElement('div');
-            container.className = 'transaction-container';
-            
-            const transactionElement = document.createElement('div');
-            transactionElement.className = 'transaction-item';
-            
-            // Delete action panel
-            const deleteAction = document.createElement('div');
-            deleteAction.className = 'delete-action';
-            deleteAction.innerHTML = '<div class="delete-text">DELETE</div>';
-            
-            // Determine transaction type and amount display
-            const isIncome = transaction.type === 'income';
-            const isSavings = transaction.type === 'savings';
-            const isDebt = transaction.type === 'debt';
-            const isDebtReturn = transaction.type === 'debt_return';
-            const isSavingsWithdraw = transaction.type === 'savings_withdraw';
-            
-            const amountClass = isIncome ? 'income-amount' : 'spending-amount';
-            
-            // FIXED: Expenses, debt returns, and savings withdrawals should show negative
-            let amountDisplay;
-            if (isIncome || isDebt) {
-                amountDisplay = `+${formatCurrency(transaction.amount)}`;
-            } else {
-                amountDisplay = `-${formatCurrency(transaction.amount)}`;
-            }
-            
-            // Format date
-            const transactionDate = new Date(transaction.timestamp || transaction.date);
-            const formattedDate = formatDate(transactionDate);
-            
-            transactionElement.innerHTML = `
-                <div class="transaction-info">
-                    <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">${transaction.display_name || transaction.name || 'Transaction'}</div>
-                        <div class="transaction-date">${formattedDate}</div>
-                    </div>
-                </div>
-                <div class="transaction-amount ${amountClass}">
-                    ${amountDisplay}₴
-                </div>
-            `;
-            
-            container.appendChild(transactionElement);
-            container.appendChild(deleteAction);
-            
-            // Add swipe functionality
-            addSwipeListeners(container, transactionElement, deleteAction, transaction);
-            
-            return container;
-        }
-
-        // Add swipe functionality to transaction
-        function addSwipeListeners(container, transactionElement, deleteAction, transaction) {
-            let startX = 0;
-            let currentX = 0;
-            let isSwiping = false;
-            
-            transactionElement.addEventListener('touchstart', (e) => {
-                startX = e.touches[0].clientX;
-                currentX = startX;
-                isSwiping = true;
-                transactionElement.classList.add('swiping');
-                
-                // Reset other swiped elements
-                resetOtherSwipes(container);
-            });
-            
-            transactionElement.addEventListener('touchmove', (e) => {
-                if (!isSwiping) return;
-                
-                currentX = e.touches[0].clientX;
-                const diff = startX - currentX;
-                
-                // Only allow left swipe (positive diff)
-                if (diff > 0) {
-                    transactionElement.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
-                    
-                    // Show delete action when threshold is reached
-                    if (diff > swipeThreshold) {
-                        deleteAction.classList.add('visible');
-                    } else {
-                        deleteAction.classList.remove('visible');
-                    }
-                }
-            });
-            
-            transactionElement.addEventListener('touchend', () => {
-                if (!isSwiping) return;
-                
-                const diff = startX - currentX;
-                isSwiping = false;
-                transactionElement.classList.remove('swiping');
-                
-                // If swiped beyond threshold, keep it open, otherwise reset
-                if (diff > swipeThreshold) {
-                    transactionElement.style.transform = 'translateX(-80px)';
-                    deleteAction.classList.add('visible');
-                    
-                    // Add click listener to delete action
-                    const deleteHandler = () => {
-                        deleteTransaction(transaction, container);
-                        deleteAction.removeEventListener('click', deleteHandler);
-                    };
-                    deleteAction.addEventListener('click', deleteHandler);
+            transactions.forEach(transaction => {
+                if (transaction.amount > 0) {
+                    income += transaction.amount;
                 } else {
-                    resetSwipe(transactionElement, deleteAction);
+                    spending += Math.abs(transaction.amount);
                 }
             });
             
-            // Reset on click/tap
-            transactionElement.addEventListener('click', () => {
-                resetSwipe(transactionElement, deleteAction);
-            });
+            // Update UI
+            document.querySelector('.balance-amount').textContent = `₹${balance.toLocaleString()}`;
+            document.querySelector('.income-amount').textContent = `+${income.toLocaleString()}`;
+            document.querySelector('.expense-amount').textContent = `-${spending.toLocaleString()}`;
         }
-
-        // Reset swipe position
-        function resetSwipe(transactionElement, deleteAction) {
-            transactionElement.style.transform = 'translateX(0)';
-            deleteAction.classList.remove('visible');
-        }
-
-        // Reset other swiped elements
-        function resetOtherSwipes(currentContainer) {
-            const allContainers = document.querySelectorAll('.transaction-container');
-            allContainers.forEach(container => {
-                if (container !== currentContainer) {
-                    const transactionEl = container.querySelector('.transaction-item');
-                    const deleteEl = container.querySelector('.delete-action');
-                    resetSwipe(transactionEl, deleteEl);
-                }
-            });
-        }
-
-        // Delete transaction
-        async function deleteTransaction(transaction, container) {
-            if (!confirm('Are you sure you want to delete this transaction?')) {
-                resetSwipe(container.querySelector('.transaction-item'), container.querySelector('.delete-action'));
-                return;
-            }
-            
-            try {
-                // Show loading state
-                container.style.opacity = '0.5';
-                
-                // Here you would call your backend API to delete the transaction
-                // For now, we'll just remove it from the frontend and reload data
-                console.log('Deleting transaction:', transaction);
-                
-                // Remove from UI immediately
-                container.style.transition = 'opacity 0.3s ease';
-                container.style.opacity = '0';
-                setTimeout(() => {
-                    container.remove();
-                }, 300);
-                
-                // Reload financial data to update balances
-                await loadFinancialData();
-                
-                // Show success message
-                showNotification('Transaction deleted successfully');
-                
-            } catch (error) {
-                console.error('Error deleting transaction:', error);
-                showNotification('Error deleting transaction', true);
-                container.style.opacity = '1';
-            }
-        }
-
-        // Show notification
-        function showNotification(message, isError = false) {
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background-color: ${isError ? '#ff453a' : '#30d158'};
-                color: white;
-                padding: 12px 20px;
-                border-radius: 8px;
-                font-weight: 600;
-                z-index: 1000;
-                animation: slideDown 0.3s ease;
-            `;
-            
-            notification.textContent = message;
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.remove();
-            }, 3000);
-        }
-
-        // Format date as "Oct 11, 2:50 PM"
-        // Format date using browser's local timezone
-        function formatDate(dateString) {
-            if (!dateString) return 'Recent';
-            
-            const date = new Date(dateString);
-            
-            if (isNaN(date.getTime())) {
-                return 'Recent';
-            }
-            
-            // Use browser's local timezone
+        
+        // Format date for display
+        function formatDate(date) {
             const options = { 
                 month: 'short', 
-                day: 'numeric',
+                day: 'numeric', 
+                year: 'numeric',
                 hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
+                minute: 'numeric'
             };
-    
-    return date.toLocaleDateString('en-US', options);
-}
-
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-US').format(amount);
+            return date.toLocaleDateString('en-US', options);
         }
-
-        // Infinite scroll handler
-        function handleScroll() {
-            const transactionsSection = document.getElementById('transactions-section');
-            const scrollTop = transactionsSection.scrollTop;
-            const scrollHeight = transactionsSection.scrollHeight;
-            const clientHeight = transactionsSection.clientHeight;
+        
+        // Render transactions
+        function renderTransactions() {
+            const transactionsContainer = document.querySelector('.transactions');
             
-            // Load more when 100px from bottom
-            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreTransactions && !isLoading) {
-                loadTransactions(currentPage + 1);
+            // Clear existing transactions (except the first one which is our template)
+            while (transactionsContainer.children.length > 2) {
+                transactionsContainer.removeChild(transactionsContainer.lastChild);
             }
-        }
-
-        // Initialize everything when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            // Load financial data and first page of transactions
-            loadFinancialData();
-            loadTransactions(1);
             
-            // Add scroll event listener for infinite scroll
-            const transactionsSection = document.getElementById('transactions-section');
-            transactionsSection.addEventListener('scroll', handleScroll);
-        });
+            // Add transactions
+            transactions.forEach(transaction => {
+                const transactionEl = document.createElement('div');
+                transactionEl.className = 'transaction';
+                
+                transactionEl.innerHTML = `
+                    <div class="transaction-info">
+                        <div class="transaction-title">${transaction.title}</div>
+                        <div class="transaction-date">${formatDate(transaction.date)}</div>
+                    </div>
+                    <div class="transaction-amount ${transaction.amount > 0 ? 'amount-positive' : 'amount-negative'}">
+                        ${transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                    </div>
+                `;
+                
+                // Insert before the divider (which is the second child)
+                transactionsContainer.insertBefore(transactionEl, transactionsContainer.children[1]);
+                
+                // Add divider if it's not the last transaction
+                if (transactions.indexOf(transaction) < transactions.length - 1) {
+                    const divider = document.createElement('div');
+                    divider.className = 'divider';
+                    transactionsContainer.insertBefore(divider, transactionsContainer.children[2]);
+                }
+            });
+        }
+        
+        // Initialize the app
+        calculateFinances();
+        renderTransactions();
     </script>
 </body>
 </html>
@@ -3042,9 +2905,7 @@ if __name__ == "__main__":
     # Set webhook when starting
     set_webhook()
     
-    # Start Flask app - Railway will handle the production server
+    # Start Flask app
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting webhook server on port {port}...")
-    
-    # Use Flask's built-in server (Railway handles production serving)
     flask_app.run(host='0.0.0.0', port=port, debug=False)
