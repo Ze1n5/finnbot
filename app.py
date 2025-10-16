@@ -24,6 +24,9 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 # ========== BOT INSTANCE INITIALIZATION ==========
 bot_instance = SimpleFinnBot()
+print("🔄 Reloading bot data for consistency...")
+bot_instance.load_all_data()
+print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
 
 # Force use of /data directory on Railway
 def setup_persistent_storage():

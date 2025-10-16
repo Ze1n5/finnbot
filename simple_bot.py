@@ -9,34 +9,29 @@ import threading
 import atexit
 import signal
 
-# Use consistent persistent directory with app.py
-PERSISTENT_DIR = "/data" if os.environ.get('RAILWAY_ENVIRONMENT') else "."
-
-def get_persistent_dir():
-    """Get the correct persistent directory for the environment"""
-    # Check if we're on Railway with /data mounted
+# ========== CONSISTENT PERSISTENT STORAGE ==========
+# Use the same logic as app.py
+def setup_persistent_storage():
+    """Setup persistent storage - force /data on Railway"""
+    # Always use /data on Railway
     if os.environ.get('RAILWAY_ENVIRONMENT'):
-        if os.path.exists("/data"):
-            print("✅ Using Railway persistent storage: /data")
-            return "/data"
-        else:
-            print("⚠️ Railway environment but /data not found, using current directory")
-            return "."
+        storage_dir = "/data"
+        print("🎯 FORCING Railway persistent storage: /data")
     else:
-        # Local development
-        print("⚠️  Using local directory for storage (data may not persist)")
-        return "."
+        storage_dir = "."
+        print("⚠️  Using local directory for storage")
+    
+    # Create directory if it doesn't exist
+    os.makedirs(storage_dir, exist_ok=True)
+    return storage_dir
 
-PERSISTENT_DIR = get_persistent_dir()
+PERSISTENT_DIR = setup_persistent_storage()
 
 def get_persistent_path(filename):
     """Get path in persistent storage directory"""
-    path = os.path.join(PERSISTENT_DIR, filename)
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    return path
+    return os.path.join(PERSISTENT_DIR, filename)
 
-print(f"📁 Using persistent directory: {PERSISTENT_DIR}")
+print(f"📁 Persistent directory: {PERSISTENT_DIR}")
 
 load_dotenv()
 
@@ -127,8 +122,8 @@ class SimpleFinnBot:
         # Try to migrate any local data to persistent storage
         self.migrate_local_data()
     
-        # Verify data loading
-        self.verify_data_loading()
+        # Load data from persistent storage
+        self.load_all_data()
         
         # 50/30/20 tracking
         self.monthly_totals = {}
@@ -161,9 +156,16 @@ class SimpleFinnBot:
         for file in data_files:
             filepath = get_persistent_path(file)
             if os.path.exists(filepath):
-                print(f"✅ {file} exists")
+                print(f"✅ {file} exists at {filepath}")
+                # Check file content
+                try:
+                    with open(filepath, 'r') as f:
+                        content = f.read()
+                        print(f"   Content length: {len(content)} characters")
+                except Exception as e:
+                    print(f"   Error reading file: {e}")
             else:
-                print(f"📭 {file} does not exist yet")
+                print(f"📭 {file} does not exist yet at {filepath}")
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
@@ -209,11 +211,14 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
         self.load_user_languages()
+        self.verify_data_loading()
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
         try:
             filepath = get_persistent_path("transactions.json")
+            print(f"📂 Loading transactions from: {filepath}")
+            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     data = json.load(f)
@@ -232,17 +237,30 @@ class SimpleFinnBot:
                         print(f"⚠️ Skipping invalid user ID: {key}")
                 
                 print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
+                
+                # Debug: Show what was loaded
+                total_transactions = sum(len(txns) for txns in self.transactions.values())
+                print(f"📊 Total transactions loaded: {total_transactions}")
+                for user_id, txns in self.transactions.items():
+                    print(f"   👤 User {user_id}: {len(txns)} transactions")
+                    for txn in txns[:3]:  # Show first 3 transactions
+                        print(f"      💰 {txn.get('type', 'unknown')}: {txn.get('amount', 0)} - {txn.get('description', 'no desc')}")
+                    
             else:
                 print("📂 No existing transactions file, starting fresh")
                 self.transactions = {}
         except Exception as e:
             print(f"❌ Error loading transactions: {e}")
+            import traceback
+            traceback.print_exc()
             self.transactions = {}
 
     def load_incomes(self):
         """Load user incomes from persistent JSON file"""
         try:
             filepath = get_persistent_path("incomes.json")
+            print(f"💰 Loading incomes from: {filepath}")
+            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_incomes = json.load(f)
@@ -258,6 +276,8 @@ class SimpleFinnBot:
         """Load user categories from persistent JSON file"""
         try:
             filepath = get_persistent_path("user_categories.json")
+            print(f"🏷️ Loading categories from: {filepath}")
+            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_categories = json.load(f)
@@ -273,6 +293,8 @@ class SimpleFinnBot:
         """Load user language preferences from persistent JSON file"""
         try:
             filepath = get_persistent_path("user_languages.json")
+            print(f"🌍 Loading languages from: {filepath}")
+            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_languages = json.load(f)
@@ -283,6 +305,8 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading user languages: {e}")
             self.user_languages = {}
+
+    # ... rest of your SimpleFinnBot class remains the same ...
     
     def check_daily_reminders(self):
         """Check and send daily reminders to active users"""
