@@ -12,8 +12,31 @@ import signal
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
+def get_persistent_dir():
+    """Get the correct persistent directory for the environment"""
+    # Check if we're on Railway with /data mounted
+    if os.path.exists("/data"):
+        print("✅ Using Railway persistent storage: /data")
+        return "/data"
+    # Check for other environments
+    elif os.path.exists("/persistent"):
+        print("✅ Using alternative persistent storage: /persistent")
+        return "/persistent"
+    else:
+        # Local development - use current directory but warn
+        print("⚠️  Using local directory for storage (data may not persist)")
+        return "."
+
+PERSISTENT_DIR = get_persistent_dir()
+
 def get_persistent_path(filename):
-    return os.path.join(PERSISTENT_DIR, filename)
+    """Get path in persistent storage directory"""
+    path = os.path.join(PERSISTENT_DIR, filename)
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+print(f"📁 Final persistent directory: {PERSISTENT_DIR}")
 
 print(f"📁 Using persistent directory: {PERSISTENT_DIR}")
 
@@ -44,6 +67,38 @@ def sync_to_railway(transaction_data):
         print(f"⚠️ Railway sync failed: {e}")
 
 class SimpleFinnBot:
+    def migrate_local_data(self):
+        """Migrate data from local files to persistent storage if needed"""
+        try:
+            print("🔄 Checking for local data migration...")
+            
+            local_files = ["transactions.json", "incomes.json", "user_categories.json", "user_languages.json"]
+            migrated_count = 0
+            
+            for file in local_files:
+                local_path = file  # Current directory
+                persistent_path = get_persistent_path(file)
+                
+                # If local file exists but persistent doesn't, copy it
+                if os.path.exists(local_path) and not os.path.exists(persistent_path):
+                    print(f"📦 Migrating {file} to persistent storage...")
+                    with open(local_path, 'r') as src:
+                        data = src.read()
+                    with open(persistent_path, 'w') as dst:
+                        dst.write(data)
+                    migrated_count += 1
+                    print(f"✅ Migrated {file}")
+            
+            if migrated_count > 0:
+                print(f"🎉 Successfully migrated {migrated_count} files to persistent storage")
+                # Reload data from persistent storage
+                self.load_all_data()
+            else:
+                print("📝 No migration needed - data already in persistent storage")
+                
+        except Exception as e:
+            print(f"❌ Error during data migration: {e}")
+
     def __init__(self):
         # Income categories (shared for all users)
         self.income_categories = {
@@ -3042,6 +3097,50 @@ def add_transaction():
     except Exception as e:
         print(f"❌ Error adding transaction: {e}")
         return jsonify({'error': str(e)}), 500
+    
+@flask_app.route('/api/debug-storage')
+def debug_storage():
+    """Check if data files exist in persistent storage"""
+    import os
+    
+    try:
+        # Check persistent directory
+        persistent_dir = "/data"
+        exists = os.path.exists(persistent_dir)
+        files = []
+        
+        if exists:
+            files = os.listdir(persistent_dir)
+        
+        # Check each data file
+        data_files = {
+            "transactions.json": os.path.exists(get_persistent_path("transactions.json")),
+            "incomes.json": os.path.exists(get_persistent_path("incomes.json")),
+            "user_categories.json": os.path.exists(get_persistent_path("user_categories.json")),
+            "user_languages.json": os.path.exists(get_persistent_path("user_languages.json"))
+        }
+        
+        # Get file sizes
+        file_sizes = {}
+        for file in data_files.keys():
+            path = get_persistent_path(file)
+            if os.path.exists(path):
+                file_sizes[file] = os.path.getsize(path)
+            else:
+                file_sizes[file] = 0
+        
+        return jsonify({
+            "persistent_directory": persistent_dir,
+            "directory_exists": exists,
+            "files_in_directory": files,
+            "data_files_exist": data_files,
+            "file_sizes": file_sizes,
+            "current_working_dir": os.getcwd(),
+            "all_files_in_cwd": os.listdir('.')
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     
 @flask_app.route('/api/delete-transaction', methods=['POST'])
 def delete_transaction():
