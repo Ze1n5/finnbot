@@ -137,8 +137,6 @@ class SimpleFinnBot:
     
         # Verify data loading
         self.verify_data_loading()
-        # Load existing data
-        self.load_all_data()
         
         # 50/30/20 tracking
         self.monthly_totals = {}
@@ -161,6 +159,19 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
+
+    def verify_data_loading(self):
+        """Verify that data is being loaded from persistent storage"""
+        print("🔍 Verifying data loading...")
+        
+        # Check each data file
+        data_files = ["transactions.json", "incomes.json", "user_categories.json", "user_languages.json"]
+        for file in data_files:
+            filepath = get_persistent_path(file)
+            if os.path.exists(filepath):
+                print(f"✅ {file} exists")
+            else:
+                print(f"📭 {file} does not exist yet")
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
@@ -2274,6 +2285,17 @@ def debug_storage_detailed():
         debug_info[file] = file_info
     
     return jsonify(debug_info)
+
+@flask_app.route('/api/simple-debug')
+def simple_debug():
+    """Simple debug endpoint"""
+    return jsonify({
+        "bot_exists": bool(bot_instance),
+        "users_with_transactions": len(bot_instance.transactions) if bot_instance else 0,
+        "all_users": list(bot_instance.transactions.keys()) if bot_instance else [],
+        "storage_dir": PERSISTENT_DIR,
+        "storage_dir_exists": os.path.exists(PERSISTENT_DIR)
+    })
 
 @flask_app.route('/api/restore-data', methods=['POST'])
 def restore_data():
