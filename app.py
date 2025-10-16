@@ -24,6 +24,29 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 # ========== BOT INSTANCE INITIALIZATION ==========
 bot_instance = SimpleFinnBot()
 
+# Force use of /data directory on Railway
+def setup_persistent_storage():
+    """Setup persistent storage - force /data on Railway"""
+    # Always use /data on Railway
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        storage_dir = "/data"
+        print("🎯 FORCING Railway persistent storage: /data")
+    else:
+        storage_dir = "."
+        print("⚠️  Using local directory for storage")
+    
+    # Create directory if it doesn't exist
+    os.makedirs(storage_dir, exist_ok=True)
+    return storage_dir
+
+PERSISTENT_DIR = setup_persistent_storage()
+
+def get_persistent_path(filename):
+    """Get path in persistent storage directory"""
+    return os.path.join(PERSISTENT_DIR, filename)
+
+print(f"📁 Persistent directory: {PERSISTENT_DIR}")
+
 # ========== SHUTDOWN HANDLER ==========
 def save_all_data():
     """Save all data before shutdown"""
@@ -41,6 +64,22 @@ def save_all_data():
 atexit.register(save_all_data)
 signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
 signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
+
+app.route('/')
+def home():
+    return jsonify({
+        "status": "OK", 
+        "message": "FinnBot is running!",
+        "endpoints": {
+            "mini_app": "/mini-app",
+            "financial_data": "/api/financial-data",
+            "health": "/health"
+        }
+    })
+
+app.route('/health')
+def health():
+    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 # ========== WEB ENDPOINTS ==========
 @app.route('/health')
