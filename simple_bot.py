@@ -132,7 +132,11 @@ class SimpleFinnBot:
         self.user_languages = {}
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
-        
+         # Try to migrate any local data to persistent storage
+        self.migrate_local_data()
+    
+        # Verify data loading
+        self.verify_data_loading()
         # Load existing data
         self.load_all_data()
         
@@ -2198,6 +2202,105 @@ You're now ready to use Finn!
 
 # Initialize bot instance
 bot_instance = SimpleFinnBot()
+
+@flask_app.route('/api/backup-data', methods=['GET'])
+def backup_data():
+    """Create a backup of current data"""
+    try:
+        backup = {
+            "transactions": bot_instance.transactions,
+            "incomes": bot_instance.user_incomes,
+            "user_categories": bot_instance.user_categories,
+            "user_languages": bot_instance.user_languages,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return jsonify({
+            "status": "success",
+            "backup": backup,
+            "message": f"Backup created with {len(bot_instance.transactions)} users' transactions"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/api/debug-storage-detailed')
+def debug_storage_detailed():
+    """Detailed storage debugging"""
+    import os
+    import json
+    
+    debug_info = {
+        "environment": {
+            "RAILWAY_ENVIRONMENT": os.environ.get('RAILWAY_ENVIRONMENT'),
+            "RAILWAY_PROJECT_ID": os.environ.get('RAILWAY_PROJECT_ID'),
+            "RAILWAY_SERVICE_ID": os.environ.get('RAILWAY_SERVICE_ID'),
+        },
+        "directories": {
+            "current_working_dir": os.getcwd(),
+            "persistent_dir": PERSISTENT_DIR,
+            "persistent_dir_exists": os.path.exists(PERSISTENT_DIR),
+        },
+        "files": {}
+    }
+    
+    # Check all possible data locations
+    locations_to_check = [
+        PERSISTENT_DIR,
+        os.getcwd(),
+        "/data",
+        "/app/data",
+        "."
+    ]
+    
+    for location in locations_to_check:
+        if os.path.exists(location):
+            files = []
+            try:
+                files = os.listdir(location)
+            except:
+                files = ["cannot_list"]
+            debug_info["files"][location] = files
+    
+    # Check data files specifically
+    data_files = ["transactions.json", "incomes.json", "user_categories.json", "user_languages.json"]
+    for file in data_files:
+        file_info = {}
+        for location in locations_to_check:
+            file_path = os.path.join(location, file)
+            file_info[location] = {
+                "exists": os.path.exists(file_path),
+                "size": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            }
+        debug_info[file] = file_info
+    
+    return jsonify(debug_info)
+
+@flask_app.route('/api/restore-data', methods=['POST'])
+def restore_data():
+    """Restore data from backup (for emergency use)"""
+    try:
+        data = request.json
+        if not data or 'transactions' not in data:
+            return jsonify({"error": "Invalid backup data"}), 400
+        
+        # Restore data
+        bot_instance.transactions = data.get('transactions', {})
+        bot_instance.user_incomes = data.get('incomes', {})
+        bot_instance.user_categories = data.get('user_categories', {})
+        bot_instance.user_languages = data.get('user_languages', {})
+        
+        # Save to persistent storage
+        bot_instance.save_transactions()
+        bot_instance.save_incomes()
+        bot_instance.save_user_categories()
+        bot_instance.save_user_languages()
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Data restored: {len(bot_instance.transactions)} users, {sum(len(t) for t in bot_instance.transactions.values())} transactions"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Webhook route
 @flask_app.route('/webhook', methods=['POST', 'GET'])
