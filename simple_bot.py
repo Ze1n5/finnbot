@@ -923,6 +923,101 @@ Let's build your financial health together! 💪""",
             
             self.send_message(chat_id, welcome_text, keyboard)
 
+        if chat_id in self.onboarding_state:
+            state = self.onboarding_state[chat_id]
+            
+            try:
+                amount = float(text)
+                user_lang = self.get_user_language(chat_id)
+                
+                if state == 'awaiting_balance':
+                    # Save initial balance as a transaction
+                    if amount > 0:
+                        transaction = {
+                            "id": 1,
+                            "amount": amount,
+                            "category": "Initial Balance",
+                            "description": "Starting cash balance",
+                            "type": "income",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"💵 Початковий баланс: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"💵 Starting balance: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_balance"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+                elif state == 'awaiting_debt':
+                    # Save initial debt
+                    if amount > 0:
+                        transaction = {
+                            "id": 2 if amount > 0 else 1,  # Adjust ID based on previous transactions
+                            "amount": -amount,  # Negative for debt
+                            "category": "Initial Debt",
+                            "description": "Starting debt balance",
+                            "type": "debt",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"💳 Початковий борг: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"💳 Starting debt: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_debt"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+                elif state == 'awaiting_savings':
+                    # Save initial savings
+                    if amount > 0:
+                        transaction = {
+                            "id": 3 if amount > 0 else 2,  # Adjust ID
+                            "amount": amount,
+                            "category": "Bank",  # Default savings category
+                            "description": "Starting savings balance",
+                            "type": "savings",
+                            "date": datetime.now().astimezone().isoformat()
+                        }
+                        self.save_user_transaction(chat_id, transaction)
+                    
+                    # Ask for confirmation
+                    if user_lang == 'uk':
+                        confirm_msg = f"🏦 Початкові заощадження: {amount:,.0f}₴\n\nЦе правильно?"
+                    else:
+                        confirm_msg = f"🏦 Starting savings: {amount:,.0f}₴\n\nIs this correct?"
+                        
+                    keyboard = {
+                        "inline_keyboard": [[
+                            {"text": "✅ Так" if user_lang == 'uk' else "✅ Yes", "callback_data": "confirm_savings"}
+                        ]]
+                    }
+                    self.send_message(chat_id, confirm_msg, keyboard)
+                    return
+                    
+            except ValueError:
+                user_lang = self.get_user_language(chat_id)
+                error_msg = "❌ Будь ласка, введіть число" if user_lang == 'uk' else "❌ Please enter a number"
+                self.send_message(chat_id, error_msg)
+            return
+
+
         elif text == "🌍 Language":
             # Show language selection keyboard
             keyboard = {
@@ -1659,59 +1754,146 @@ This will help me provide better financial recommendations!"""
         # Answer the callback query first to remove loading state
         self.answer_callback(query["id"])
 
-            # NEW: Handle start language selection
-        # NEW: Handle start language selection
-        if data.startswith("start_lang_"):
-            language = data[11:]  # 'en' or 'uk'
+        # ✅ ADD ONBOARDING HANDLERS HERE ✅
+        if data.startswith("onboard_lang_"):
+            language = data[13:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
             
-            if language == 'uk':
-                welcome_text = """
-Привіт! Я *Finn* - твій AI фінансовий помічник 🤖💰
-Разом ми будемо будувати вашу фінансову здоров'я за допомогою *правила 50/30/20* - простої та ефективної системи управління грошима:
-
-🎯 *Розподіл 50/30/20:*
-• 🏠 *50% Потреби* - Оренда, їжа, комунальні, транспорт
-• 🎉 *30% Бажання* - Ресторани, розваги, шопінг
-• 🏦 *20% Майбутнє* - Заощадження, погашення боргів, інвестиції
-
-🚀 *Швидкий старт:*
-`+5000 зарплата` - Додати дохід
-`150 обід` - Додати витрату
-`++1000` - Додати до заощаджень
-`-200 кредит` - Додати борг
-
-Давайте будувати ваше фінансове здоров'я разом! 💪"""
-            else:
-                welcome_text = """
-Hi! I'm *Finn* - your AI finance assistant 🤖💰
-Together we'll build your financial health using the *50/30/20 rule* - a simple and powerful system for managing your money:
-
-🎯 *50/30/20 Breakdown:*
-• 🏠 *50% Needs* - Rent, food, utilities, transport
-• 🎉 *30% Wants* - Dining, entertainment, shopping  
-• 🏦 *20% Future* - Savings, debt repayment, investments
-
-🚀 *Quick Start:*
-`+5000 salary` - Add income
-`150 lunch` - Add expense  
-`++1000` - Add to savings
-`-200 loan` - Add debt
-
-Let's build your financial health together! 💪"""
-            
-            self.send_message(chat_id, welcome_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
-            
-            # Delete the language selection message
+            # Delete language selection message
             try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
                     "message_id": message_id
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
             
+            # Send welcome message and ask for current balance
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                welcome_msg = """👋 *Ласкаво просимо до Finn!*
+
+    Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
+
+    *Крок 1/4: Поточний баланс*
+
+    Скільки готівки у вас є зараз? (в гривнях)
+
+    💡 *Введіть суму:*
+    `5000` - якщо у вас 5,000₴
+    `0` - якщо готівки немає"""
+            else:
+                welcome_msg = """👋 *Welcome to Finn!*
+
+    Let's create your financial profile. This will just take a minute!
+
+    *Step 1/4: Current Balance*
+
+    How much cash do you have right now? (in UAH)
+
+    💡 *Enter amount:*
+    `5000` - if you have 5,000₴
+    `0` - if no cash"""
+            
+            # Set onboarding state
+            self.onboarding_state[chat_id] = 'awaiting_balance'
+            self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
             return
+
+        # Handle balance confirmation
+        elif data == "confirm_balance":
+            # Move to debt question
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                debt_msg = """✅ *Баланс збережено!*
+
+    *Крок 2/4: Борги*
+
+    Чи є у вас борги? (кредити, позики тощо)
+
+    💡 *Введіть загальну суму боргів:*
+    `10000` - якщо винен 10,000₴
+    `0` - якщо боргів немає"""
+            else:
+                debt_msg = """✅ *Balance saved!*
+
+    *Step 2/4: Debts*
+
+    Do you have any debts? (loans, credits, etc.)
+
+    💡 *Enter total debt amount:*
+    `10000` - if you owe 10,000₴
+    `0` - if no debts"""
+            
+            self.onboarding_state[chat_id] = 'awaiting_debt'
+            self.send_message(chat_id, debt_msg, parse_mode='Markdown')
+
+        # Handle debt confirmation  
+        elif data == "confirm_debt":
+            # Move to savings question
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                savings_msg = """✅ *Борги збережено!*
+
+    *Крок 3/4: Заощадження*
+
+    Чи є у вас заощадження? (банк, крипто, інвестиції)
+
+    💡 *Введіть загальну суму заощаджень:*
+    `15000` - якщо маєте 15,000₴
+    `0` - якщо заощаджень немає"""
+            else:
+                savings_msg = """✅ *Debts saved!*
+
+    *Step 3/4: Savings*
+
+    Do you have any savings? (bank, crypto, investments)
+
+    💡 *Enter total savings amount:*
+    `15000` - if you have 15,000₴ saved
+    `0` - if no savings"""
+            
+            self.onboarding_state[chat_id] = 'awaiting_savings'
+            self.send_message(chat_id, savings_msg, parse_mode='Markdown')
+
+        # Handle savings confirmation
+        elif data == "confirm_savings":
+            # Complete onboarding
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                complete_msg = """🎉 *Профіль створено!*
+
+    Тепер ви готові до роботи з Finn! 
+
+    🚀 *Швидкий старт:*
+    `150 обід` - Додати витрату
+    `+5000 зарплата` - Додати дохід
+    `++1000` - Додати заощадження
+    `-200 кредит` - Додати борг
+
+    💡 Почніть відстежувати транзакції або використовуйте меню!"""
+            else:
+                complete_msg = """🎉 *Profile Created!*
+
+    You're now ready to use Finn!
+
+    🚀 *Quick Start:*
+    `150 lunch` - Add expense
+    `+5000 salary` - Add income
+    `++1000` - Add savings  
+    `-200 loan` - Add debt
+
+    💡 Start tracking transactions or use the menu!"""
+            
+            # Clear onboarding state
+            if chat_id in self.onboarding_state:
+                del self.onboarding_state[chat_id]
+            
+            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         
         if data.startswith("cat_"):
