@@ -200,60 +200,79 @@ class SimpleFinnBot:
         self.verify_data_loading()
 
     def load_transactions(self):
-        """Load transactions from persistent JSON file"""
         try:
             filepath = get_persistent_path("transactions.json")
-            print(f"📂 Loading transactions from: {filepath}")
-            print(f"📂 File exists: {os.path.exists(filepath)}")
+            print(f"🔄 LOADING from: {filepath}")
             
             if os.path.exists(filepath):
-                file_size = os.path.getsize(filepath)
-                print(f"📂 File size: {file_size} bytes")
+                # Read the raw file content first
+                with open(filepath, 'r') as f:
+                    raw_content = f.read().strip()
                 
-                with open(filepath, "r") as f:
-                    file_content = f.read()
-                    print(f"📂 Raw file content: '{file_content}'")
-                    
-                # Now parse the JSON
-                with open(filepath, "r") as f:
-                    data = json.load(f)
+                print(f"📄 RAW FILE CONTENT: '{raw_content}'")
+                print(f"📄 FILE SIZE: {len(raw_content)} chars")
                 
-                print(f"📂 Parsed data type: {type(data)}")
-                print(f"📂 Parsed data: {data}")
+                if not raw_content or raw_content == '{}' or raw_content == 'null':
+                    print("❌ FILE IS EMPTY OR INVALID - starting fresh")
+                    self.transactions = {}
+                    return
                 
-                # Reset and load transactions
+                # Parse JSON
+                data = json.loads(raw_content)
+                print(f"📄 PARSED DATA: {data}")
+                
+                # Convert to proper format
                 self.transactions = {}
-                if isinstance(data, dict):
-                    for key, value in data.items():
-                        try:
-                            user_id = int(key)
-                            if isinstance(value, list):
-                                self.transactions[user_id] = value
-                                print(f"✅ Loaded {len(value)} transactions for user {user_id}")
-                            else:
-                                print(f"⚠️ Invalid data type for user {user_id}: {type(value)}")
-                                self.transactions[user_id] = []
-                        except (ValueError, TypeError) as e:
-                            print(f"⚠️ Error processing user {key}: {e}")
-                else:
-                    print(f"❌ Expected dict but got {type(data)}")
-                    
-                total_txns = sum(len(txns) for txns in self.transactions.values())
-                print(f"📂 Total transactions loaded: {total_txns}")
+                for key, value in data.items():
+                    try:
+                        user_id = int(key)
+                        if isinstance(value, list):
+                            self.transactions[user_id] = value
+                            print(f"✅ LOADED {len(value)} transactions for user {user_id}")
+                        else:
+                            print(f"❌ INVALID DATA for user {user_id}")
+                            self.transactions[user_id] = []
+                    except:
+                        print(f"❌ SKIPPING invalid user ID: {key}")
+                
+                total = sum(len(t) for t in self.transactions.values())
+                print(f"🎯 TOTAL TRANSACTIONS LOADED: {total}")
                 
             else:
-                print("📂 No existing transactions file, starting fresh")
+                print("📭 NO TRANSACTIONS FILE - starting fresh")
                 self.transactions = {}
                 
-        except json.JSONDecodeError as e:
-            print(f"❌ JSON decode error: {e}")
-            print("🔄 Starting with empty transactions due to corrupt file")
-            self.transactions = {}
         except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
+            print(f"💥 CRITICAL LOAD ERROR: {e}")
             import traceback
             traceback.print_exc()
             self.transactions = {}
+
+def save_transactions(self):
+    """Save transactions to persistent JSON file - SIMPLE VERSION"""
+    try:
+        filepath = get_persistent_path("transactions.json")
+        total_txns = sum(len(t) for t in self.transactions.values())
+        print(f"💾 SAVING {total_txns} transactions to: {filepath}")
+        
+        # Convert to JSON-serializable format
+        data_to_save = {str(k): v for k, v in self.transactions.items()}
+        
+        # Save with error checking
+        with open(filepath, 'w') as f:
+            json.dump(data_to_save, f, indent=2)
+        
+        # Verify the save
+        if os.path.exists(filepath):
+            file_size = os.path.getsize(filepath)
+            print(f"✅ SAVE SUCCESSFUL - File size: {file_size} bytes")
+        else:
+            print("❌ SAVE FAILED - File not created")
+            
+    except Exception as e:
+        print(f"💥 CRITICAL SAVE ERROR: {e}")
+        import traceback
+        traceback.print_exc()
 
     def check_data_integrity(self):
         """Check if data is properly loaded and consistent"""
@@ -562,16 +581,6 @@ class SimpleFinnBot:
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
-
-    def save_transactions(self):
-        """Save transactions to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("transactions.json")
-            with open(filepath, "w") as f:
-                json.dump(self.transactions, f, indent=2)
-            print(f"💾 Saved transactions for {len(self.transactions)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
 
     def save_user_transaction(self, user_id, transaction):
         """Add transaction for a specific user and save to persistent storage"""
