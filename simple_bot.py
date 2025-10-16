@@ -147,6 +147,23 @@ Let's build your financial health together! 💪""",
     }
 }
         
+    def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
+        """Send photo from a public URL"""
+        data = {
+            "chat_id": chat_id,
+            "photo": photo_url
+        }
+        
+        if caption:
+            data["caption"] = caption
+            data["parse_mode"] = "Markdown"
+        
+        if keyboard:
+            data["reply_markup"] = json.dumps(keyboard)
+        
+        response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
+        return response
+
     def categorize_transaction(self, category_name, description=""):
         """Categorize transaction into needs/wants/future"""
         category_lower = category_name.lower()
@@ -911,7 +928,16 @@ Let's build your financial health together! 💪""",
         elif text == "/start":
             user_name = msg["chat"].get("first_name", "there")
             
-            # Show language selection first
+            # Send welcome image first
+            welcome_image_url = "https://github.com/Ze1n5/finnbot/blob/3d177fe8ea8057ec09103540ff71154e1b21c8fc/Images/welcome.jpg"
+            welcome_caption = f"👋 Welcome {user_name}! I'm Finn - your AI finance assistant 🤖💰\n\nLet's set up your financial profile."
+            
+            # Send the photo
+            self.send_photo_from_url(chat_id, welcome_image_url, welcome_caption)
+            
+            # Then show language selection (after a short delay)
+            time.sleep(1)  # Optional: wait 1 second before showing language selection
+            
             keyboard = {
                 "inline_keyboard": [
                     [{"text": "🇺🇸 English", "callback_data": "onboard_lang_en"}],
@@ -919,9 +945,8 @@ Let's build your financial health together! 💪""",
                 ]
             }
             
-            welcome_text = f"👋 Welcome {user_name}! Let's set up your financial profile.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
-            
-            self.send_message(chat_id, welcome_text, keyboard)
+            language_text = "Please choose your language / Будь ласка, оберіть вашу мову:"
+            self.send_message(chat_id, language_text, keyboard)
 
         if chat_id in self.onboarding_state:
             state = self.onboarding_state[chat_id]
