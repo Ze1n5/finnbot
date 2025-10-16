@@ -78,32 +78,6 @@ def home():
         }
     })
 
-@app.route('/api/emergency-debug')
-def emergency_debug():
-    """Emergency debug endpoint"""
-    try:
-        # Check file directly
-        filepath = get_persistent_path("transactions.json")
-        file_exists = os.path.exists(filepath)
-        
-        # Read file content
-        file_content = "FILE_NOT_EXISTS"
-        if file_exists:
-            with open(filepath, 'r') as f:
-                file_content = f.read()
-        
-        return jsonify({
-            "status": "debug",
-            "file_exists": file_exists,
-            "file_path": filepath,
-            "file_content": file_content,
-            "file_size": len(file_content) if file_exists else 0,
-            "bot_has_data": len(bot_instance.transactions) > 0,
-            "bot_users": list(bot_instance.transactions.keys()),
-            "bot_transaction_counts": {str(k): len(v) for k, v in bot_instance.transactions.items()}
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/debug-data')
 def debug_data():
@@ -300,15 +274,6 @@ def api_financial_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
-
-print("🤖 Initializing SimpleFinnBot...")
-bot_instance = SimpleFinnBot()
-
-# FORCE RELOAD - Don't trust the initial load
-print("🔄 FORCING DATA RELOAD...")
-bot_instance.load_all_data()
-
-print(f"📊 FINAL CHECK: {sum(len(t) for t in bot_instance.transactions.values())} transactions loaded")
 
 @app.route('/api/transactions')
 def api_transactions():

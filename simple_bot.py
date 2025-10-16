@@ -200,53 +200,54 @@ class SimpleFinnBot:
         self.verify_data_loading()
 
     def load_transactions(self):
-        try:
-            filepath = get_persistent_path("transactions.json")
-            print(f"🔄 LOADING from: {filepath}")
+    """Load transactions from persistent JSON file - SIMPLE VERSION"""
+    try:
+        filepath = get_persistent_path("transactions.json")
+        print(f"🔄 LOADING from: {filepath}")
+        
+        if os.path.exists(filepath):
+            # Read the raw file content first
+            with open(filepath, 'r') as f:
+                raw_content = f.read().strip()
             
-            if os.path.exists(filepath):
-                # Read the raw file content first
-                with open(filepath, 'r') as f:
-                    raw_content = f.read().strip()
-                
-                print(f"📄 RAW FILE CONTENT: '{raw_content}'")
-                print(f"📄 FILE SIZE: {len(raw_content)} chars")
-                
-                if not raw_content or raw_content == '{}' or raw_content == 'null':
-                    print("❌ FILE IS EMPTY OR INVALID - starting fresh")
-                    self.transactions = {}
-                    return
-                
-                # Parse JSON
-                data = json.loads(raw_content)
-                print(f"📄 PARSED DATA: {data}")
-                
-                # Convert to proper format
+            print(f"📄 RAW FILE CONTENT: '{raw_content}'")
+            print(f"📄 FILE SIZE: {len(raw_content)} chars")
+            
+            if not raw_content or raw_content == '{}' or raw_content == 'null':
+                print("❌ FILE IS EMPTY OR INVALID - starting fresh")
                 self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                            print(f"✅ LOADED {len(value)} transactions for user {user_id}")
-                        else:
-                            print(f"❌ INVALID DATA for user {user_id}")
-                            self.transactions[user_id] = []
-                    except:
-                        print(f"❌ SKIPPING invalid user ID: {key}")
-                
-                total = sum(len(t) for t in self.transactions.values())
-                print(f"🎯 TOTAL TRANSACTIONS LOADED: {total}")
-                
-            else:
-                print("📭 NO TRANSACTIONS FILE - starting fresh")
-                self.transactions = {}
-                
-        except Exception as e:
-            print(f"💥 CRITICAL LOAD ERROR: {e}")
-            import traceback
-            traceback.print_exc()
+                return
+            
+            # Parse JSON
+            data = json.loads(raw_content)
+            print(f"📄 PARSED DATA: {data}")
+            
+            # Convert to proper format
             self.transactions = {}
+            for key, value in data.items():
+                try:
+                    user_id = int(key)
+                    if isinstance(value, list):
+                        self.transactions[user_id] = value
+                        print(f"✅ LOADED {len(value)} transactions for user {user_id}")
+                    else:
+                        print(f"❌ INVALID DATA for user {user_id}")
+                        self.transactions[user_id] = []
+                except:
+                    print(f"❌ SKIPPING invalid user ID: {key}")
+            
+            total = sum(len(t) for t in self.transactions.values())
+            print(f"🎯 TOTAL TRANSACTIONS LOADED: {total}")
+            
+        else:
+            print("📭 NO TRANSACTIONS FILE - starting fresh")
+            self.transactions = {}
+            
+    except Exception as e:
+        print(f"💥 CRITICAL LOAD ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        self.transactions = {}
 
 def save_transactions(self):
     """Save transactions to persistent JSON file - SIMPLE VERSION"""
@@ -581,6 +582,7 @@ def save_transactions(self):
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
+
 
     def save_user_transaction(self, user_id, transaction):
         """Add transaction for a specific user and save to persistent storage"""
