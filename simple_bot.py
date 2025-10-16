@@ -10,12 +10,9 @@ import threading
 import atexit
 import signal
 
-PERSISTENT_DIR = "/data"  # Railway provides this for persistent storage
+PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
 def get_persistent_path(filename):
-    """Get path in persistent storage directory"""
-    # Create directory if it doesn't exist
-    os.makedirs(PERSISTENT_DIR, exist_ok=True)
     return os.path.join(PERSISTENT_DIR, filename)
 
 print(f"📁 Using persistent directory: {PERSISTENT_DIR}")
@@ -81,7 +78,7 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data FROM PERSISTENT STORAGE
+        # Load existing data
         self.load_all_data()
         
         # 50/30/20 tracking
@@ -150,9 +147,6 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
         self.load_user_languages()
-        self.load_all_data()
-        self.verify_data_loading()
-
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
@@ -488,6 +482,17 @@ class SimpleFinnBot:
             with open(filepath, "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
             print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
+            
+            # Sync incomes to Railway
+            for user_id, amount in self.user_incomes.items():
+                sync_to_railway({
+                    'amount': amount,
+                    'description': 'Monthly Income',
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'income',
+                    'user_id': user_id
+                })
+                
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
 
