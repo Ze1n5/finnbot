@@ -1792,7 +1792,7 @@ This will help me provide better financial recommendations!"""
 
 💡 *Введіть суму:*
 `5000` - якщо у вас 5,000₴
-`0` - якщо готівки немає"""
+`0` - якщо на балансі нічого немає"""
             else:
                 image_caption = """👋 *Hi! I'm Finn!*
 
@@ -2480,13 +2480,15 @@ def api_transactions():
 
 @flask_app.route('/mini-app')
 def serve_mini_app():
+    return flask_app.route('/mini-app')
+def serve_mini_app():
     return """
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Balance Tracker</title>
+    <title>FinnBot - Financial Tracker</title>
     <style>
         * {
             margin: 0;
@@ -2504,6 +2506,22 @@ def serve_mini_app():
         .container {
             max-width: 400px;
             margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #8e8e93;
+            font-size: 14px;
         }
         
         .balance-card {
@@ -2532,7 +2550,7 @@ def serve_mini_app():
             justify-content: space-around;
         }
         
-        .income, .expense {
+        .income, .expense, .savings {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -2550,7 +2568,13 @@ def serve_mini_app():
             font-weight: 600;
         }
         
-        .income-label, .expense-label {
+        .savings-amount {
+            color: #007aff;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .income-label, .expense-label, .savings-label {
             font-size: 14px;
             color: #8e8e93;
             margin-top: 4px;
@@ -2562,11 +2586,38 @@ def serve_mini_app():
             margin: 20px 0;
         }
         
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .refresh-btn {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .refresh-btn:active {
+            background: #0056cc;
+        }
+        
         .transactions {
             background: white;
             border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
         }
         
         .transaction {
@@ -2582,6 +2633,19 @@ def serve_mini_app():
         }
         
         .transaction-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .transaction-emoji {
+            font-size: 20px;
+            width: 32px;
+            text-align: center;
+        }
+        
+        .transaction-details {
             flex: 1;
         }
         
@@ -2608,136 +2672,330 @@ def serve_mini_app():
         .amount-positive {
             color: #34c759;
         }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8e8e93;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #ff3b30;
+            background: #ffebee;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8e8e93;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #8e8e93;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="header">
+            <h1>💰 FinnBot</h1>
+            <p>Your Personal Finance Tracker</p>
+        </div>
+        
         <div class="balance-card">
-            <div class="balance-label">Balance</div>
-            <div class="balance-amount">₹10,000</div>
-            <div class="income-expense">
-                <div class="expense">
-                    <div class="expense-amount">-1,200</div>
-                    <div class="expense-label">Spending</div>
+            <div class="balance-label">Current Balance</div>
+            <div class="balance-amount" id="balanceAmount">Loading...</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value income-amount" id="incomeAmount">0₴</div>
+                    <div class="stat-label">Income</div>
                 </div>
-                <div class="income">
-                    <div class="income-amount">+3,000</div>
-                    <div class="income-label">Income</div>
+                <div class="stat-card">
+                    <div class="stat-value expense-amount" id="expenseAmount">0₴</div>
+                    <div class="stat-label">Spending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value savings-amount" id="savingsAmount">0₴</div>
+                    <div class="stat-label">Savings</div>
                 </div>
             </div>
         </div>
         
-        <div class="transactions">
-            <div class="transaction">
-                <div class="transaction-info">
-                    <div class="transaction-title">Food</div>
-                    <div class="transaction-date">Oct 10, 2025 10:24</div>
-                </div>
-                <div class="transaction-amount amount-negative">-1,000</div>
-            </div>
-            
-            <div class="divider"></div>
-            
-            <div class="transaction">
-                <div class="transaction-info">
-                    <div class="transaction-title">Salary</div>
-                    <div class="transaction-date">Oct 10, 2025 10:24</div>
-                </div>
-                <div class="transaction-amount amount-positive">+1,000</div>
-            </div>
+        <div class="section-header">
+            <div class="section-title">Recent Transactions</div>
+            <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
         </div>
+        
+        <div class="transactions" id="transactionsContainer">
+            <div class="loading">Loading transactions...</div>
+        </div>
+        
+        <div class="error" id="errorMessage" style="display: none;"></div>
     </div>
 
     <script>
-        // Sample transaction data - in a real app, this would come from a database
-        const transactions = [
-            {
-                id: 1,
-                title: "Food",
-                amount: -1000,
-                date: new Date('2025-10-10T10:24:00'),
-                category: "expense"
-            },
-            {
-                id: 2,
-                title: "Salary",
-                amount: 1000,
-                date: new Date('2025-10-10T10:24:00'),
-                category: "income"
-            }
-        ];
+        // API endpoints
+        const API_BASE = window.location.origin;
+        const FINANCIAL_DATA_URL = `${API_BASE}/api/financial-data`;
+        const TRANSACTIONS_URL = `${API_BASE}/api/transactions`;
         
-        // Calculate balance, income, and spending
-        function calculateFinances() {
-            let balance = 10000; // Starting balance
-            let income = 0;
-            let spending = 0;
-            
-            transactions.forEach(transaction => {
-                if (transaction.amount > 0) {
-                    income += transaction.amount;
-                } else {
-                    spending += Math.abs(transaction.amount);
-                }
-            });
-            
-            // Update UI
-            document.querySelector('.balance-amount').textContent = `₹${balance.toLocaleString()}`;
-            document.querySelector('.income-amount').textContent = `+${income.toLocaleString()}`;
-            document.querySelector('.expense-amount').textContent = `-${spending.toLocaleString()}`;
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('uk-UA', { 
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0 
+            }).format(amount) + '₴';
         }
         
-        // Format date for display
-        function formatDate(date) {
-            const options = { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric'
-            };
-            return date.toLocaleDateString('en-US', options);
-        }
-        
-        // Render transactions
-        function renderTransactions() {
-            const transactionsContainer = document.querySelector('.transactions');
+        // Format date
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown date';
             
-            // Clear existing transactions (except the first one which is our template)
-            while (transactionsContainer.children.length > 2) {
-                transactionsContainer.removeChild(transactionsContainer.lastChild);
-            }
-            
-            // Add transactions
-            transactions.forEach(transaction => {
-                const transactionEl = document.createElement('div');
-                transactionEl.className = 'transaction';
+            try {
+                const date = new Date(dateString);
+                const now = new Date();
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
                 
-                transactionEl.innerHTML = `
-                    <div class="transaction-info">
-                        <div class="transaction-title">${transaction.title}</div>
-                        <div class="transaction-date">${formatDate(transaction.date)}</div>
-                    </div>
-                    <div class="transaction-amount ${transaction.amount > 0 ? 'amount-positive' : 'amount-negative'}">
-                        ${transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                if (date >= today) {
+                    return 'Today ' + date.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false 
+                    });
+                } else if (date >= yesterday) {
+                    return 'Yesterday ' + date.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false 
+                    });
+                } else {
+                    return date.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                }
+            } catch (e) {
+                return 'Unknown date';
+            }
+        }
+        
+        // Get emoji for transaction type
+        function getTransactionEmoji(transaction) {
+            if (transaction.emoji) return transaction.emoji;
+            
+            const type = transaction.type;
+            const name = transaction.name?.toLowerCase() || '';
+            
+            if (type === 'income') return '💵';
+            if (type === 'savings') return '🏦';
+            if (type === 'debt') return '💳';
+            if (type === 'debt_return') return '🔙';
+            if (type === 'savings_withdraw') return '📥';
+            
+            // For expenses, use more specific emojis
+            if (name.includes('food') || name.includes('lunch') || name.includes('dinner') || name.includes('restaurant')) return '🍕';
+            if (name.includes('rent') || name.includes('house') || name.includes('apartment')) return '🏠';
+            if (name.includes('transport') || name.includes('bus') || name.includes('taxi') || name.includes('fuel')) return '🚗';
+            if (name.includes('shopping') || name.includes('store') || name.includes('market')) return '🛍️';
+            if (name.includes('coffee') || name.includes('cafe')) return '☕';
+            
+            return '🛒'; // Default for expenses
+        }
+        
+        // Load financial data
+        async function loadFinancialData() {
+            try {
+                console.log('Loading financial data from:', FINANCIAL_DATA_URL);
+                const response = await fetch(FINANCIAL_DATA_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Financial data loaded:', data);
+                
+                // Update balance
+                const balanceElement = document.getElementById('balanceAmount');
+                if (balanceElement) {
+                    balanceElement.textContent = formatCurrency(data.balance || 0);
+                }
+                
+                // Update income
+                const incomeElement = document.getElementById('incomeAmount');
+                if (incomeElement) {
+                    incomeElement.textContent = formatCurrency(data.income || 0);
+                }
+                
+                // Update expenses
+                const expenseElement = document.getElementById('expenseAmount');
+                if (expenseElement) {
+                    expenseElement.textContent = formatCurrency(data.spending || 0);
+                }
+                
+                // Update savings
+                const savingsElement = document.getElementById('savingsAmount');
+                if (savingsElement) {
+                    savingsElement.textContent = formatCurrency(data.savings || 0);
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('Error loading financial data:', error);
+                showError('Failed to load financial data: ' + error.message);
+                return null;
+            }
+        }
+        
+        // Load transactions
+        async function loadTransactions() {
+            try {
+                console.log('Loading transactions from:', TRANSACTIONS_URL);
+                const response = await fetch(TRANSACTIONS_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Transactions loaded:', data);
+                
+                displayTransactions(data.transactions || []);
+                return data;
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+                showError('Failed to load transactions: ' + error.message);
+                return null;
+            }
+        }
+        
+        // Display transactions
+        function displayTransactions(transactions) {
+            const container = document.getElementById('transactionsContainer');
+            
+            if (!transactions || transactions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
+                        <div>No transactions yet</div>
+                        <div style="font-size: 14px; margin-top: 8px;">Start adding transactions in the bot!</div>
                     </div>
                 `;
+                return;
+            }
+            
+            let html = '';
+            
+            transactions.forEach((transaction, index) => {
+                const emoji = getTransactionEmoji(transaction);
+                const amount = transaction.amount;
+                const isPositive = amount > 0;
+                const displayName = transaction.display_name || transaction.name || 'Transaction';
+                const timestamp = transaction.timestamp;
                 
-                // Insert before the divider (which is the second child)
-                transactionsContainer.insertBefore(transactionEl, transactionsContainer.children[1]);
-                
-                // Add divider if it's not the last transaction
-                if (transactions.indexOf(transaction) < transactions.length - 1) {
-                    const divider = document.createElement('div');
-                    divider.className = 'divider';
-                    transactionsContainer.insertBefore(divider, transactionsContainer.children[2]);
-                }
+                html += `
+                    <div class="transaction">
+                        <div class="transaction-info">
+                            <div class="transaction-emoji">${emoji}</div>
+                            <div class="transaction-details">
+                                <div class="transaction-title">${displayName}</div>
+                                <div class="transaction-date">${formatDate(timestamp)}</div>
+                            </div>
+                        </div>
+                        <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
+                            ${isPositive ? '+' : ''}${formatCurrency(amount)}
+                        </div>
+                    </div>
+                    ${index < transactions.length - 1 ? '<div class="divider"></div>' : ''}
+                `;
             });
+            
+            container.innerHTML = html;
         }
         
-        // Initialize the app
-        calculateFinances();
-        renderTransactions();
+        // Show error message
+        function showError(message) {
+            const errorElement = document.getElementById('errorMessage');
+            if (errorElement) {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+                
+                // Hide error after 5 seconds
+                setTimeout(() => {
+                    errorElement.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Load all data
+        async function loadData() {
+            console.log('Loading all data...');
+            
+            // Show loading states
+            document.getElementById('balanceAmount').textContent = 'Loading...';
+            document.getElementById('transactionsContainer').innerHTML = '<div class="loading">Loading transactions...</div>';
+            document.getElementById('errorMessage').style.display = 'none';
+            
+            try {
+                // Load both data sources in parallel
+                const [financialData, transactionsData] = await Promise.all([
+                    loadFinancialData(),
+                    loadTransactions()
+                ]);
+                
+                console.log('All data loaded successfully');
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Failed to load data: ' + error.message);
+            }
+        }
+        
+        // Initialize the app when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Mini-app initialized');
+            loadData();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadData, 30000);
+        });
+        
+        // Add error handling for unhandled promises
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled promise rejection:', event.reason);
+            showError('An unexpected error occurred');
+        });
     </script>
 </body>
 </html>
@@ -2829,6 +3087,58 @@ def add_income():
 @flask_app.route('/api/test')
 def test_api():
     return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
+
+@flask_app.route('/api/test-mini-app')
+def test_mini_app_apis():
+    """Test if mini-app APIs are working"""
+    try:
+        # Test financial data API
+        financial_response = {
+            'balance': 15000,
+            'income': 50000,
+            'spending': 35000,
+            'savings': 10000,
+            'transactions': [
+                {'emoji': '🍕', 'name': 'Lunch', 'amount': -150, 'timestamp': '2024-01-15T12:30:00'},
+                {'emoji': '💵', 'name': 'Salary', 'amount': 50000, 'timestamp': '2024-01-15T09:00:00'}
+            ],
+            'transaction_count': 2
+        }
+        
+        # Test transactions API
+        transactions_response = {
+            'transactions': [
+                {
+                    'emoji': '🍕',
+                    'name': 'Lunch',
+                    'display_name': 'Lunch at cafe',
+                    'amount': -150,
+                    'timestamp': '2024-01-15T12:30:00',
+                    'type': 'expense'
+                },
+                {
+                    'emoji': '💵', 
+                    'name': 'Salary',
+                    'display_name': 'Monthly Salary',
+                    'amount': 50000,
+                    'timestamp': '2024-01-15T09:00:00',
+                    'type': 'income'
+                }
+            ],
+            'has_more': False,
+            'current_page': 1,
+            'total_transactions': 2
+        }
+        
+        return jsonify({
+            'financial_api_working': True,
+            'transactions_api_working': True,
+            'test_financial_data': financial_response,
+            'test_transactions_data': transactions_response
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Set webhook on startup
 def set_webhook():
