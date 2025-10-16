@@ -10,25 +10,6 @@ from flask import Flask, jsonify, request
 from simple_bot import SimpleFinnBot
 
 # ========== PERSISTENT STORAGE SETUP ==========
-PERSISTENT_DIR = "/data"
-
-def get_persistent_path(filename):
-    os.makedirs(PERSISTENT_DIR, exist_ok=True)
-    return os.path.join(PERSISTENT_DIR, filename)
-
-print(f"🎯 FORCING persistent directory: {PERSISTENT_DIR}")
-
-# ========== FLASK APP INITIALIZATION ==========
-app = Flask(__name__)
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
-# ========== BOT INSTANCE INITIALIZATION ==========
-bot_instance = SimpleFinnBot()
-print("🔄 Reloading bot data for consistency...")
-bot_instance.load_all_data()
-print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
-
-# Force use of /data directory on Railway
 def setup_persistent_storage():
     """Setup persistent storage - force /data on Railway"""
     # Always use /data on Railway
@@ -50,6 +31,20 @@ def get_persistent_path(filename):
     return os.path.join(PERSISTENT_DIR, filename)
 
 print(f"📁 Persistent directory: {PERSISTENT_DIR}")
+
+# ========== FLASK APP INITIALIZATION ==========
+app = Flask(__name__)
+BOT_TOKEN = os.environ.get('BOT_TOKEN')
+
+# ========== BOT INSTANCE INITIALIZATION ==========
+print("🤖 Initializing SimpleFinnBot...")
+bot_instance = SimpleFinnBot()
+
+# Force reload of data to ensure consistency
+print("🔄 Reloading bot data for consistency...")
+bot_instance.load_all_data()
+
+print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
 
 # ========== SHUTDOWN HANDLER ==========
 def save_all_data():
@@ -81,6 +76,33 @@ def home():
         }
     })
 
+@app.route('/api/debug-data')
+def debug_data():
+    """Debug endpoint to check data loading"""
+    try:
+        # Check if data files exist
+        transactions_file = get_persistent_path("transactions.json")
+        transactions_exists = os.path.exists(transactions_file)
+        
+        # Read file content directly
+        file_content = {}
+        if transactions_exists:
+            with open(transactions_file, 'r') as f:
+                file_content = json.load(f)
+        
+        return jsonify({
+            "persistent_dir": PERSISTENT_DIR,
+            "transactions_file": transactions_file,
+            "transactions_exists": transactions_exists,
+            "file_content_keys": list(file_content.keys()) if file_content else [],
+            "file_content_sample": file_content,
+            "bot_transactions_count": len(bot_instance.transactions),
+            "bot_transactions_users": list(bot_instance.transactions.keys()),
+            "bot_loaded_data": {str(k): len(v) for k, v in bot_instance.transactions.items()}
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/health')
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
@@ -92,7 +114,10 @@ def debug_storage():
         "persistent_dir": PERSISTENT_DIR,
         "data_dir_exists": os.path.exists(PERSISTENT_DIR),
         "current_directory": os.listdir(".") if os.path.exists(".") else [],
-        "data_directory": os.listdir(PERSISTENT_DIR) if os.path.exists(PERSISTENT_DIR) else []
+        "data_directory": os.listdir(PERSISTENT_DIR) if os.path.exists(PERSISTENT_DIR) else [],
+        "transactions_file": get_persistent_path("transactions.json"),
+        "transactions_exists": os.path.exists(get_persistent_path("transactions.json")),
+        "bot_transactions_count": len(bot_instance.transactions) if bot_instance else 0
     }
     return jsonify(storage_info)
 
@@ -293,7 +318,7 @@ def api_transactions():
             
             if trans_type == 'income':
                 emoji = "💵"
-                # For income: show category instead of description
+                # For income: show category in brackets
                 display_name = f"{category}"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
