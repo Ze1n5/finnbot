@@ -68,6 +68,7 @@ class SimpleFinnBot:
         
         # User-specific data - THESE WILL NOW PERSIST
         self.learned_patterns = {}
+        self.onboarding_state = {}  # Track where user is in onboarding
         self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
@@ -907,18 +908,18 @@ Let's build your financial health together! 💪""",
             return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
-        if text == "/start":
+        elif text == "/start":
             user_name = msg["chat"].get("first_name", "there")
             
             # Show language selection first
             keyboard = {
                 "inline_keyboard": [
-                    [{"text": "🇺🇸 English", "callback_data": "start_lang_en"}],
-                    [{"text": "🇺🇦 Українська", "callback_data": "start_lang_uk"}]
+                    [{"text": "🇺🇸 English", "callback_data": "onboard_lang_en"}],
+                    [{"text": "🇺🇦 Українська", "callback_data": "onboard_lang_uk"}]
                 ]
             }
             
-            welcome_text = f"👋 Welcome {user_name}! Let's set up your language first.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
+            welcome_text = f"👋 Welcome {user_name}! Let's set up your financial profile.\n\nPlease choose your language / Будь ласка, оберіть вашу мову:"
             
             self.send_message(chat_id, welcome_text, keyboard)
 
