@@ -204,42 +204,72 @@ class SimpleFinnBot:
         try:
             filepath = get_persistent_path("transactions.json")
             print(f"📂 Loading transactions from: {filepath}")
+            print(f"📂 File exists: {os.path.exists(filepath)}")
             
             if os.path.exists(filepath):
+                file_size = os.path.getsize(filepath)
+                print(f"📂 File size: {file_size} bytes")
+                
+                with open(filepath, "r") as f:
+                    file_content = f.read()
+                    print(f"📂 Raw file content: '{file_content}'")
+                    
+                # Now parse the JSON
                 with open(filepath, "r") as f:
                     data = json.load(f)
                 
-                # Safely convert data to proper format
+                print(f"📂 Parsed data type: {type(data)}")
+                print(f"📂 Parsed data: {data}")
+                
+                # Reset and load transactions
                 self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
-                
-                # Debug: Show what was loaded
-                total_transactions = sum(len(txns) for txns in self.transactions.values())
-                print(f"📊 Total transactions loaded: {total_transactions}")
-                for user_id, txns in self.transactions.items():
-                    print(f"   👤 User {user_id}: {len(txns)} transactions")
-                    for txn in txns[:3]:  # Show first 3 transactions
-                        print(f"      💰 {txn.get('type', 'unknown')}: {txn.get('amount', 0)} - {txn.get('description', 'no desc')}")
+                if isinstance(data, dict):
+                    for key, value in data.items():
+                        try:
+                            user_id = int(key)
+                            if isinstance(value, list):
+                                self.transactions[user_id] = value
+                                print(f"✅ Loaded {len(value)} transactions for user {user_id}")
+                            else:
+                                print(f"⚠️ Invalid data type for user {user_id}: {type(value)}")
+                                self.transactions[user_id] = []
+                        except (ValueError, TypeError) as e:
+                            print(f"⚠️ Error processing user {key}: {e}")
+                else:
+                    print(f"❌ Expected dict but got {type(data)}")
                     
+                total_txns = sum(len(txns) for txns in self.transactions.values())
+                print(f"📂 Total transactions loaded: {total_txns}")
+                
             else:
                 print("📂 No existing transactions file, starting fresh")
                 self.transactions = {}
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON decode error: {e}")
+            print("🔄 Starting with empty transactions due to corrupt file")
+            self.transactions = {}
         except Exception as e:
             print(f"❌ Error loading transactions: {e}")
             import traceback
             traceback.print_exc()
             self.transactions = {}
+
+    def check_data_integrity(self):
+        """Check if data is properly loaded and consistent"""
+        transactions_file = get_persistent_path("transactions.json")
+        file_exists = os.path.exists(transactions_file)
+        file_size = os.path.getsize(transactions_file) if file_exists else 0
+        
+        total_transactions = sum(len(txns) for txns in self.transactions.values())
+        
+        print(f"🔍 Data Integrity Check:")
+        print(f"   Transactions file exists: {file_exists}")
+        print(f"   Transactions file size: {file_size} bytes")
+        print(f"   Transactions in memory: {total_transactions}")
+        print(f"   Users in memory: {len(self.transactions)}")
+        
+        return total_transactions > 0
 
     def load_incomes(self):
         """Load user incomes from persistent JSON file"""

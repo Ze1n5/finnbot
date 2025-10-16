@@ -57,6 +57,7 @@ def save_all_data():
     """Save all data before shutdown"""
     print("💾 Saving all data before shutdown...")
     try:
+        print(f"📊 Before save - Transactions: {sum(len(txns) for txns in bot_instance.transactions.values())}")
         bot_instance.save_transactions()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
@@ -64,11 +65,6 @@ def save_all_data():
         print("✅ All data saved successfully!")
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
-
-# Register shutdown handlers
-atexit.register(save_all_data)
-signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
-signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
 
 @app.route('/')
 def home():
