@@ -540,17 +540,6 @@ class SimpleFinnBot:
             with open(filepath, "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
             print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
-            
-            # Sync incomes to Railway
-            for user_id, amount in self.user_incomes.items():
-                sync_to_railway({
-                    'amount': amount,
-                    'description': 'Monthly Income',
-                    'timestamp': datetime.now().isoformat(),
-                    'type': 'income',
-                    'user_id': user_id
-                })
-                
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
 
@@ -1957,15 +1946,6 @@ You're now ready to use Finn!
                     user_transactions.append(transaction)
                     self.save_transactions()
                     print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
-                    
-                    # Sync to Railway
-                    sync_to_railway({
-                        'amount': amount,
-                        'description': text,
-                        'category': category,
-                        'timestamp': datetime.now().isoformat(),
-                        'type': transaction_type
-                    })
                     
                 except Exception as e:
                     print(f"❌ Error saving transaction: {e}")

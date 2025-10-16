@@ -45,6 +45,12 @@ print("🔄 Reloading bot data for consistency...")
 bot_instance.load_all_data()
 
 print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
+for user_id, transactions in bot_instance.transactions.items():
+    print(f"   👤 User {user_id}: {len(transactions)} transactions")
+    for txn in transactions:
+        print(f"      💰 {txn.get('type', 'unknown')}: {txn.get('amount', 0)} - {txn.get('description', 'no desc')}")
+
+print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
 
 # ========== SHUTDOWN HANDLER ==========
 def save_all_data():
