@@ -1567,6 +1567,53 @@ This will help me provide better financial recommendations!"""
                     # Calculation error
                     self.send_message(chat_id, result[1])
                     return
+                else:
+                    # ADD THIS: Show formatting help only for unrecognized transaction formats
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    if user_lang == 'uk':
+                        help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
+
+            🛒 10 - Витрата (обід, шопінг тощо)
+                                            
+            💰 +100 - Дохід (зарплата, бізнес тощо) 
+                                            
+            🏦 ++100 - Заощадження (відкласти гроші)
+                                            
+            💳 -100 - Борг (позичені гроші)
+                                            
+            🔙 +-100 - Повернення боргу (повернення)
+                                            
+            📥 -+100 - Зняття заощаджень (зняття з заощаджень)
+
+            💡 *Приклади:*
+            `150 обід` - Витрата на обід
+            `+5000 зарплата` - Дохід
+            `++1000` - Заощадження
+            `-200 кредит` - Борг"""
+                    else:
+                        help_text = """🤔 Oops! Let me help you format that correctly:
+                                            
+            🛒 10 - Expense (lunch, shopping, etc.)
+                                            
+            💰 +100 - Income (salary, business, etc.) 
+                                            
+            🏦 ++100 - Savings (put money aside)
+                                            
+            💳 -100 - Debt (borrowed money)
+                                            
+            🔙 +-100 - Returned debt (paying back)
+                                            
+            📥 -+100 - Savings withdrawal (taking from savings)
+
+            💡 *Examples:*
+            `150 lunch` - Expense for lunch
+            `+5000 salary` - Income  
+            `++1000` - Savings
+            `-200 loan` - Debt"""
+
+                    self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    return
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
