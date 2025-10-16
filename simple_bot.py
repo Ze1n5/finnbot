@@ -38,20 +38,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-def sync_to_railway(transaction_data):
-    """Send transaction data to Railway web app"""
-    try:
-        railway_url = "https://finnbot-production.up.railway.app"
-        response = requests.post(f"{railway_url}/api/add-transaction", 
-                            json=transaction_data,
-                            timeout=5)
-        if response.status_code == 200:
-            print("✅ Synced to Railway")
-        else:
-            print(f"⚠️ Failed to sync to Railway: {response.status_code}")
-    except Exception as e:
-        print(f"⚠️ Railway sync failed: {e}")
-
 class SimpleFinnBot:
     def migrate_local_data(self):
         """Migrate data from local files to persistent storage if needed"""
