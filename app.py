@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import asyncio
 import threading
 import atexit
@@ -65,7 +66,7 @@ atexit.register(save_all_data)
 signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
 signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
 
-app.route('/')
+@app.route('/')
 def home():
     return jsonify({
         "status": "OK", 
@@ -77,15 +78,11 @@ def home():
         }
     })
 
-app.route('/health')
+@app.route('/health')
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
 
 # ========== WEB ENDPOINTS ==========
-@app.route('/health')
-def health_check():
-    return jsonify({"status": "healthy", "message": "Server is running"})
-
 @app.route('/debug-storage')
 def debug_storage():
     storage_info = {
@@ -293,7 +290,7 @@ def api_transactions():
             
             if trans_type == 'income':
                 emoji = "💵"
-                # For income: show category in brackets
+                # For income: show category instead of description
                 display_name = f"{category}"
             elif trans_type == 'expense':
                 if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
