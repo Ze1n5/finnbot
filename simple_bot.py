@@ -1567,22 +1567,6 @@ This will help me provide better financial recommendations!"""
                     # Calculation error
                     self.send_message(chat_id, result[1])
                     return
-                
-            else:
-                self.send_message(chat_id, """🤔 Oops! Let me help you format that correctly:
-                                 
-🛒 10 - Expense (lunch, shopping, etc.)
-                                 
-💰 +100 - Income (salary, business, etc.) 
-                                  
-🏦 ++100 - Savings (put money aside)
-                                 
-💳 -100 - Debt (borrowed money)
-                                 
-🔙 +-100 - Returned debt (paying back)
-                                 
-📥 -+100 - Savings withdrawal (taking from savings)
-""")
             
             # Original transaction processing (keep your existing code)
             amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
