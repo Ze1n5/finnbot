@@ -2214,6 +2214,81 @@ You're now ready to use Finn!
 # Initialize bot instance
 bot_instance = SimpleFinnBot()
 
+@flask_app.route('/api/financial-data-fixed')
+def api_financial_data_fixed():
+    """Fixed version of financial data calculation"""
+    try:
+        print("🧮 FIXED FINANCIAL CALCULATION...")
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        all_transactions = bot_instance.transactions
+        print(f"📊 Total users: {len(all_transactions)}")
+        
+        # Initialize totals
+        total_income = 0
+        total_expenses = 0
+        total_savings = 0
+        recent_transactions = []
+
+        # Process ALL transactions
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
+                    
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            print(f"   📝 {trans_type}: {amount}")
+                            
+                            # SIMPLIFIED CALCULATION
+                            if trans_type == 'income':
+                                total_income += amount
+                            elif trans_type == 'expense':
+                                total_expenses += amount
+                            elif trans_type == 'savings':
+                                total_savings += amount
+                    
+                    # Get recent transactions
+                    for transaction in user_transactions[-5:]:
+                        if isinstance(transaction, dict):
+                            recent_transactions.append({
+                                "emoji": "💰",
+                                "name": transaction.get('description', 'Transaction'),
+                                "amount": transaction.get('amount', 0),
+                                "timestamp": transaction.get('date', '')
+                            })
+
+        # Calculate balance (income - expenses - savings)
+        balance = total_income - total_expenses - total_savings
+        
+        print("=" * 50)
+        print(f"✅ FIXED CALCULATION:")
+        print(f"   Income: {total_income}₴")
+        print(f"   Expenses: {total_expenses}₴") 
+        print(f"   Savings: {total_savings}₴")
+        print(f"   Balance: {balance}₴")
+        print("=" * 50)
+        
+        response_data = {
+            'balance': balance,
+            'income': total_income,
+            'spending': total_expenses,
+            'savings': total_savings,
+            'transactions': recent_transactions,
+            'transaction_count': len(recent_transactions)
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return jsonify({'error': 'Calculation error'}), 500
+
 @flask_app.route('/api/backup-data', methods=['GET'])
 def backup_data():
     """Create a backup of current data"""
