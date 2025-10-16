@@ -1763,8 +1763,8 @@ This will help me provide better financial recommendations!"""
 `5000` - якщо у вас 5,000₴
 `0` - якщо готівки немає"""
             else:
-                image_caption = "👋 *Welcome to Finn!*"
-                welcome_msg = """Let's create your financial profile. This will just take a minute!
+                image_caption = """👋 *Hi! I'm Finn!*
+                Let's create your financial profile. This will just take a minute!
 
 *Step 1/4: Current Balance*
 
