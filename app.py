@@ -756,7 +756,7 @@ def serve_mini_app():
 
 def set_webhook():
     """Set Telegram webhook URL for SimpleFinnBot"""
-    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
         print("❌ Cannot set webhook - bot token not configured")
         return
     
@@ -781,13 +781,12 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     
     # Check for bot token but don't exit - just warn
-    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
-        print("❌ WARNING: Bot token not set. Telegram bot features will not work.")
-        print("💡 Please set BOT_TOKEN environment variable on Railway")
+    # NEW CODE (checking environment variable):
+    if not BOT_TOKEN:
+        print("❌ ERROR: BOT_TOKEN environment variable not set")
     else:
-        # Only set webhook if token is available
-        set_webhook()
         print("✅ Bot token found - Telegram bot is active")
+        set_webhook()
     
     print(f"🚀 Starting FinnBot on port {port}...")
     print(f"🎯 Persistent directory: {PERSISTENT_DIR}")
