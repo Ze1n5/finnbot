@@ -89,15 +89,36 @@ def init_db():
         print("🔄 Creating indexes...")
         cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_languages (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT UNIQUE NOT NULL,
+                language TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS user_categories (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                category_name TEXT NOT NULL,
+                category_type TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         conn.commit()
         conn.close()
         print("✅ PostgreSQL database tables initialized")
         return True
+        # Add to your init_db() function after the incomes table:
         
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
         return False
+    # Add to your init_db() function after the incomes table:
+
 
 # Initialize database when app starts
 init_db()
@@ -164,6 +185,45 @@ def api_init_db():
     """Manual database initialization"""
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
+
+@app.route('/api/clear-duplicates')
+def clear_duplicates():
+    """Clear duplicate transactions"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "No database connection"})
+    
+    try:
+        cur = conn.cursor()
+        
+        # Count before
+        cur.execute('SELECT COUNT(*) FROM transactions')
+        before_count = cur.fetchone()[0]
+        
+        # Keep only the most recent transaction for each unique combination
+        cur.execute('''
+            DELETE FROM transactions 
+            WHERE id NOT IN (
+                SELECT MAX(id) 
+                FROM transactions 
+                GROUP BY user_id, amount, description, category, type
+            )
+        ''')
+        
+        # Count after
+        cur.execute('SELECT COUNT(*) FROM transactions')
+        after_count = cur.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "removed_duplicates": before_count - after_count,
+            "remaining_transactions": after_count
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/api/check-tables')
 def check_tables():

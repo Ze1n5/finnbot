@@ -234,7 +234,7 @@ class SimpleFinnBot:
             self.user_languages = {}
 
     def save_transactions(self):
-        """Save transactions to PostgreSQL"""
+        """Save transactions to PostgreSQL - REPLACE existing data"""
         conn = self.get_db_connection()
         if not conn:
             print("❌ Cannot save - no database connection")
@@ -242,6 +242,12 @@ class SimpleFinnBot:
         
         try:
             cur = conn.cursor()
+            
+            # DELETE existing transactions for this user before inserting new ones
+            # This prevents duplicates
+            for user_id in self.transactions.keys():
+                cur.execute('DELETE FROM transactions WHERE user_id = %s', (user_id,))
+                print(f"🧹 Cleared existing transactions for user {user_id}")
             
             # Save transactions
             transaction_count = 0
@@ -255,7 +261,7 @@ class SimpleFinnBot:
             
             conn.commit()
             conn.close()
-            print(f"💾 Saved {transaction_count} transactions to PostgreSQL")
+            print(f"💾 Saved {transaction_count} transactions to PostgreSQL (replaced existing)")
             
         except Exception as e:
             print(f"❌ Error saving to database: {e}")
