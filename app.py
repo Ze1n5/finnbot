@@ -291,6 +291,32 @@ def api_financial_data():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Calculation error'}), 500
+    
+@app.route('/api/check-data-files')
+def check_data_files():
+    """Check what's actually in the data files"""
+    try:
+        # Read files directly from /data
+        transactions_file = "/data/transactions.json"
+        incomes_file = "/data/incomes.json"
+        
+        with open(transactions_file, 'r') as f:
+            transactions_content = json.load(f)
+            
+        with open(incomes_file, 'r') as f:
+            incomes_content = json.load(f)
+            
+        return jsonify({
+            "transactions_file_content": transactions_content,
+            "incomes_file_content": incomes_content,
+            "transactions_keys": list(transactions_content.keys()) if isinstance(transactions_content, dict) else [],
+            "file_sizes": {
+                "transactions": len(str(transactions_content)),
+                "incomes": len(str(incomes_content))
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/transactions')
 def api_transactions():

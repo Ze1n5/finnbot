@@ -183,14 +183,20 @@ class SimpleFinnBot:
     def load_all_data(self):
         """Load all data from persistent storage"""
         try:
+            print("🔄 Starting data load from /data/ directory...")
+            
             # Load transactions
             try:
                 with open('/data/transactions.json', 'r') as f:
                     self.transactions = json.load(f)
                 print(f"📊 Loaded transactions for {len(self.transactions)} users")
+                print(f"📊 Transaction keys: {list(self.transactions.keys())}")
             except FileNotFoundError:
                 self.transactions = {}
                 print("📊 No existing transactions file, starting fresh")
+            except Exception as e:
+                print(f"❌ Error loading transactions: {e}")
+                self.transactions = {}
             
             # Load incomes
             try:
@@ -200,8 +206,11 @@ class SimpleFinnBot:
             except FileNotFoundError:
                 self.user_incomes = {}
                 print("💰 No existing incomes file, starting fresh")
+            except Exception as e:
+                print(f"❌ Error loading incomes: {e}")
+                self.user_incomes = {}
                 
-            # Load other data files similarly...
+            print("✅ Data loading completed")
             
         except Exception as e:
             print(f"❌ Error loading data: {e}")
