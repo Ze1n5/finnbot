@@ -204,27 +204,6 @@ class SimpleFinnBot:
             ]
         }
 
-
-    def save_user_categories(self):
-        """Save user categories to persistent storage"""
-        try:
-            categories_file = "/data/user_categories.json"
-            with open(categories_file, 'w') as f:
-                json.dump(self.user_categories, f, indent=2)
-            print(f"💾 User categories saved to {categories_file}")
-        except Exception as e:
-            print(f"❌ Error saving user categories: {e}")
-
-    def save_user_languages(self):
-        """Save user languages to persistent storage"""
-        try:
-            languages_file = "/data/user_languages.json"
-            with open(languages_file, 'w') as f:
-                json.dump(self.user_languages, f, indent=2)
-            print(f"💾 User languages saved to {languages_file}")
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
-
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
         data = {
@@ -283,6 +262,24 @@ class SimpleFinnBot:
                 self.user_incomes = {}
                 print("💰 No existing incomes file, starting fresh")
                 
+            # Load user categories
+            try:
+                with open('user_categories.json', 'r') as f:
+                    self.user_categories = json.load(f)
+                print(f"📁 Loaded categories for {len(self.user_categories)} users")
+            except FileNotFoundError:
+                self.user_categories = {}
+                print("📁 No existing user categories file, starting fresh")
+                
+            # Load user languages
+            try:
+                with open('user_languages.json', 'r') as f:
+                    self.user_languages = json.load(f)
+                print(f"🌐 Loaded languages for {len(self.user_languages)} users")
+            except FileNotFoundError:
+                self.user_languages = {}
+                print("🌐 No existing user languages file, starting fresh")
+                
         except Exception as e:
             print(f"❌ Error loading data: {e}")
 
@@ -303,6 +300,24 @@ class SimpleFinnBot:
             print("💾 Incomes saved to incomes.json")
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
+
+    def save_user_categories(self):
+        """Save user categories to current directory"""
+        try:
+            with open('user_categories.json', 'w') as f:
+                json.dump(self.user_categories, f, indent=2)
+            print("💾 User categories saved to user_categories.json")
+        except Exception as e:
+            print(f"❌ Error saving user categories: {e}")
+
+    def save_user_languages(self):
+        """Save user languages to current directory"""
+        try:
+            with open('user_languages.json', 'w') as f:
+                json.dump(self.user_languages, f, indent=2)
+            print("💾 User languages saved to user_languages.json")
+        except Exception as e:
+            print(f"❌ Error saving user languages: {e}")
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""

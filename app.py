@@ -8,8 +8,6 @@ import signal
 from datetime import datetime
 from flask import Flask, jsonify, request
 from simple_bot import SimpleFinnBot
-import psycopg2
-from urllib.parse import urlparse
 
 
 # ========== PERSISTENT STORAGE SETUP ==========
@@ -54,75 +52,6 @@ for user_id, transactions in bot_instance.transactions.items():
         print(f"      💰 {txn.get('type', 'unknown')}: {txn.get('amount', 0)} - {txn.get('description', 'no desc')}")
 
 print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
-
-import psycopg2
-from urllib.parse import urlparse
-
-def get_db_connection():
-    """Get PostgreSQL connection"""
-    database_url = os.environ.get('DATABASE_URL')
-    if not database_url:
-        print("❌ No DATABASE_URL found")
-        return None
-    
-    try:
-        result = urlparse(database_url)
-        conn = psycopg2.connect(
-            database=result.path[1:],
-            user=result.username,
-            password=result.password,
-            host=result.hostname,
-            port=result.port
-        )
-        return conn
-    except Exception as e:
-        print(f"❌ Database connection error: {e}")
-        return None
-
-def init_db():
-    """Initialize database tables"""
-    conn = get_db_connection()
-    if not conn:
-        print("❌ No database connection - running in memory mode")
-        return
-    
-    try:
-        cur = conn.cursor()
-        
-        # Create transactions table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT,
-                amount DECIMAL(10,2),
-                description TEXT,
-                category TEXT,
-                type TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create incomes table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS incomes (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT UNIQUE,
-                amount DECIMAL(10,2),
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        print("✅ PostgreSQL database tables initialized")
-        
-    except Exception as e:
-        print(f"❌ Database error: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-# Call this when app starts
-init_db()
 
 # ========== SHUTDOWN HANDLER ==========
 def save_all_data():
@@ -188,31 +117,6 @@ def debug_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route('/api/db-check')
-def db_check():
-    """Check database connection"""
-    try:
-        conn = get_db_connection()
-        if conn:
-            cur = conn.cursor()
-            cur.execute('SELECT COUNT(*) FROM transactions')
-            transaction_count = cur.fetchone()[0]
-            
-            cur.execute('SELECT COUNT(*) FROM incomes') 
-            income_count = cur.fetchone()[0]
-            
-            conn.close()
-            
-            return jsonify({
-                "status": "connected",
-                "transaction_count": transaction_count,
-                "income_count": income_count
-            })
-        else:
-            return jsonify({"status": "no_connection"})
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)})
-
 @app.route('/health')
 def health():
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
