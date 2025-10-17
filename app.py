@@ -186,6 +186,77 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/hard-reset', methods=['POST'])
+def hard_reset():
+    """COMPLETELY clear all transactions from PostgreSQL"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Count before
+        cur.execute('SELECT COUNT(*) FROM transactions')
+        before_count = cur.fetchone()[0]
+        
+        # DELETE ALL transactions
+        cur.execute('DELETE FROM transactions')
+        
+        # Count after
+        cur.execute('SELECT COUNT(*) FROM transactions')
+        after_count = cur.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        # Also clear the bot's memory
+        bot_instance.transactions = {}
+        
+        return jsonify({
+            "message": "COMPLETE RESET - All transactions deleted from PostgreSQL",
+            "deleted_count": before_count,
+            "remaining_count": after_count
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/check-db')
+def check_db():
+    """Check database content"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "No database connection"})
+    
+    try:
+        cur = conn.cursor()
+        
+        # Get transaction count
+        cur.execute('SELECT COUNT(*) FROM transactions')
+        transaction_count = cur.fetchone()[0]
+        
+        # Get sample transactions
+        cur.execute('SELECT user_id, amount, description, type FROM transactions LIMIT 5')
+        sample_transactions = cur.fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            "transaction_count": transaction_count,
+            "sample_transactions": [
+                {
+                    "user_id": row[0],
+                    "amount": float(row[1]),
+                    "description": row[2],
+                    "type": row[3]
+                } for row in sample_transactions
+            ]
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
 @app.route('/api/hard-reset')
 def hard_reset():
     """COMPLETELY clear all transactions"""
