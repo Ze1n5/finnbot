@@ -8,8 +8,76 @@ import signal
 from datetime import datetime
 from flask import Flask, jsonify, request
 from simple_bot import SimpleFinnBot
+import psycopg2
+from urllib.parse import urlparse
 
+def get_db_connection():
+    """Get PostgreSQL connection"""
+    database_url = os.environ.get('DATABASE_URL')
+    if not database_url:
+        print("❌ No DATABASE_URL environment variable found")
+        return None
+    
+    try:
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
 
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    if not conn:
+        print("❌ No database connection - tables not created")
+        return
+    
+    try:
+        cur = conn.cursor()
+        
+        # Create transactions table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                description TEXT,
+                category TEXT,
+                type TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create incomes table
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS incomes (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT UNIQUE NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes for better performance
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)')
+        
+        conn.commit()
+        conn.close()
+        print("✅ PostgreSQL database tables initialized")
+        
+    except Exception as e:
+        print(f"❌ Database initialization error: {e}")
+
+# Initialize database when app starts
+init_db()
 # ========== PERSISTENT STORAGE SETUP ==========
 def setup_persistent_storage():
     """Setup persistent storage - force /data on Railway"""
@@ -66,6 +134,37 @@ def save_all_data():
         print("✅ All data saved successfully!")
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
+
+@app.route('/api/debug-transactions')
+def debug_transactions():
+    """Debug transaction loading issue"""
+    try:
+        # Check what's in the bot instance RIGHT NOW
+        bot_data = {
+            "transactions_count": len(bot_instance.transactions),
+            "transactions_users": list(bot_instance.transactions.keys()),
+            "user_659184170_count": len(bot_instance.transactions.get(659184170, [])),
+            "user_659184170_sample": bot_instance.transactions.get(659184170, [])[:2] if bot_instance.transactions.get(659184170) else []
+        }
+        
+        # Also check the file directly
+        try:
+            with open('transactions.json', 'r') as f:
+                file_content = json.load(f)
+            file_data = {
+                "file_user_659184170_count": len(file_content.get('659184170', [])),
+                "file_user_659184170_sample": file_content.get('659184170', [])[:2] if file_content.get('659184170') else []
+            }
+        except Exception as e:
+            file_data = {"file_error": str(e)}
+        
+        return jsonify({
+            "bot_instance": bot_data,
+            "file_content": file_data
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/save-data')
 def save_data():

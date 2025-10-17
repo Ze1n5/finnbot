@@ -12,6 +12,7 @@ import signal
 import psycopg2
 from urllib.parse import urlparse
 
+
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
 def get_persistent_path(filename):
@@ -145,6 +146,135 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
+    def get_db_connection(self):
+        """Get PostgreSQL connection"""
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            print("❌ No DATABASE_URL environment variable found")
+            return None
+        
+        try:
+            result = urlparse(database_url)
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port
+            )
+            return conn
+        except Exception as e:
+            print(f"❌ Database connection error: {e}")
+            return None
+
+    def load_all_data(self):
+        """Load all data from PostgreSQL"""
+        print("🔄 Loading data from PostgreSQL...")
+        
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ No database connection - starting with empty data")
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # Load transactions
+            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            transactions_data = cur.fetchall()
+            
+            self.transactions = {}
+            for user_id, amount, description, category, trans_type in transactions_data:
+                user_id = int(user_id)
+                if user_id not in self.transactions:
+                    self.transactions[user_id] = []
+                
+                self.transactions[user_id].append({
+                    'amount': float(amount),
+                    'description': description,
+                    'category': category,
+                    'type': trans_type,
+                    'date': datetime.now().isoformat()
+                })
+            
+            # Load incomes
+            cur.execute('SELECT user_id, amount FROM incomes')
+            incomes_data = cur.fetchall()
+            
+            self.user_incomes = {}
+            for user_id, amount in incomes_data:
+                self.user_incomes[int(user_id)] = float(amount)
+            
+            # Load user categories
+            self.user_categories = {}  # We'll add this table later
+            # Load user languages  
+            self.user_languages = {}   # We'll add this table later
+            
+            conn.close()
+            print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error loading from database: {e}")
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
+
+    def save_transactions(self):
+        """Save transactions to PostgreSQL"""
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ Cannot save - no database connection")
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # Save transactions
+            transaction_count = 0
+            for user_id, transactions in self.transactions.items():
+                for txn in transactions:
+                    cur.execute(
+                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                    )
+                    transaction_count += 1
+            
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved {transaction_count} transactions to PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error saving to database: {e}")
+
+    def save_incomes(self):
+        """Save incomes to PostgreSQL"""
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ Cannot save - no database connection")
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # Save incomes
+            for user_id, amount in self.user_incomes.items():
+                cur.execute(
+                    'INSERT INTO incomes (user_id, amount) VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET amount = EXCLUDED.amount',
+                    (user_id, amount)
+                )
+            
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved {len(self.user_incomes)} incomes to PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error saving incomes to database: {e}")
+
     def __init__(self):
         # Income categories (shared for all users)
         self.income_categories = {
@@ -240,84 +370,7 @@ class SimpleFinnBot:
         
         # Default to 'wants' for unknown categories
         return 'wants'
-    
-    def load_all_data(self):
-        """Load all data from current directory"""
-        try:
-            # Load transactions
-            try:
-                with open('transactions.json', 'r') as f:
-                    self.transactions = json.load(f)
-                print(f"📊 Loaded transactions for {len(self.transactions)} users")
-            except FileNotFoundError:
-                self.transactions = {}
-                print("📊 No existing transactions file, starting fresh")
-            
-            # Load incomes
-            try:
-                with open('incomes.json', 'r') as f:
-                    self.user_incomes = json.load(f)
-                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
-            except FileNotFoundError:
-                self.user_incomes = {}
-                print("💰 No existing incomes file, starting fresh")
-                
-            # Load user categories
-            try:
-                with open('user_categories.json', 'r') as f:
-                    self.user_categories = json.load(f)
-                print(f"📁 Loaded categories for {len(self.user_categories)} users")
-            except FileNotFoundError:
-                self.user_categories = {}
-                print("📁 No existing user categories file, starting fresh")
-                
-            # Load user languages
-            try:
-                with open('user_languages.json', 'r') as f:
-                    self.user_languages = json.load(f)
-                print(f"🌐 Loaded languages for {len(self.user_languages)} users")
-            except FileNotFoundError:
-                self.user_languages = {}
-                print("🌐 No existing user languages file, starting fresh")
-                
-        except Exception as e:
-            print(f"❌ Error loading data: {e}")
 
-    def save_transactions(self):
-        """Save transactions to current directory"""
-        try:
-            with open('transactions.json', 'w') as f:
-                json.dump(self.transactions, f, indent=2)
-            print("💾 Transactions saved to transactions.json")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
-
-    def save_incomes(self):
-        """Save incomes to current directory"""
-        try:
-            with open('incomes.json', 'w') as f:
-                json.dump(self.user_incomes, f, indent=2)
-            print("💾 Incomes saved to incomes.json")
-        except Exception as e:
-            print(f"❌ Error saving incomes: {e}")
-
-    def save_user_categories(self):
-        """Save user categories to current directory"""
-        try:
-            with open('user_categories.json', 'w') as f:
-                json.dump(self.user_categories, f, indent=2)
-            print("💾 User categories saved to user_categories.json")
-        except Exception as e:
-            print(f"❌ Error saving user categories: {e}")
-
-    def save_user_languages(self):
-        """Save user languages to current directory"""
-        try:
-            with open('user_languages.json', 'w') as f:
-                json.dump(self.user_languages, f, indent=2)
-            print("💾 User languages saved to user_languages.json")
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
