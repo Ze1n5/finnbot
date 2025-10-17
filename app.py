@@ -66,6 +66,16 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
+@app.route('/api/save-data')
+def save_data():
+    """Manual save endpoint"""
+    try:
+        bot_instance.save_transactions()
+        bot_instance.save_incomes()
+        return jsonify({"status": "saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/')
 def home():
     return jsonify({
@@ -135,7 +145,14 @@ def webhook():
         print(f"📨 Received webhook update")
         
         # Process the update in a separate thread to avoid timeout
-        threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
+        def process_and_save():
+            bot_instance.process_update(update_data)
+            # ADD THESE SAVE CALLS:
+            bot_instance.save_transactions()
+            bot_instance.save_incomes()
+            print("💾 Data saved to persistent storage")
+        
+        threading.Thread(target=process_and_save).start()
         
         return jsonify({"status": "success"}), 200
 
