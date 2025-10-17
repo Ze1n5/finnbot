@@ -192,7 +192,12 @@ class SimpleFinnBot:
         try:
             cur = conn.cursor()
             
-            # Load transactions
+            # DEBUG: Check database count first
+            cur.execute('SELECT COUNT(*) FROM transactions')
+            db_count = cur.fetchone()[0]
+            print(f"🔍 DEBUG: Database has {db_count} transactions")
+            
+            # Load transactions FROM POSTGRESQL ONLY
             cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
             transactions_data = cur.fetchall()
             
@@ -218,16 +223,12 @@ class SimpleFinnBot:
             for user_id, amount in incomes_data:
                 self.user_incomes[int(user_id)] = float(amount)
             
-            # Load user categories
-            self.user_categories = {}  # We'll add this table later
-            # Load user languages  
-            self.user_languages = {}   # We'll add this table later
-            
             conn.close()
             print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error loading from database: {e}")
+            # Don't fall back to files!
             self.transactions = {}
             self.user_incomes = {}
             self.user_categories = {}
