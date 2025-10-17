@@ -3018,14 +3018,13 @@ if not hasattr(bot_instance, 'reminder_started'):
     print("✅ Periodic reminder checker started")
 
 if __name__ == "__main__":
-    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-        print("❌ ERROR: Please set your actual bot token in the .env file")
-        exit(1)
+    if not BOT_TOKEN:
+        print("❌ ERROR: BOT_TOKEN environment variable not set")
+        print("⚠️  Running without Telegram bot features")
+    else:
+        print("✅ Bot token found - setting webhook")
+        set_webhook()
     
-    # Set webhook when starting
-    set_webhook()
-    
-    # Start Flask app
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting webhook server on port {port}...")
     flask_app.run(host='0.0.0.0', port=port, debug=False)
