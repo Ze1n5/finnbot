@@ -146,6 +146,15 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
+    def save_user_languages(self):
+        """Save user languages - placeholder for now"""
+        print("💾 User languages would be saved here")
+        # We'll implement this later if needed
+
+    def save_user_categories(self):
+        """Save user categories - placeholder for now""" 
+        print("💾 User categories would be saved here")
+        # We'll implement this later if needed
     def get_db_connection(self):
         """Get PostgreSQL connection"""
         database_url = os.environ.get('DATABASE_URL')
