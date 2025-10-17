@@ -37,47 +37,71 @@ def init_db():
     conn = get_db_connection()
     if not conn:
         print("❌ No database connection - tables not created")
-        return
+        return False
     
     try:
         cur = conn.cursor()
         
-        # Create transactions table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                description TEXT,
-                category TEXT,
-                type TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        # Check if tables exist first
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'transactions'
+            );
+        """)
+        transactions_exists = cur.fetchone()[0]
         
-        # Create incomes table
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS incomes (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT UNIQUE NOT NULL,
-                amount DECIMAL(10,2) NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        if not transactions_exists:
+            print("🔄 Creating transactions table...")
+            cur.execute('''
+                CREATE TABLE transactions (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    amount DECIMAL(10,2) NOT NULL,
+                    description TEXT,
+                    category TEXT,
+                    type TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
         
-        # Create indexes for better performance
+        # Check if incomes table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'incomes'
+            );
+        """)
+        incomes_exists = cur.fetchone()[0]
+        
+        if not incomes_exists:
+            print("🔄 Creating incomes table...")
+            cur.execute('''
+                CREATE TABLE incomes (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT UNIQUE NOT NULL,
+                    amount DECIMAL(10,2) NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        
+        # Create indexes
+        print("🔄 Creating indexes...")
         cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
         cur.execute('CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)')
         
         conn.commit()
         conn.close()
         print("✅ PostgreSQL database tables initialized")
+        return True
         
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
+        return False
 
 # Initialize database when app starts
 init_db()
+
 # ========== PERSISTENT STORAGE SETUP ==========
 def setup_persistent_storage():
     """Setup persistent storage - force /data on Railway"""
@@ -134,6 +158,32 @@ def save_all_data():
         print("✅ All data saved successfully!")
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
+
+@app.route('/api/init-db')
+def api_init_db():
+    """Manual database initialization"""
+    success = init_db()
+    return jsonify({"success": success, "message": "Database initialized"})
+
+@app.route('/api/check-tables')
+def check_tables():
+    """Check if tables exist"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "No database connection"})
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        tables = [row[0] for row in cur.fetchall()]
+        conn.close()
+        return jsonify({"tables": tables})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/api/debug-transactions')
 def debug_transactions():
