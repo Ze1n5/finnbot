@@ -275,23 +275,19 @@ def debug_storage():
     }
     return jsonify(storage_info)
 
-@app.route('/webhook', methods=['POST', 'GET'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     """Receive updates from Telegram for SimpleFinnBot"""
-    if request.method == 'GET':
-        return jsonify({"status": "healthy", "message": "Webhook endpoint active"})
-    
     if request.method == 'POST':
         update_data = request.get_json()
         print(f"📨 Received webhook update")
         
-        # Process the update in a separate thread to avoid timeout
         def process_and_save():
             bot_instance.process_update(update_data)
-            # ADD THESE SAVE CALLS:
+            # SAVE DATA AFTER PROCESSING
             bot_instance.save_transactions()
             bot_instance.save_incomes()
-            print("💾 Data saved to persistent storage")
+            print("💾 Data saved after webhook processing")
         
         threading.Thread(target=process_and_save).start()
         

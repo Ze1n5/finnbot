@@ -204,27 +204,6 @@ class SimpleFinnBot:
             ]
         }
 
-    
-
-    def save_transactions(self):
-        """Save transactions to persistent storage"""
-        try:
-            transactions_file = "/data/transactions.json"
-            with open(transactions_file, 'w') as f:
-                json.dump(self.transactions, f, indent=2)
-            print(f"💾 Transactions saved to {transactions_file}")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
-
-    def save_incomes(self):
-        """Save incomes to persistent storage"""
-        try:
-            incomes_file = "/data/incomes.json"
-            with open(incomes_file, 'w') as f:
-                json.dump(self.user_incomes, f, indent=2)
-            print(f"💾 Incomes saved to {incomes_file}")
-        except Exception as e:
-            print(f"❌ Error saving incomes: {e}")
 
     def save_user_categories(self):
         """Save user categories to persistent storage"""
@@ -284,26 +263,46 @@ class SimpleFinnBot:
         return 'wants'
     
     def load_all_data(self):
-        """Load data with database fallback to memory"""
-        print("🔄 Loading data...")
-        
-        # Try database first
-        if self.try_load_from_db():
-            print("✅ Data loaded from database")
-            return
-        
-        # Fallback to memory (data will be lost on restart)
-        self.transactions = {}
-        self.user_incomes = {}
-        print("⚠️  Running in memory mode - data will be lost on restart")
+        """Load all data from current directory"""
+        try:
+            # Load transactions
+            try:
+                with open('transactions.json', 'r') as f:
+                    self.transactions = json.load(f)
+                print(f"📊 Loaded transactions for {len(self.transactions)} users")
+            except FileNotFoundError:
+                self.transactions = {}
+                print("📊 No existing transactions file, starting fresh")
+            
+            # Load incomes
+            try:
+                with open('incomes.json', 'r') as f:
+                    self.user_incomes = json.load(f)
+                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
+            except FileNotFoundError:
+                self.user_incomes = {}
+                print("💰 No existing incomes file, starting fresh")
+                
+        except Exception as e:
+            print(f"❌ Error loading data: {e}")
 
     def save_transactions(self):
-        """Save transactions with database fallback"""
-        # Try to save to database
-        if self.try_save_to_db():
-            print("💾 Data saved to database")
-        else:
-            print("⚠️  Data saved to memory only (will be lost on restart)")
+        """Save transactions to current directory"""
+        try:
+            with open('transactions.json', 'w') as f:
+                json.dump(self.transactions, f, indent=2)
+            print("💾 Transactions saved to transactions.json")
+        except Exception as e:
+            print(f"❌ Error saving transactions: {e}")
+
+    def save_incomes(self):
+        """Save incomes to current directory"""
+        try:
+            with open('incomes.json', 'w') as f:
+                json.dump(self.user_incomes, f, indent=2)
+            print("💾 Incomes saved to incomes.json")
+        except Exception as e:
+            print(f"❌ Error saving incomes: {e}")
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
