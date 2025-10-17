@@ -756,8 +756,8 @@ def serve_mini_app():
 
 def set_webhook():
     """Set Telegram webhook URL for SimpleFinnBot"""
-    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-        print("❌ Cannot set webhook - bot token not configured")
+    if not BOT_TOKEN:
+        print("❌ Cannot set webhook - BOT_TOKEN environment variable not configured")
         return
     
     try:
@@ -777,19 +777,16 @@ def set_webhook():
 # ========== MAIN EXECUTION ==========
 
 if __name__ == "__main__":
-    # Railway will set PORT environment variable
     port = int(os.environ.get("PORT", 8080))
     
-    # Check for bot token but don't exit - just warn
-    # NEW CODE (checking environment variable):
-    if not BOT_TOKEN:
-        print("❌ ERROR: BOT_TOKEN environment variable not set")
+    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+        print("❌ WARNING: Bot token not set. Telegram bot features will not work.")
     else:
-        print("✅ Bot token found - Telegram bot is active")
         set_webhook()
+        print("✅ Bot token found - Telegram bot is active")
     
     print(f"🚀 Starting FinnBot on port {port}...")
-    print(f"🎯 Persistent directory: {PERSISTENT_DIR}")
-    print(f"📊 Loaded data: {len(bot_instance.transactions)} users")
     
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Use Waitress for production instead of Flask dev server
+    from waitress import serve
+    serve(app, host='0.0.0.0', port=port)
