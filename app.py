@@ -257,38 +257,6 @@ def check_db():
     except Exception as e:
         return jsonify({"error": str(e)})
 
-@app.route('/api/hard-reset')
-def hard_reset():
-    """COMPLETELY clear all transactions"""
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "No database connection"})
-    
-    try:
-        cur = conn.cursor()
-        
-        # Count before
-        cur.execute('SELECT COUNT(*) FROM transactions')
-        before_count = cur.fetchone()[0]
-        
-        # DELETE ALL transactions
-        cur.execute('DELETE FROM transactions')
-        
-        # Count after
-        cur.execute('SELECT COUNT(*) FROM transactions')
-        after_count = cur.fetchone()[0]
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            "message": "COMPLETE RESET - All transactions deleted",
-            "deleted_count": before_count,
-            "remaining_count": after_count
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)})
 
 @app.route('/api/clear-duplicates')
 def clear_duplicates():
