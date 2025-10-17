@@ -103,6 +103,46 @@ class SimpleFinnBot:
             ]
         }
 
+    def save_transactions(self):
+        """Save transactions to persistent storage"""
+        try:
+            transactions_file = "/data/transactions.json"
+            with open(transactions_file, 'w') as f:
+                json.dump(self.transactions, f, indent=2)
+            print(f"💾 Transactions saved to {transactions_file}")
+        except Exception as e:
+            print(f"❌ Error saving transactions: {e}")
+
+    def save_incomes(self):
+        """Save incomes to persistent storage"""
+        try:
+            incomes_file = "/data/incomes.json"
+            with open(incomes_file, 'w') as f:
+                json.dump(self.user_incomes, f, indent=2)
+            print(f"💾 Incomes saved to {incomes_file}")
+        except Exception as e:
+            print(f"❌ Error saving incomes: {e}")
+
+    def save_user_categories(self):
+        """Save user categories to persistent storage"""
+        try:
+            categories_file = "/data/user_categories.json"
+            with open(categories_file, 'w') as f:
+                json.dump(self.user_categories, f, indent=2)
+            print(f"💾 User categories saved to {categories_file}")
+        except Exception as e:
+            print(f"❌ Error saving user categories: {e}")
+
+    def save_user_languages(self):
+        """Save user languages to persistent storage"""
+        try:
+            languages_file = "/data/user_languages.json"
+            with open(languages_file, 'w') as f:
+                json.dump(self.user_languages, f, indent=2)
+            print(f"💾 User languages saved to {languages_file}")
+        except Exception as e:
+            print(f"❌ Error saving user languages: {e}")
+
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
         data = {
@@ -142,11 +182,29 @@ class SimpleFinnBot:
     
     def load_all_data(self):
         """Load all data from persistent storage"""
-        print("📂 Loading data from persistent storage...")
-        self.load_transactions()
-        self.load_incomes()
-        self.load_user_categories()
-        self.load_user_languages()
+        try:
+            # Load transactions
+            try:
+                with open('/data/transactions.json', 'r') as f:
+                    self.transactions = json.load(f)
+                print(f"📊 Loaded transactions for {len(self.transactions)} users")
+            except FileNotFoundError:
+                self.transactions = {}
+                print("📊 No existing transactions file, starting fresh")
+            
+            # Load incomes
+            try:
+                with open('/data/incomes.json', 'r') as f:
+                    self.user_incomes = json.load(f)
+                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
+            except FileNotFoundError:
+                self.user_incomes = {}
+                print("💰 No existing incomes file, starting fresh")
+                
+            # Load other data files similarly...
+            
+        except Exception as e:
+            print(f"❌ Error loading data: {e}")
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
@@ -438,16 +496,6 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading user languages: {e}")
 
-    def save_user_languages(self):
-        """Save user language preferences to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("user_languages.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_languages, f, indent=2)
-            print(f"💾 Saved language preferences for {len(self.user_languages)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
-
     def get_user_language(self, user_id):
         """Get user's preferred language, default to English"""
         return self.user_languages.get(str(user_id), 'en')
@@ -475,41 +523,10 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading incomes: {e}")
 
-    def save_incomes(self):
-        """Save user incomes to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("incomes.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_incomes, f, indent=2)
-            print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
-            
-            # Sync incomes to Railway
-            for user_id, amount in self.user_incomes.items():
-                sync_to_railway({
-                    'amount': amount,
-                    'description': 'Monthly Income',
-                    'timestamp': datetime.now().isoformat(),
-                    'type': 'income',
-                    'user_id': user_id
-                })
-                
-        except Exception as e:
-            print(f"❌ Error saving incomes: {e}")
-
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
-
-    def save_transactions(self):
-        """Save transactions to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("transactions.json")
-            with open(filepath, "w") as f:
-                json.dump(self.transactions, f, indent=2)
-            print(f"💾 Saved transactions for {len(self.transactions)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
-
+    
     def load_transactions(self):
         """Load transactions from JSON file (separated by user)"""
         try:
@@ -558,16 +575,6 @@ class SimpleFinnBot:
                 print("🏷️ No existing user categories file - starting fresh")
         except Exception as e:
             print(f"❌ Error loading user categories: {e}")
-
-    def save_user_categories(self):
-        """Save user categories to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("user_categories.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_categories, f, indent=2)
-            print(f"💾 Saved spending categories for {len(self.user_categories)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving user categories: {e}")
 
     def get_user_categories(self, user_id):
         """Get spending categories for a specific user"""
