@@ -55,27 +55,35 @@ for user_id, transactions in bot_instance.transactions.items():
 
 print(f"📊 Bot initialized with {len(bot_instance.transactions)} users' transactions")
 
+import psycopg2
+from urllib.parse import urlparse
+
 def get_db_connection():
     """Get PostgreSQL connection"""
     database_url = os.environ.get('DATABASE_URL')
     if not database_url:
+        print("❌ No DATABASE_URL found")
         return None
     
-    result = urlparse(database_url)
-    conn = psycopg2.connect(
-        database=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port
-    )
-    return conn
+    try:
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
 
 def init_db():
     """Initialize database tables"""
     conn = get_db_connection()
     if not conn:
-        print("❌ No database connection - running in file mode")
+        print("❌ No database connection - running in memory mode")
         return
     
     try:
@@ -105,12 +113,13 @@ def init_db():
         ''')
         
         conn.commit()
-        print("✅ Database tables initialized")
+        print("✅ PostgreSQL database tables initialized")
         
     except Exception as e:
         print(f"❌ Database error: {e}")
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 # Call this when app starts
 init_db()
