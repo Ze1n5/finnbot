@@ -5,72 +5,45 @@ import requests
 import time
 from dotenv import load_dotenv
 from datetime import datetime
+from flask import Flask, jsonify, request
 import threading
 import atexit
 import signal
 
-# ========== CONSISTENT PERSISTENT STORAGE ==========
-# Use the same logic as app.py
-def setup_persistent_storage():
-    """Setup persistent storage - force /data on Railway"""
-    # Always use /data on Railway
-    if os.environ.get('RAILWAY_ENVIRONMENT'):
-        storage_dir = "/data"
-        print("🎯 FORCING Railway persistent storage: /data")
-    else:
-        storage_dir = "."
-        print("⚠️  Using local directory for storage")
-    
-    # Create directory if it doesn't exist
-    os.makedirs(storage_dir, exist_ok=True)
-    return storage_dir
-
-PERSISTENT_DIR = setup_persistent_storage()
+PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
 def get_persistent_path(filename):
-    """Get path in persistent storage directory"""
     return os.path.join(PERSISTENT_DIR, filename)
 
-print(f"📁 Persistent directory: {PERSISTENT_DIR}")
+print(f"📁 Using persistent directory: {PERSISTENT_DIR}")
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-class SimpleFinnBot:
-    def migrate_local_data(self):
-        """Migrate data from local files to persistent storage if needed"""
-        try:
-            print("🔄 Checking for local data migration...")
-            
-            local_files = ["transactions.json", "incomes.json", "user_categories.json", "user_languages.json"]
-            migrated_count = 0
-            
-            for file in local_files:
-                local_path = file  # Current directory
-                persistent_path = get_persistent_path(file)
-                
-                # If local file exists but persistent doesn't, copy it
-                if os.path.exists(local_path) and not os.path.exists(persistent_path):
-                    print(f"📦 Migrating {file} to persistent storage...")
-                    with open(local_path, 'r') as src:
-                        data = src.read()
-                    with open(persistent_path, 'w') as dst:
-                        dst.write(data)
-                    migrated_count += 1
-                    print(f"✅ Migrated {file}")
-            
-            if migrated_count > 0:
-                print(f"🎉 Successfully migrated {migrated_count} files to persistent storage")
-                # Reload data from persistent storage
-                self.load_all_data()
-            else:
-                print("📝 No migration needed - data already in persistent storage")
-                
-        except Exception as e:
-            print(f"❌ Error during data migration: {e}")
+# Initialize Flask app FIRST
+flask_app = Flask(__name__)
 
+@flask_app.before_request
+def log_request_info():
+    print(f"🌐 Incoming: {request.method} {request.path} - From: {request.remote_addr}")
+
+def sync_to_railway(transaction_data):
+    """Send transaction data to Railway web app"""
+    try:
+        railway_url = "https://finnbot-production.up.railway.app"
+        response = requests.post(f"{railway_url}/api/add-transaction", 
+                            json=transaction_data,
+                            timeout=5)
+        if response.status_code == 200:
+            print("✅ Synced to Railway")
+        else:
+            print(f"⚠️ Failed to sync to Railway: {response.status_code}")
+    except Exception as e:
+        print(f"⚠️ Railway sync failed: {e}")
+
+class SimpleFinnBot:
     def __init__(self):
         # Income categories (shared for all users)
         self.income_categories = {
@@ -105,10 +78,7 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Try to migrate any local data to persistent storage
-        self.migrate_local_data()
-    
-        # Load data from persistent storage
+        # Load existing data
         self.load_all_data()
         
         # 50/30/20 tracking
@@ -132,26 +102,6 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
-
-    def verify_data_loading(self):
-        """Verify that data is being loaded from persistent storage"""
-        print("🔍 Verifying data loading...")
-        
-        # Check each data file
-        data_files = ["transactions.json", "incomes.json", "user_categories.json", "user_languages.json"]
-        for file in data_files:
-            filepath = get_persistent_path(file)
-            if os.path.exists(filepath):
-                print(f"✅ {file} exists at {filepath}")
-                # Check file content
-                try:
-                    with open(filepath, 'r') as f:
-                        content = f.read()
-                        print(f"   Content length: {len(content)} characters")
-                except Exception as e:
-                    print(f"   Error reading file: {e}")
-            else:
-                print(f"📭 {file} does not exist yet at {filepath}")
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
@@ -197,106 +147,40 @@ class SimpleFinnBot:
         self.load_incomes()
         self.load_user_categories()
         self.load_user_languages()
-        self.verify_data_loading()
 
     def load_transactions(self):
-    """Load transactions from persistent JSON file - SIMPLE VERSION"""
-    try:
-        filepath = get_persistent_path("transactions.json")
-        print(f"🔄 LOADING from: {filepath}")
-        
-        if os.path.exists(filepath):
-            # Read the raw file content first
-            with open(filepath, 'r') as f:
-                raw_content = f.read().strip()
-            
-            print(f"📄 RAW FILE CONTENT: '{raw_content}'")
-            print(f"📄 FILE SIZE: {len(raw_content)} chars")
-            
-            if not raw_content or raw_content == '{}' or raw_content == 'null':
-                print("❌ FILE IS EMPTY OR INVALID - starting fresh")
+        """Load transactions from persistent JSON file"""
+        try:
+            filepath = get_persistent_path("transactions.json")
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                
+                # Safely convert data to proper format
                 self.transactions = {}
-                return
-            
-            # Parse JSON
-            data = json.loads(raw_content)
-            print(f"📄 PARSED DATA: {data}")
-            
-            # Convert to proper format
+                for key, value in data.items():
+                    try:
+                        user_id = int(key)
+                        if isinstance(value, list):
+                            self.transactions[user_id] = value
+                        else:
+                            print(f"⚠️ Invalid data for user {user_id}, resetting")
+                            self.transactions[user_id] = []
+                    except (ValueError, TypeError):
+                        print(f"⚠️ Skipping invalid user ID: {key}")
+                
+                print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
+            else:
+                print("📂 No existing transactions file, starting fresh")
+                self.transactions = {}
+        except Exception as e:
+            print(f"❌ Error loading transactions: {e}")
             self.transactions = {}
-            for key, value in data.items():
-                try:
-                    user_id = int(key)
-                    if isinstance(value, list):
-                        self.transactions[user_id] = value
-                        print(f"✅ LOADED {len(value)} transactions for user {user_id}")
-                    else:
-                        print(f"❌ INVALID DATA for user {user_id}")
-                        self.transactions[user_id] = []
-                except:
-                    print(f"❌ SKIPPING invalid user ID: {key}")
-            
-            total = sum(len(t) for t in self.transactions.values())
-            print(f"🎯 TOTAL TRANSACTIONS LOADED: {total}")
-            
-        else:
-            print("📭 NO TRANSACTIONS FILE - starting fresh")
-            self.transactions = {}
-            
-    except Exception as e:
-        print(f"💥 CRITICAL LOAD ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        self.transactions = {}
-
-def save_transactions(self):
-    """Save transactions to persistent JSON file - SIMPLE VERSION"""
-    try:
-        filepath = get_persistent_path("transactions.json")
-        total_txns = sum(len(t) for t in self.transactions.values())
-        print(f"💾 SAVING {total_txns} transactions to: {filepath}")
-        
-        # Convert to JSON-serializable format
-        data_to_save = {str(k): v for k, v in self.transactions.items()}
-        
-        # Save with error checking
-        with open(filepath, 'w') as f:
-            json.dump(data_to_save, f, indent=2)
-        
-        # Verify the save
-        if os.path.exists(filepath):
-            file_size = os.path.getsize(filepath)
-            print(f"✅ SAVE SUCCESSFUL - File size: {file_size} bytes")
-        else:
-            print("❌ SAVE FAILED - File not created")
-            
-    except Exception as e:
-        print(f"💥 CRITICAL SAVE ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-
-    def check_data_integrity(self):
-        """Check if data is properly loaded and consistent"""
-        transactions_file = get_persistent_path("transactions.json")
-        file_exists = os.path.exists(transactions_file)
-        file_size = os.path.getsize(transactions_file) if file_exists else 0
-        
-        total_transactions = sum(len(txns) for txns in self.transactions.values())
-        
-        print(f"🔍 Data Integrity Check:")
-        print(f"   Transactions file exists: {file_exists}")
-        print(f"   Transactions file size: {file_size} bytes")
-        print(f"   Transactions in memory: {total_transactions}")
-        print(f"   Users in memory: {len(self.transactions)}")
-        
-        return total_transactions > 0
 
     def load_incomes(self):
         """Load user incomes from persistent JSON file"""
         try:
             filepath = get_persistent_path("incomes.json")
-            print(f"💰 Loading incomes from: {filepath}")
-            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_incomes = json.load(f)
@@ -312,8 +196,6 @@ def save_transactions(self):
         """Load user categories from persistent JSON file"""
         try:
             filepath = get_persistent_path("user_categories.json")
-            print(f"🏷️ Loading categories from: {filepath}")
-            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_categories = json.load(f)
@@ -329,8 +211,6 @@ def save_transactions(self):
         """Load user language preferences from persistent JSON file"""
         try:
             filepath = get_persistent_path("user_languages.json")
-            print(f"🌍 Loading languages from: {filepath}")
-            
             if os.path.exists(filepath):
                 with open(filepath, "r") as f:
                     self.user_languages = json.load(f)
@@ -341,8 +221,6 @@ def save_transactions(self):
         except Exception as e:
             print(f"❌ Error loading user languages: {e}")
             self.user_languages = {}
-
-    # ... rest of your SimpleFinnBot class remains the same ...
     
     def check_daily_reminders(self):
         """Check and send daily reminders to active users"""
@@ -549,6 +427,16 @@ def save_transactions(self):
         if user_id not in self.transactions:
             self.transactions[user_id] = []
         return self.transactions[user_id]
+    
+    def load_user_languages(self):
+        """Load user language preferences"""
+        try:
+            if os.path.exists("user_languages.json"):
+                with open("user_languages.json", "r") as f:
+                    self.user_languages = json.load(f)
+                print(f"🌍 Loaded language preferences for {len(self.user_languages)} users")
+        except Exception as e:
+            print(f"❌ Error loading user languages: {e}")
 
     def save_user_languages(self):
         """Save user language preferences to persistent JSON file"""
@@ -568,6 +456,24 @@ def save_transactions(self):
         """Set user's preferred language"""
         self.user_languages[str(user_id)] = language_code
         self.save_user_languages()
+        
+        def get_user_transactions(self, user_id):
+            """Get transactions for a specific user"""
+            if user_id not in self.transactions:
+                self.transactions[user_id] = []
+            return self.transactions[user_id]
+
+    def load_incomes(self):
+        """Load user incomes from JSON file"""
+        try:
+            if os.path.exists("incomes.json"):
+                with open("incomes.json", "r") as f:
+                    self.user_incomes = json.load(f)
+                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
+            else:
+                print("💰 No existing incomes file")
+        except Exception as e:
+            print(f"❌ Error loading incomes: {e}")
 
     def save_incomes(self):
         """Save user incomes to persistent JSON file"""
@@ -576,6 +482,17 @@ def save_transactions(self):
             with open(filepath, "w") as f:
                 json.dump(self.user_incomes, f, indent=2)
             print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
+            
+            # Sync incomes to Railway
+            for user_id, amount in self.user_incomes.items():
+                sync_to_railway({
+                    'amount': amount,
+                    'description': 'Monthly Income',
+                    'timestamp': datetime.now().isoformat(),
+                    'type': 'income',
+                    'user_id': user_id
+                })
+                
         except Exception as e:
             print(f"❌ Error saving incomes: {e}")
 
@@ -583,6 +500,44 @@ def save_transactions(self):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
 
+    def save_transactions(self):
+        """Save transactions to persistent JSON file"""
+        try:
+            filepath = get_persistent_path("transactions.json")
+            with open(filepath, "w") as f:
+                json.dump(self.transactions, f, indent=2)
+            print(f"💾 Saved transactions for {len(self.transactions)} users to {filepath}")
+        except Exception as e:
+            print(f"❌ Error saving transactions: {e}")
+
+    def load_transactions(self):
+        """Load transactions from JSON file (separated by user)"""
+        try:
+            if os.path.exists("transactions.json"):
+                with open("transactions.json", "r") as f:
+                    data = json.load(f)
+                
+                # Safely convert data to proper format
+                self.transactions = {}
+                for key, value in data.items():
+                    try:
+                        user_id = int(key)
+                        # Ensure value is a list of transactions
+                        if isinstance(value, list):
+                            self.transactions[user_id] = value
+                        else:
+                            print(f"⚠️ Invalid data for user {user_id}, resetting")
+                            self.transactions[user_id] = []
+                    except (ValueError, TypeError):
+                        print(f"⚠️ Skipping invalid user ID: {key}")
+                
+                print(f"📂 Loaded transactions for {len(self.transactions)} users")
+            else:
+                print("📂 No existing transactions file, starting fresh")
+                self.transactions = {}
+        except Exception as e:
+            print(f"❌ Error loading transactions: {e}")
+            self.transactions = {}
 
     def save_user_transaction(self, user_id, transaction):
         """Add transaction for a specific user and save to persistent storage"""
@@ -591,6 +546,18 @@ def save_transactions(self):
             
         self.transactions[user_id].append(transaction)
         self.save_transactions() 
+
+    def load_user_categories(self):
+        """Load user categories from JSON file"""
+        try:
+            if os.path.exists("user_categories.json"):
+                with open("user_categories.json", "r") as f:
+                    self.user_categories = json.load(f)
+                print(f"🏷️ Loaded spending categories for {len(self.user_categories)} users")
+            else:
+                print("🏷️ No existing user categories file - starting fresh")
+        except Exception as e:
+            print(f"❌ Error loading user categories: {e}")
 
     def save_user_categories(self):
         """Save user categories to persistent JSON file"""
@@ -660,7 +627,7 @@ def save_transactions(self):
         }
     
     def extract_amount(self, text):
-        # Clean the text first
+    # Clean the text first
         clean_text = text.strip()
         print(f"🔍 DEBUG extract_amount: text='{clean_text}'")
         
@@ -1825,7 +1792,7 @@ This will help me provide better financial recommendations!"""
 
 💡 *Введіть суму:*
 `5000` - якщо у вас 5,000₴
-`0` - якщо на балансі нічого немає"""
+`0` - якщо готівки немає"""
             else:
                 image_caption = """👋 *Hi! I'm Finn!*
 
@@ -1844,7 +1811,7 @@ How much cash do you have right now? (in UAH)
             # Wait a moment then send the balance question
             time.sleep(1)
             self.onboarding_state[chat_id] = 'awaiting_balance'
-            self.send_message(chat_id, image_caption, parse_mode='Markdown')
+            self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
 
         # Handle balance confirmation
         elif data == "confirm_balance":
@@ -1973,6 +1940,15 @@ You're now ready to use Finn!
                     user_transactions.append(transaction)
                     self.save_transactions()
                     print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
+                    
+                    # Sync to Railway
+                    sync_to_railway({
+                        'amount': amount,
+                        'description': text,
+                        'category': category,
+                        'timestamp': datetime.now().isoformat(),
+                        'type': transaction_type
+                    })
                     
                 except Exception as e:
                     print(f"❌ Error saving transaction: {e}")
@@ -2145,6 +2121,16 @@ You're now ready to use Finn!
                 confirmation = "✅ Мову встановлено українську!"
             
             self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
             
             # Delete the language selection message
             try:
@@ -2157,6 +2143,712 @@ You're now ready to use Finn!
 
 # Initialize bot instance
 bot_instance = SimpleFinnBot()
+
+# Webhook route
+@flask_app.route('/webhook', methods=['POST', 'GET'])
+def webhook():
+    """Receive updates from Telegram"""
+    if request.method == 'GET':
+        return jsonify({"status": "healthy", "message": "Webhook endpoint active"})
+    
+    if request.method == 'POST':
+        update_data = request.get_json()
+        print(f"📨 Received webhook update")
+        
+        # Process the update in a separate thread to avoid timeout
+        threading.Thread(target=bot_instance.process_update, args=(update_data,)).start()
+        
+        return jsonify({"status": "success"}), 200
+    
+@flask_app.route('/debug-categories')
+def debug_categories():
+    """Debug route to check if categories are working"""
+    try:
+        return jsonify({
+            "protected_categories": bot_instance.protected_savings_categories,
+            "user_languages": bot_instance.user_languages,
+            "pending_transactions": len(bot_instance.pending),
+            "transactions_count": len(bot_instance.transactions)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/debug-bot-state')
+def debug_bot_state():
+    """Debug route to check bot internal state"""
+    try:
+        return jsonify({
+            "bot_initialized": bool(bot_instance),
+            "protected_categories": bot_instance.protected_savings_categories,
+            "pending_transactions": dict(bot_instance.pending),
+            "user_languages": bot_instance.user_languages,
+            "transactions_count": len(bot_instance.transactions),
+            "income_categories": bot_instance.income_categories,
+            "category_mapping": bot_instance.category_mapping
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/debug-webhook')
+def debug_webhook():
+    """Debug webhook setup"""
+    try:
+        # Get current webhook info
+        response = requests.get(f"{BASE_URL}/getWebhookInfo")
+        webhook_info = response.json()
+        
+        # Set webhook to your correct URL
+        webhook_url = "https://finnbot-production.up.railway.app/webhook"
+        set_response = requests.post(
+            f"{BASE_URL}/setWebhook",
+            json={"url": webhook_url}
+        )
+        
+        return jsonify({
+            "current_webhook": webhook_info,
+            "set_webhook_result": set_response.json(),
+            "webhook_url": webhook_url,
+            "bot_token_exists": bool(BOT_TOKEN and BOT_TOKEN != "your_bot_token_here")
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Health check route
+@flask_app.route('/', methods=['GET', 'POST'])
+def health_check():
+    if request.method == 'POST':
+        # Handle POST requests gracefully
+        return jsonify({"status": "OK", "message": "FinnBot is running!", "method": "POST"})
+    
+    return jsonify({"status": "OK", "message": "FinnBot is running with webhooks!"})
+
+# Your existing API routes
+@flask_app.route('/api/financial-data')
+def api_financial_data():
+    try:
+        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions from the bot instance
+        all_transactions = bot_instance.transactions
+        print(f"📊 Total users with transactions: {len(all_transactions)}")
+        
+        # Initialize totals
+        balance = 0
+        total_income = 0
+        total_expenses = 0
+        total_savings = 0
+        transaction_count = 0
+        recent_transactions = []
+
+        # Process ALL transactions for calculation
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    print(f"👤 User {user_id}: {len(user_transactions)} transactions")
+                    
+                    # Calculate totals from ALL transactions
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            
+                            print(f"   📝 {trans_type}: {amount} - {description}")
+                            
+                            # CORRECTED BALANCE CALCULATION
+                            if trans_type == 'income':
+                                balance += amount
+                                total_income += amount
+                            elif trans_type == 'expense':
+                                balance -= amount
+                                total_expenses += amount
+                            elif trans_type == 'savings':
+                                balance -= amount  # Money moved to savings
+                                total_savings += amount
+                            elif trans_type == 'debt':
+                                balance += amount  # You receive money as debt
+                            elif trans_type == 'debt_return':
+                                balance -= amount  # You pay back debt
+                            elif trans_type == 'savings_withdraw':
+                                balance += amount  # You take money from savings
+                                total_savings -= amount
+                            
+                            transaction_count += 1
+                    
+                    # Get recent transactions for display (last 5)
+                    for transaction in user_transactions[-5:]:
+                        if isinstance(transaction, dict):
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            description = transaction.get('description', 'Unknown')
+                            category = transaction.get('category', 'Other')
+                            
+                            # Determine emoji and display format
+                            emoji = "💰"
+                            display_name = description
+                            
+                            if trans_type == 'income':
+                                emoji = "💵"
+                                # For income, show category instead of description
+                                display_name = category
+                            elif trans_type == 'expense':
+                                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                                    emoji = "🏠"
+                                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                                    emoji = "🍕"
+                                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                                    emoji = "🚗"
+                                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                                    emoji = "🛍️"
+                                else:
+                                    emoji = "🛒"
+                            elif trans_type == 'savings':
+                                emoji = "🏦"
+                                display_name = "Savings"
+                            elif trans_type == 'debt':
+                                emoji = "💳"
+                                display_name = "Debt"
+                            elif trans_type == 'debt_return':
+                                emoji = "🔙"
+                                display_name = "Debt Return"
+                            elif trans_type == 'savings_withdraw':
+                                emoji = "📥"
+                                display_name = "Savings Withdraw"
+                            
+                            # Truncate long descriptions
+                            if len(display_name) > 25:
+                                display_name = display_name[:22] + "..."
+                            
+                            recent_transactions.append({
+                                "emoji": emoji,
+                                "name": display_name,
+                                "amount": amount  # Use original amount, let frontend handle sign
+                            })
+
+        # Use total_savings for savings display
+        actual_savings = total_savings
+        
+        # FINAL VERIFICATION
+        print("=" * 50)
+        print(f"✅ FINAL CALCULATION:")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income: {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {actual_savings}")
+        print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
+        print("=" * 50)
+        
+        response_data = {
+            'balance': balance,
+            'income': total_income,
+            'spending': total_expenses,
+            'savings': actual_savings,
+            'transactions': recent_transactions,
+            'transaction_count': transaction_count
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Calculation error'}), 500
+    
+
+@flask_app.route('/api/transactions')
+def api_transactions():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        all_transactions = bot_instance.transactions
+        all_transactions_list = []
+        
+        # Collect all transactions from all users
+        if isinstance(all_transactions, dict):
+            for user_id, user_transactions in all_transactions.items():
+                if isinstance(user_transactions, list):
+                    for transaction in user_transactions:
+                        if isinstance(transaction, dict):
+                            # Add user_id to transaction for uniqueness
+                            transaction_with_user = transaction.copy()
+                            transaction_with_user['user_id'] = user_id
+                            all_transactions_list.append(transaction_with_user)
+        
+        # Sort by date (newest first)
+        all_transactions_list.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_transactions = all_transactions_list[start_idx:end_idx]
+        
+        # Format transactions for display
+        formatted_transactions = []
+        for transaction in paginated_transactions:
+            amount = float(transaction.get('amount', 0))
+            trans_type = transaction.get('type', 'expense')
+            description = transaction.get('description', 'Unknown')
+            category = transaction.get('category', 'Other')
+            timestamp = transaction.get('date', '')
+            
+            # Determine emoji and display name
+            emoji = "💰"
+            display_name = ""
+            
+            if trans_type == 'income':
+                emoji = "💵"
+                # For income: show category in brackets
+                display_name = f"{category}"
+            elif trans_type == 'expense':
+                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                    emoji = "🏠"
+                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                    emoji = "🍕"
+                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                    emoji = "🚗"
+                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                    emoji = "🛍️"
+                else:
+                    emoji = "🛒"
+                
+                # For expenses: extract the actual description (remove numbers and symbols)
+                # The description might be "100 food" - we want just "food"
+                clean_description = description
+                
+                # Remove numbers and currency symbols
+                clean_description = re.sub(r'[\d+.,₴]', '', clean_description).strip()
+                
+                # Remove common transaction symbols
+                clean_description = re.sub(r'[+-]+', '', clean_description).strip()
+                
+                # If we have a meaningful description after cleaning
+                if clean_description and clean_description.lower() != category:
+                    display_name = f"{category} {clean_description}"
+                else:
+                    display_name = f"{category}"
+                    
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = "Savings"
+            elif trans_type == 'debt':
+                emoji = "💳"
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+            
+            # Truncate long descriptions
+            if len(display_name) > 30:
+                display_name = display_name[:27] + "..."
+            
+            formatted_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "display_name": display_name,
+                "amount": amount,
+                "timestamp": timestamp,
+                "type": trans_type
+            })
+        
+        has_more = len(all_transactions_list) > end_idx
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'has_more': has_more,
+            'current_page': page,
+            'total_transactions': len(all_transactions_list)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in transactions API: {e}")
+        return jsonify({'error': 'Failed to load transactions'}), 500
+
+# Serve mini app main page
+# ========== MINI-APP ROUTES ==========
+
+@flask_app.route('/mini-app')
+def serve_mini_app():
+    return """
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balance Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f7;
+            padding: 20px;
+            color: #1d1d1f;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .balance-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+        
+        .balance-label {
+            font-size: 16px;
+            color: #8e8e93;
+            margin-bottom: 8px;
+        }
+        
+        .balance-amount {
+            font-size: 36px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        
+        .income-expense {
+            display: flex;
+            justify-content: space-around;
+        }
+        
+        .income, .expense {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .income-amount {
+            color: #34c759;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .expense-amount {
+            color: #ff3b30;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .income-label, .expense-label {
+            font-size: 14px;
+            color: #8e8e93;
+            margin-top: 4px;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e5e5ea;
+            margin: 20px 0;
+        }
+        
+        .transactions {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .transaction {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #f2f2f7;
+        }
+        
+        .transaction:last-child {
+            border-bottom: none;
+        }
+        
+        .transaction-info {
+            flex: 1;
+        }
+        
+        .transaction-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .transaction-date {
+            font-size: 14px;
+            color: #8e8e93;
+        }
+        
+        .transaction-amount {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .amount-negative {
+            color: #ff3b30;
+        }
+        
+        .amount-positive {
+            color: #34c759;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="balance-card">
+            <div class="balance-label">Balance</div>
+            <div class="balance-amount">₹10,000</div>
+            <div class="income-expense">
+                <div class="expense">
+                    <div class="expense-amount">-1,200</div>
+                    <div class="expense-label">Spending</div>
+                </div>
+                <div class="income">
+                    <div class="income-amount">+3,000</div>
+                    <div class="income-label">Income</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="transactions">
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Food</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
+                </div>
+                <div class="transaction-amount amount-negative">-1,000</div>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <div class="transaction">
+                <div class="transaction-info">
+                    <div class="transaction-title">Salary</div>
+                    <div class="transaction-date">Oct 10, 2025 10:24</div>
+                </div>
+                <div class="transaction-amount amount-positive">+1,000</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample transaction data - in a real app, this would come from a database
+        const transactions = [
+            {
+                id: 1,
+                title: "Food",
+                amount: -1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "expense"
+            },
+            {
+                id: 2,
+                title: "Salary",
+                amount: 1000,
+                date: new Date('2025-10-10T10:24:00'),
+                category: "income"
+            }
+        ];
+        
+        // Calculate balance, income, and spending
+        function calculateFinances() {
+            let balance = 10000; // Starting balance
+            let income = 0;
+            let spending = 0;
+            
+            transactions.forEach(transaction => {
+                if (transaction.amount > 0) {
+                    income += transaction.amount;
+                } else {
+                    spending += Math.abs(transaction.amount);
+                }
+            });
+            
+            // Update UI
+            document.querySelector('.balance-amount').textContent = `₹${balance.toLocaleString()}`;
+            document.querySelector('.income-amount').textContent = `+${income.toLocaleString()}`;
+            document.querySelector('.expense-amount').textContent = `-${spending.toLocaleString()}`;
+        }
+        
+        // Format date for display
+        function formatDate(date) {
+            const options = { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric'
+            };
+            return date.toLocaleDateString('en-US', options);
+        }
+        
+        // Render transactions
+        function renderTransactions() {
+            const transactionsContainer = document.querySelector('.transactions');
+            
+            // Clear existing transactions (except the first one which is our template)
+            while (transactionsContainer.children.length > 2) {
+                transactionsContainer.removeChild(transactionsContainer.lastChild);
+            }
+            
+            // Add transactions
+            transactions.forEach(transaction => {
+                const transactionEl = document.createElement('div');
+                transactionEl.className = 'transaction';
+                
+                transactionEl.innerHTML = `
+                    <div class="transaction-info">
+                        <div class="transaction-title">${transaction.title}</div>
+                        <div class="transaction-date">${formatDate(transaction.date)}</div>
+                    </div>
+                    <div class="transaction-amount ${transaction.amount > 0 ? 'amount-positive' : 'amount-negative'}">
+                        ${transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                    </div>
+                `;
+                
+                // Insert before the divider (which is the second child)
+                transactionsContainer.insertBefore(transactionEl, transactionsContainer.children[1]);
+                
+                // Add divider if it's not the last transaction
+                if (transactions.indexOf(transaction) < transactions.length - 1) {
+                    const divider = document.createElement('div');
+                    divider.className = 'divider';
+                    transactionsContainer.insertBefore(divider, transactionsContainer.children[2]);
+                }
+            });
+        }
+        
+        // Initialize the app
+        calculateFinances();
+        renderTransactions();
+    </script>
+</body>
+</html>
+    """
+
+# ========== TELEGRAM BOT SETUP ==========
+
+@flask_app.route('/api/add-transaction', methods=['POST', 'GET'])
+def add_transaction():
+    if request.method == 'GET':
+        return jsonify({"status": "active", "message": "Add transaction endpoint ready"})
+    
+    try:
+        transaction_data = request.json
+        print(f"📥 Received transaction: {transaction_data}")
+        
+        # Read current transactions
+        try:
+            with open('transactions.json', 'r') as f:
+                transactions = json.load(f)
+        except:
+            transactions = {}
+        
+        # Add new transaction (your data structure is {user_id: [transactions]})
+        user_id = str(transaction_data.get('user_id', 'default_user'))
+        if user_id not in transactions:
+            transactions[user_id] = []
+        
+        transactions[user_id].append({
+            'amount': transaction_data.get('amount', 0),
+            'description': transaction_data.get('description', ''),
+            'category': transaction_data.get('category', 'Other'),
+            'type': transaction_data.get('type', 'expense'),
+            'timestamp': transaction_data.get('timestamp', '')
+        })
+        
+        # Save back to file
+        with open('transactions.json', 'w') as f:
+            json.dump(transactions, f)
+        
+        print("✅ Transaction added successfully")
+        return jsonify({'status': 'success', 'message': 'Transaction added'})
+        
+    except Exception as e:
+        print(f"❌ Error adding transaction: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@flask_app.route('/api/delete-transaction', methods=['POST'])
+def delete_transaction():
+    try:
+        data = request.json
+        transaction_id = data.get('transaction_id')
+        user_id = data.get('user_id')
+        
+        # Your logic to delete the transaction from your data store
+        # This would remove it from transactions.json and update calculations
+        
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@flask_app.route('/api/add-income', methods=['POST']) 
+def add_income():
+    try:
+        income_data = request.json
+        
+        # Read current incomes
+        try:
+            with open('incomes.json', 'r') as f:
+                incomes = json.load(f)
+        except:
+            incomes = {}
+        
+        # Update income
+        user_id = income_data.get('user_id')
+        amount = income_data.get('amount')
+        incomes[user_id] = amount
+        
+        # Save back to file
+        with open('incomes.json', 'w') as f:
+            json.dump(incomes, f)
+        
+        return jsonify({'status': 'success', 'message': 'Income updated'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Test route
+@flask_app.route('/api/test')
+def test_api():
+    return jsonify({'message': 'API is working!', 'data': {'balance': 1000, 'income': 5000}})
+
+# Set webhook on startup
+def set_webhook():
+    """Set Telegram webhook URL only if token is available"""
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
+        print("❌ Cannot set webhook - bot token not configured")
+        return
+    
+    try:
+        webhook_url = "https://finnbot-production.up.railway.app/webhook"
+        response = requests.post(
+            f"{BASE_URL}/setWebhook",
+            json={"url": webhook_url}
+        )
+        if response.status_code == 200:
+            print("✅ Webhook set successfully!")
+        else:
+            print(f"❌ Failed to set webhook: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"❌ Error setting webhook: {e}")
 
 def check_reminders_periodically():
     """Check every hour if it's time for reminders"""
@@ -2194,6 +2886,7 @@ def save_all_data():
 
 # Register shutdown handlers to auto-save data
 atexit.register(save_all_data)
+import signal
 signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
 signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
 
@@ -2203,3 +2896,16 @@ if not hasattr(bot_instance, 'reminder_started'):
     reminder_thread.start()
     bot_instance.reminder_started = True
     print("✅ Periodic reminder checker started")
+
+if __name__ == "__main__":
+    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
+        print("❌ ERROR: Please set your actual bot token in the .env file")
+        exit(1)
+    
+    # Set webhook when starting
+    set_webhook()
+    
+    # Start Flask app
+    port = int(os.environ.get('PORT', 8080))
+    print(f"🚀 Starting webhook server on port {port}...")
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
