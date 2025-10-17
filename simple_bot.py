@@ -9,6 +9,8 @@ from flask import Flask, jsonify, request
 import threading
 import atexit
 import signal
+import psycopg2
+from urllib.parse import urlparse
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
@@ -42,6 +44,105 @@ def sync_to_railway(transaction_data):
             print(f"⚠️ Failed to sync to Railway: {response.status_code}")
     except Exception as e:
         print(f"⚠️ Railway sync failed: {e}")
+
+def get_db_connection(self):
+    """Get PostgreSQL connection"""
+    database_url = os.environ.get('DATABASE_URL')
+    if not database_url:
+        return None
+    
+    try:
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
+
+def try_load_from_db(self):
+    """Load data from PostgreSQL"""
+    try:
+        conn = self.get_db_connection()
+        if not conn:
+            return False
+            
+        cur = conn.cursor()
+        
+        # Load transactions
+        cur.execute('SELECT user_id, amount, description, category, type FROM transactions')
+        transactions_data = cur.fetchall()
+        
+        self.transactions = {}
+        for user_id, amount, description, category, trans_type in transactions_data:
+            if user_id not in self.transactions:
+                self.transactions[user_id] = []
+            
+            self.transactions[user_id].append({
+                'amount': float(amount),
+                'description': description,
+                'category': category,
+                'type': trans_type,
+                'date': datetime.now().isoformat()
+            })
+        
+        # Load incomes
+        cur.execute('SELECT user_id, amount FROM incomes')
+        incomes_data = cur.fetchall()
+        
+        self.user_incomes = {}
+        for user_id, amount in incomes_data:
+            self.user_incomes[user_id] = float(amount)
+        
+        conn.close()
+        print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from database")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading from database: {e}")
+        return False
+
+def try_save_to_db(self):
+    """Save data to PostgreSQL"""
+    try:
+        conn = self.get_db_connection()
+        if not conn:
+            return False
+            
+        cur = conn.cursor()
+        
+        # Clear existing data (simple approach)
+        cur.execute('DELETE FROM transactions')
+        cur.execute('DELETE FROM incomes')
+        
+        # Save transactions
+        for user_id, transactions in self.transactions.items():
+            for txn in transactions:
+                cur.execute(
+                    'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                    (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                )
+        
+        # Save incomes
+        for user_id, amount in self.user_incomes.items():
+            cur.execute(
+                'INSERT INTO incomes (user_id, amount) VALUES (%s, %s)',
+                (user_id, amount)
+            )
+        
+        conn.commit()
+        conn.close()
+        print("💾 Data saved to PostgreSQL database")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error saving to database: {e}")
+        return False
 
 class SimpleFinnBot:
     def __init__(self):
@@ -102,6 +203,8 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
+
+    
 
     def save_transactions(self):
         """Save transactions to persistent storage"""
@@ -181,39 +284,26 @@ class SimpleFinnBot:
         return 'wants'
     
     def load_all_data(self):
-        """Load all data from persistent storage"""
-        try:
-            print("🔄 Starting data load from /data/ directory...")
-            
-            # Load transactions
-            try:
-                with open('/data/transactions.json', 'r') as f:
-                    self.transactions = json.load(f)
-                print(f"📊 Loaded transactions for {len(self.transactions)} users")
-                print(f"📊 Transaction keys: {list(self.transactions.keys())}")
-            except FileNotFoundError:
-                self.transactions = {}
-                print("📊 No existing transactions file, starting fresh")
-            except Exception as e:
-                print(f"❌ Error loading transactions: {e}")
-                self.transactions = {}
-            
-            # Load incomes
-            try:
-                with open('/data/incomes.json', 'r') as f:
-                    self.user_incomes = json.load(f)
-                print(f"💰 Loaded incomes for {len(self.user_incomes)} users")
-            except FileNotFoundError:
-                self.user_incomes = {}
-                print("💰 No existing incomes file, starting fresh")
-            except Exception as e:
-                print(f"❌ Error loading incomes: {e}")
-                self.user_incomes = {}
-                
-            print("✅ Data loading completed")
-            
-        except Exception as e:
-            print(f"❌ Error loading data: {e}")
+        """Load data with database fallback to memory"""
+        print("🔄 Loading data...")
+        
+        # Try database first
+        if self.try_load_from_db():
+            print("✅ Data loaded from database")
+            return
+        
+        # Fallback to memory (data will be lost on restart)
+        self.transactions = {}
+        self.user_incomes = {}
+        print("⚠️  Running in memory mode - data will be lost on restart")
+
+    def save_transactions(self):
+        """Save transactions with database fallback"""
+        # Try to save to database
+        if self.try_save_to_db():
+            print("💾 Data saved to database")
+        else:
+            print("⚠️  Data saved to memory only (will be lost on restart)")
 
     def load_transactions(self):
         """Load transactions from persistent JSON file"""
