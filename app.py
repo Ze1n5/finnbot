@@ -478,8 +478,8 @@ def webhook():
         
         def process_and_save():
             bot_instance.process_update(update_data)
-            # SAVE DATA AFTER PROCESSING
-            bot_instance.save_transactions()
+            # COMMENT OUT OR REMOVE THIS LINE:
+            # bot_instance.save_transactions()
             bot_instance.save_incomes()
             print("💾 Data saved after webhook processing")
         
