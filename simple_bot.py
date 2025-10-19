@@ -2002,7 +2002,17 @@ How much cash do you have right now? (in UAH)
 
         # Handle balance confirmation
         elif data == "confirm_balance":
-            # Move to debt question
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted balance confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting balance confirmation message: {e}")
+            
+            # Move to debt question (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2031,7 +2041,17 @@ Do you have any debts? (loans, credits, etc.)
 
         # Handle debt confirmation  
         elif data == "confirm_debt":
-            # Move to savings question
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted debt confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting debt confirmation message: {e}")
+            
+            # Move to savings question (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2060,7 +2080,17 @@ Do you have any savings? (bank, crypto, investments)
 
         # Handle savings confirmation
         elif data == "confirm_savings":
-            # Complete onboarding
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted savings confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting savings confirmation message: {e}")
+            
+            # Complete onboarding (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
