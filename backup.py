@@ -9,6 +9,9 @@ from flask import Flask, jsonify, request
 import threading
 import atexit
 import signal
+import psycopg2
+from urllib.parse import urlparse
+
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
 
@@ -43,7 +46,247 @@ def sync_to_railway(transaction_data):
     except Exception as e:
         print(f"⚠️ Railway sync failed: {e}")
 
+def get_db_connection(self):
+    """Get PostgreSQL connection"""
+    database_url = os.environ.get('DATABASE_URL')
+    if not database_url:
+        return None
+    
+    try:
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
+
+def try_load_from_db(self):
+    """Load data from PostgreSQL"""
+    try:
+        conn = self.get_db_connection()
+        if not conn:
+            return False
+            
+        cur = conn.cursor()
+        
+        # Load transactions
+        cur.execute('SELECT user_id, amount, description, category, type FROM transactions')
+        transactions_data = cur.fetchall()
+        
+        self.transactions = {}
+        for user_id, amount, description, category, trans_type in transactions_data:
+            if user_id not in self.transactions:
+                self.transactions[user_id] = []
+            
+            self.transactions[user_id].append({
+                'amount': float(amount),
+                'description': description,
+                'category': category,
+                'type': trans_type,
+                'date': datetime.now().isoformat()
+            })
+        
+        # Load incomes
+        cur.execute('SELECT user_id, amount FROM incomes')
+        incomes_data = cur.fetchall()
+        
+        self.user_incomes = {}
+        for user_id, amount in incomes_data:
+            self.user_incomes[user_id] = float(amount)
+        
+        conn.close()
+        print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from database")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error loading from database: {e}")
+        return False
+
+def try_save_to_db(self):
+    """Save data to PostgreSQL"""
+    try:
+        conn = self.get_db_connection()
+        if not conn:
+            return False
+            
+        cur = conn.cursor()
+        
+        # Clear existing data (simple approach)
+        cur.execute('DELETE FROM transactions')
+        cur.execute('DELETE FROM incomes')
+        
+        # Save transactions
+        for user_id, transactions in self.transactions.items():
+            for txn in transactions:
+                cur.execute(
+                    'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                    (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                )
+        
+        # Save incomes
+        for user_id, amount in self.user_incomes.items():
+            cur.execute(
+                'INSERT INTO incomes (user_id, amount) VALUES (%s, %s)',
+                (user_id, amount)
+            )
+        
+        conn.commit()
+        conn.close()
+        print("💾 Data saved to PostgreSQL database")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error saving to database: {e}")
+        return False
+
 class SimpleFinnBot:
+    def save_user_languages(self):
+        """Save user languages - placeholder for now"""
+        print("💾 User languages would be saved here")
+        # We'll implement this later if needed
+
+    def save_user_categories(self):
+        """Save user categories - placeholder for now""" 
+        print("💾 User categories would be saved here")
+        # We'll implement this later if needed
+    def get_db_connection(self):
+        """Get PostgreSQL connection"""
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            print("❌ No DATABASE_URL environment variable found")
+            return None
+        
+        try:
+            result = urlparse(database_url)
+            conn = psycopg2.connect(
+                database=result.path[1:],
+                user=result.username,
+                password=result.password,
+                host=result.hostname,
+                port=result.port
+            )
+            return conn
+        except Exception as e:
+            print(f"❌ Database connection error: {e}")
+            return None
+
+    def load_all_data(self):
+        """Load all data from PostgreSQL"""
+        print("🔄 Loading data from PostgreSQL...")
+        
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ No database connection - starting with empty data")
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # DEBUG: Check database count first
+            cur.execute('SELECT COUNT(*) FROM transactions')
+            db_count = cur.fetchone()[0]
+            print(f"🔍 DEBUG: Database has {db_count} transactions")
+            
+            # Load transactions FROM POSTGRESQL ONLY
+            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            transactions_data = cur.fetchall()
+            
+            self.transactions = {}
+            for user_id, amount, description, category, trans_type in transactions_data:
+                user_id = int(user_id)
+                if user_id not in self.transactions:
+                    self.transactions[user_id] = []
+                
+                self.transactions[user_id].append({
+                    'amount': float(amount),
+                    'description': description,
+                    'category': category,
+                    'type': trans_type,
+                    'date': datetime.now().isoformat()
+                })
+            
+            # Load incomes
+            cur.execute('SELECT user_id, amount FROM incomes')
+            incomes_data = cur.fetchall()
+            
+            self.user_incomes = {}
+            for user_id, amount in incomes_data:
+                self.user_incomes[int(user_id)] = float(amount)
+            
+            conn.close()
+            print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error loading from database: {e}")
+            # Don't fall back to files!
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
+
+    def sync_transactions_to_postgres(self):
+        """Full sync - replace PostgreSQL with current memory state"""
+        conn = self.get_db_connection()
+        if not conn:
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # Delete ALL transactions for all users
+            cur.execute('DELETE FROM transactions')
+            
+            # Insert current memory state (even if empty)
+            transaction_count = 0
+            for user_id, transactions in self.transactions.items():
+                for txn in transactions:
+                    cur.execute(
+                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                    )
+                    transaction_count += 1
+            
+            conn.commit()
+            conn.close()
+            print(f"🔄 Full sync: {transaction_count} transactions to PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error syncing to PostgreSQL: {e}")
+
+    def save_incomes(self):
+        """Save incomes to PostgreSQL"""
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ Cannot save - no database connection")
+            return
+        
+        try:
+            cur = conn.cursor()
+            
+            # Save incomes
+            for user_id, amount in self.user_incomes.items():
+                cur.execute(
+                    'INSERT INTO incomes (user_id, amount) VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET amount = EXCLUDED.amount',
+                    (user_id, amount)
+                )
+            
+            conn.commit()
+            conn.close()
+            print(f"💾 Saved {len(self.user_incomes)} incomes to PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error saving incomes to database: {e}")
+
     def __init__(self):
         # Income categories (shared for all users)
         self.income_categories = {
@@ -139,43 +382,6 @@ class SimpleFinnBot:
         
         # Default to 'wants' for unknown categories
         return 'wants'
-    
-    def load_all_data(self):
-        """Load all data from persistent storage"""
-        print("📂 Loading data from persistent storage...")
-        self.load_transactions()
-        self.load_incomes()
-        self.load_user_categories()
-        self.load_user_languages()
-
-    def load_transactions(self):
-        """Load transactions from persistent JSON file"""
-        try:
-            filepath = get_persistent_path("transactions.json")
-            if os.path.exists(filepath):
-                with open(filepath, "r") as f:
-                    data = json.load(f)
-                
-                # Safely convert data to proper format
-                self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
-            else:
-                print("📂 No existing transactions file, starting fresh")
-                self.transactions = {}
-        except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
-            self.transactions = {}
 
     def load_incomes(self):
         """Load user incomes from persistent JSON file"""
@@ -438,16 +644,6 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading user languages: {e}")
 
-    def save_user_languages(self):
-        """Save user language preferences to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("user_languages.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_languages, f, indent=2)
-            print(f"💾 Saved language preferences for {len(self.user_languages)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving user languages: {e}")
-
     def get_user_language(self, user_id):
         """Get user's preferred language, default to English"""
         return self.user_languages.get(str(user_id), 'en')
@@ -475,77 +671,49 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading incomes: {e}")
 
-    def save_incomes(self):
-        """Save user incomes to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("incomes.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_incomes, f, indent=2)
-            print(f"💾 Saved incomes for {len(self.user_incomes)} users to {filepath}")
-            
-            # Sync incomes to Railway
-            for user_id, amount in self.user_incomes.items():
-                sync_to_railway({
-                    'amount': amount,
-                    'description': 'Monthly Income',
-                    'timestamp': datetime.now().isoformat(),
-                    'type': 'income',
-                    'user_id': user_id
-                })
-                
-        except Exception as e:
-            print(f"❌ Error saving incomes: {e}")
-
     def get_user_income(self, user_id):
         """Get monthly income for a specific user"""
         return self.user_incomes.get(str(user_id))
-
-    def save_transactions(self):
-        """Save transactions to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("transactions.json")
-            with open(filepath, "w") as f:
-                json.dump(self.transactions, f, indent=2)
-            print(f"💾 Saved transactions for {len(self.transactions)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving transactions: {e}")
-
+    
     def load_transactions(self):
-        """Load transactions from JSON file (separated by user)"""
-        try:
-            if os.path.exists("transactions.json"):
-                with open("transactions.json", "r") as f:
-                    data = json.load(f)
-                
-                # Safely convert data to proper format
-                self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        # Ensure value is a list of transactions
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users")
-            else:
-                print("📂 No existing transactions file, starting fresh")
-                self.transactions = {}
-        except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
+        """Load transactions from PostgreSQL"""
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ No database connection, skipping transaction load")
             self.transactions = {}
-
-    def save_user_transaction(self, user_id, transaction):
-        """Add transaction for a specific user and save to persistent storage"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
+            return
+        
+        try:
+            cur = conn.cursor()
             
-        self.transactions[user_id].append(transaction)
-        self.save_transactions() 
+            # DEBUG: Check database count first
+            cur.execute('SELECT COUNT(*) FROM transactions')
+            db_count = cur.fetchone()[0]
+            print(f"🔍 DEBUG: Database has {db_count} transactions")
+            
+            # Load transactions FROM POSTGRESQL
+            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            transactions_data = cur.fetchall()
+            
+            self.transactions = {}
+            for user_id, amount, description, category, trans_type in transactions_data:
+                user_id = int(user_id)
+                if user_id not in self.transactions:
+                    self.transactions[user_id] = []
+                
+                self.transactions[user_id].append({
+                    'amount': float(amount),
+                    'description': description,
+                    'category': category,
+                    'type': trans_type
+                })
+            
+            conn.close()
+            print(f"📊 Loaded {len(transactions_data)} transactions from PostgreSQL")
+            
+        except Exception as e:
+            print(f"❌ Error loading from PostgreSQL: {e}")
+            self.transactions = {}
 
     def load_user_categories(self):
         """Load user categories from JSON file"""
@@ -558,16 +726,6 @@ class SimpleFinnBot:
                 print("🏷️ No existing user categories file - starting fresh")
         except Exception as e:
             print(f"❌ Error loading user categories: {e}")
-
-    def save_user_categories(self):
-        """Save user categories to persistent JSON file"""
-        try:
-            filepath = get_persistent_path("user_categories.json")
-            with open(filepath, "w") as f:
-                json.dump(self.user_categories, f, indent=2)
-            print(f"💾 Saved spending categories for {len(self.user_categories)} users to {filepath}")
-        except Exception as e:
-            print(f"❌ Error saving user categories: {e}")
 
     def get_user_categories(self, user_id):
         """Get spending categories for a specific user"""
@@ -865,7 +1023,7 @@ class SimpleFinnBot:
                             for i, transaction in enumerate(user_transactions):
                                 transaction['id'] = i + 1
                             
-                            self.save_transactions()
+                            self.sync_transactions_to_postgres()
                             # IMPORTANT: Clear delete mode to force refresh
                             self.delete_mode[chat_id] = False
                         else:
@@ -1938,7 +2096,7 @@ You're now ready to use Finn!
                         "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
-                    self.save_transactions()
+                    self.sync_transactions_to_postgres()
                     print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
                     
                     # Sync to Railway
@@ -2062,7 +2220,7 @@ You're now ready to use Finn!
                 del self.delete_mode[chat_id]
             
             # Save all changes
-            self.save_transactions()
+            self.sync_transactions_to_postgres()
             self.save_incomes()
             self.save_user_categories()
             
@@ -2786,18 +2944,29 @@ def add_transaction():
         return jsonify({'error': str(e)}), 500
     
 @flask_app.route('/api/delete-transaction', methods=['POST'])
-def delete_transaction():
-    try:
-        data = request.json
-        transaction_id = data.get('transaction_id')
-        user_id = data.get('user_id')
-        
-        # Your logic to delete the transaction from your data store
-        # This would remove it from transactions.json and update calculations
-        
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+def delete_transaction(self, user_id, transaction_index):
+    """Delete a transaction from both memory AND PostgreSQL"""
+    
+    # 1. Delete from memory
+    if user_id in self.transactions and transaction_index < len(self.transactions[user_id]):
+        deleted_transaction = self.transactions[user_id].pop(transaction_index)
+        print(f"🗑️ Deleted transaction from memory: {deleted_transaction}")
+    
+    # 2. Delete from PostgreSQL
+    conn = self.get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            # You need a way to identify the exact transaction in PostgreSQL
+            # This might require adding transaction IDs or unique identifiers
+            cur.execute('DELETE FROM transactions WHERE user_id = %s AND amount = %s AND description = %s', 
+                       (user_id, deleted_transaction['amount'], deleted_transaction['description']))
+            conn.commit()
+            conn.close()
+            print("🗑️ Deleted transaction from PostgreSQL")
+        except Exception as e:
+            print(f"❌ Error deleting from PostgreSQL: {e}")
+    self.sync_transactions_to_postgres()
 
 @flask_app.route('/api/add-income', methods=['POST']) 
 def add_income():
@@ -2876,7 +3045,7 @@ def save_all_data():
     """Save all data before shutdown"""
     print("💾 Saving all data before shutdown...")
     try:
-        bot_instance.save_transactions()
+        bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
         bot_instance.save_user_languages()
@@ -2898,14 +3067,13 @@ if not hasattr(bot_instance, 'reminder_started'):
     print("✅ Periodic reminder checker started")
 
 if __name__ == "__main__":
-    if not BOT_TOKEN or BOT_TOKEN == "8326266095:AAFTk0c6lo5kOHbCfNCGTrN4qrmJQn5Q7OI":
-        print("❌ ERROR: Please set your actual bot token in the .env file")
-        exit(1)
+    if not BOT_TOKEN:
+        print("❌ ERROR: BOT_TOKEN environment variable not set")
+        print("⚠️  Running without Telegram bot features")
+    else:
+        print("✅ Bot token found - setting webhook")
+        set_webhook()
     
-    # Set webhook when starting
-    set_webhook()
-    
-    # Start Flask app
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting webhook server on port {port}...")
     flask_app.run(host='0.0.0.0', port=port, debug=False)
