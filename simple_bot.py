@@ -388,8 +388,12 @@ class SimpleFinnBot:
         if keyboard:
             data["reply_markup"] = json.dumps(keyboard)
         
-        response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
-        return response
+        try:
+            response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
+            return response.json()
+        except Exception as e:
+            print(f"❌ Error sending photo: {e}")
+            return None
 
     def categorize_transaction(self, category_name, description=""):
         """Categorize transaction into needs/wants/future"""
@@ -2059,54 +2063,45 @@ Do you have any savings? (bank, crypto, investments)
             self.send_message(chat_id, savings_msg, parse_mode='Markdown')
 
         # Handle savings confirmation
+        # Handle savings confirmation
         elif data == "confirm_savings":
             # Complete onboarding
             user_lang = self.get_user_language(chat_id)
             
-            # Send profile created image with caption
+            # Send profile created image with caption AND confirmation
             profile_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/profile_created.jpg"
             
             if user_lang == 'uk':
                 complete_caption = """🎉 *Профіль створено!*
 
-        Тепер ти готовий до правильного управління фінансами.
+        Тепер ви готові до роботи з Finn! 
 
         🚀 *Швидкий старт:*
-        *150* [коментар у разі потреби] - Додати витрату
-        *+5000* _ЗП_ - Додати дохід
-        *++1000* - Додати заощадження
-        *-200* _Кредитний лиміт_ - Додати борг
+        `150 обід` - Додати витрату
+        `+5000 зарплата` - Додати дохід
+        `++1000` - Додати заощадження
+        `-200 кредит` - Додати борг
 
-        Для редагування категорій витрат, просто використовуйте + -, наприклад:
-        + Їжа - категорія додасться
-        - Ремонт - категорія видалиться
-
-        💡 Почніть відстежувати транзакції в застосунку та використовуйте меню для налаштувань"""
+        💡 Почніть відстежувати транзакції або використовуйте меню!"""
             else:
                 complete_caption = """🎉 *Profile Created!*
 
-        You are now ready for proper financial management.
+        You're now ready to use Finn!
 
         🚀 *Quick Start:*
-        *150* [comment if needed] - Add expense
-        *+5000* _Salary_ - Add income
-        *++1000* - Add to savings
-        *-200* _Credit Limit_ - Add debt
+        `150 lunch` - Add expense
+        `+5000 salary` - Add income
+        `++1000` - Add savings  
+        `-200 loan` - Add debt
 
-        To edit expense categories, simply use + -, for example:
-        + Food - category will be added
-        - Repair - category will be deleted
-
-        💡 Start tracking transactions with our app, and use the menu for settings"""
+        💡 Start tracking transactions or use the menu!"""
             
-            # Send the photo with caption
-            self.send_photo_from_url(chat_id, profile_image_url, complete_caption)
+            # Send the photo with caption AND main menu
+            self.send_photo_from_url(chat_id, profile_image_url, complete_caption, reply_markup=self.get_main_menu())
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
-            
-            # No need to send separate message since caption includes everything
 
         
         if data.startswith("cat_"):
