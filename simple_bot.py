@@ -146,6 +146,7 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
+    
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
         print("💾 User languages would be saved here")
@@ -345,6 +346,33 @@ class SimpleFinnBot:
                 'Debt Return', 'Education', 'Retirement', 'Emergency Fund'
             ]
         }
+        
+
+    def save_user_transaction(self, chat_id, transaction):
+        """Save a single transaction for a user"""
+        try:
+            print(f"🔍 DEBUG save_user_transaction: Starting - chat_id: {chat_id}, transaction: {transaction}")
+            
+            # Initialize if needed
+            if chat_id not in self.transactions:
+                print(f"🔍 DEBUG: Initializing transactions for user {chat_id}")
+                self.transactions[chat_id] = []
+            
+            # Add transaction
+            self.transactions[chat_id].append(transaction)
+            print(f"🔍 DEBUG: Added transaction to memory")
+            
+            # Sync to database
+            print(f"🔍 DEBUG: About to call sync_transactions_to_postgres")
+            self.sync_transactions_to_postgres()
+            print(f"🔍 DEBUG: Successfully synced to PostgreSQL")
+            
+            print(f"✅ Saved {transaction['type']} transaction for user {chat_id}")
+            
+        except Exception as e:
+            print(f"❌ Error in save_user_transaction: {e}")
+            import traceback
+            traceback.print_exc()  # This will show the full error stack
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
@@ -1074,9 +1102,13 @@ class SimpleFinnBot:
                         "amount": amount,
                         "category": "Initial Balance",
                         "description": "Starting cash balance",
-                        "type": "income", 
+                        "type": "income",
                         "date": datetime.now().astimezone().isoformat()
                     }
+                    
+                    print(f"🔍 DEBUG: About to call save_user_transaction with transaction: {transaction}")
+                    print(f"🔍 DEBUG: Method exists: {hasattr(self, 'save_user_transaction')}")
+                    
                     self.save_user_transaction(chat_id, transaction)
                     
                     # Ask for confirmation
