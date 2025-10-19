@@ -1068,17 +1068,16 @@ class SimpleFinnBot:
                 user_lang = self.get_user_language(chat_id)
                 
                 if state == 'awaiting_balance':
-                    # Save initial balance
-                    if amount > 0:
-                        transaction = {
-                            "id": 1,
-                            "amount": amount,
-                            "category": "Initial Balance",
-                            "description": "Starting cash balance",
-                            "type": "income",
-                            "date": datetime.now().astimezone().isoformat()
-                        }
-                        self.save_user_transaction(chat_id, transaction)
+                    # Save initial balance (even if 0)
+                    transaction = {
+                        "id": 1,
+                        "amount": amount,
+                        "category": "Initial Balance",
+                        "description": "Starting cash balance",
+                        "type": "income", 
+                        "date": datetime.now().astimezone().isoformat()
+                    }
+                    self.save_user_transaction(chat_id, transaction)
                     
                     # Ask for confirmation
                     if user_lang == 'uk':
@@ -1095,17 +1094,16 @@ class SimpleFinnBot:
                     return
                     
                 elif state == 'awaiting_debt':
-                    # Save initial debt
-                    if amount > 0:
-                        transaction = {
-                            "id": len(self.get_user_transactions(chat_id)) + 1,
-                            "amount": -amount,
-                            "category": "Initial Debt",
-                            "description": "Starting debt balance",
-                            "type": "debt",
-                            "date": datetime.now().astimezone().isoformat()
-                        }
-                        self.save_user_transaction(chat_id, transaction)
+                    # Save initial debt (even if 0)
+                    transaction = {
+                        "id": len(self.get_user_transactions(chat_id)) + 1,
+                        "amount": -amount,  # Negative for debt
+                        "category": "Initial Debt", 
+                        "description": "Starting debt balance",
+                        "type": "debt",
+                        "date": datetime.now().astimezone().isoformat()
+                    }
+                    self.save_user_transaction(chat_id, transaction)
                     
                     # Ask for confirmation
                     if user_lang == 'uk':
@@ -1122,17 +1120,16 @@ class SimpleFinnBot:
                     return
                     
                 elif state == 'awaiting_savings':
-                    # Save initial savings
-                    if amount > 0:
-                        transaction = {
-                            "id": len(self.get_user_transactions(chat_id)) + 1,
-                            "amount": amount,
-                            "category": "Bank",
-                            "description": "Starting savings balance",
-                            "type": "savings",
-                            "date": datetime.now().astimezone().isoformat()
-                        }
-                        self.save_user_transaction(chat_id, transaction)
+                    # Save initial savings (even if 0)  
+                    transaction = {
+                        "id": len(self.get_user_transactions(chat_id)) + 1,
+                        "amount": amount,
+                        "category": "Bank",
+                        "description": "Starting savings balance",
+                        "type": "savings",
+                        "date": datetime.now().astimezone().isoformat()
+                    }
+                    self.save_user_transaction(chat_id, transaction)
                     
                     # Ask for confirmation
                     if user_lang == 'uk':
