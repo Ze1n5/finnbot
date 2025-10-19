@@ -235,7 +235,7 @@ class SimpleFinnBot:
             self.user_languages = {}
 
     def save_transactions(self):
-        """Save transactions to PostgreSQL - REPLACE existing data"""
+        """Save ONLY NEW transactions to PostgreSQL - don't replace all"""
         conn = self.get_db_connection()
         if not conn:
             print("❌ Cannot save - no database connection")
@@ -244,25 +244,25 @@ class SimpleFinnBot:
         try:
             cur = conn.cursor()
             
-            # DELETE existing transactions for this user before inserting new ones
-            # This prevents duplicates
-            for user_id in self.transactions.keys():
-                cur.execute('DELETE FROM transactions WHERE user_id = %s', (user_id,))
-                print(f"🧹 Cleared existing transactions for user {user_id}")
-            
-            # Save transactions
+            # Save ONLY transactions that don't already exist
             transaction_count = 0
             for user_id, transactions in self.transactions.items():
                 for txn in transactions:
+                    # Check if transaction already exists
                     cur.execute(
-                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
-                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                        'SELECT id FROM transactions WHERE user_id = %s AND amount = %s AND description = %s AND category = %s',
+                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'))
                     )
-                    transaction_count += 1
+                    if not cur.fetchone():  # Only insert if it doesn't exist
+                        cur.execute(
+                            'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                            (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                        )
+                        transaction_count += 1
             
             conn.commit()
             conn.close()
-            print(f"💾 Saved {transaction_count} transactions to PostgreSQL (replaced existing)")
+            print(f"💾 Added {transaction_count} NEW transactions to PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error saving to database: {e}")
@@ -386,36 +386,6 @@ class SimpleFinnBot:
         
         # Default to 'wants' for unknown categories
         return 'wants'
-
-
-    def load_transactions(self):
-        """Load transactions from persistent JSON file"""
-        try:
-            filepath = get_persistent_path("transactions.json")
-            if os.path.exists(filepath):
-                with open(filepath, "r") as f:
-                    data = json.load(f)
-                
-                # Safely convert data to proper format
-                self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users from {filepath}")
-            else:
-                print("📂 No existing transactions file, starting fresh")
-                self.transactions = {}
-        except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
-            self.transactions = {}
 
     def load_incomes(self):
         """Load user incomes from persistent JSON file"""
@@ -710,32 +680,43 @@ class SimpleFinnBot:
         return self.user_incomes.get(str(user_id))
     
     def load_transactions(self):
-        """Load transactions from JSON file (separated by user)"""
+        """Load transactions from PostgreSQL"""
+        conn = self.get_db_connection()
+        if not conn:
+            print("❌ No database connection, skipping transaction load")
+            self.transactions = {}
+            return
+        
         try:
-            if os.path.exists("transactions.json"):
-                with open("transactions.json", "r") as f:
-                    data = json.load(f)
+            cur = conn.cursor()
+            
+            # DEBUG: Check database count first
+            cur.execute('SELECT COUNT(*) FROM transactions')
+            db_count = cur.fetchone()[0]
+            print(f"🔍 DEBUG: Database has {db_count} transactions")
+            
+            # Load transactions FROM POSTGRESQL
+            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            transactions_data = cur.fetchall()
+            
+            self.transactions = {}
+            for user_id, amount, description, category, trans_type in transactions_data:
+                user_id = int(user_id)
+                if user_id not in self.transactions:
+                    self.transactions[user_id] = []
                 
-                # Safely convert data to proper format
-                self.transactions = {}
-                for key, value in data.items():
-                    try:
-                        user_id = int(key)
-                        # Ensure value is a list of transactions
-                        if isinstance(value, list):
-                            self.transactions[user_id] = value
-                        else:
-                            print(f"⚠️ Invalid data for user {user_id}, resetting")
-                            self.transactions[user_id] = []
-                    except (ValueError, TypeError):
-                        print(f"⚠️ Skipping invalid user ID: {key}")
-                
-                print(f"📂 Loaded transactions for {len(self.transactions)} users")
-            else:
-                print("📂 No existing transactions file, starting fresh")
-                self.transactions = {}
+                self.transactions[user_id].append({
+                    'amount': float(amount),
+                    'description': description,
+                    'category': category,
+                    'type': trans_type
+                })
+            
+            conn.close()
+            print(f"📊 Loaded {len(transactions_data)} transactions from PostgreSQL")
+            
         except Exception as e:
-            print(f"❌ Error loading transactions: {e}")
+            print(f"❌ Error loading from PostgreSQL: {e}")
             self.transactions = {}
 
     def save_user_transaction(self, user_id, transaction):
