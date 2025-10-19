@@ -2097,8 +2097,7 @@ Do you have any savings? (bank, crypto, investments)
         💡 Start tracking transactions or use the menu!"""
             
             # Send the photo with caption AND main menu
-            self.send_photo_from_url(chat_id, profile_image_url, complete_caption, reply_markup=self.get_main_menu())
-            
+            self.send_photo_from_url(chat_id, profile_image_url, complete_caption, keyboard=self.get_main_menu())            
             # Clear onboarding state
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
