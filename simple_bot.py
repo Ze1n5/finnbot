@@ -2063,36 +2063,50 @@ Do you have any savings? (bank, crypto, investments)
             # Complete onboarding
             user_lang = self.get_user_language(chat_id)
             
+            # Send profile created image with caption
+            profile_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/profile_created.jpg"
+            
             if user_lang == 'uk':
-                complete_msg = """🎉 *Профіль створено!*
+                complete_caption = """🎉 *Профіль створено!*
 
-Тепер ви готові до роботи з Finn! 
+        Тепер ти готовий до правильного управління фінансами.
 
-🚀 *Швидкий старт:*
-`150 обід` - Додати витрату
-`+5000 зарплата` - Додати дохід
-`++1000` - Додати заощадження
-`-200 кредит` - Додати борг
+        🚀 *Швидкий старт:*
+        *150* [коментар у разі потреби] - Додати витрату
+        *+5000* _ЗП_ - Додати дохід
+        *++1000* - Додати заощадження
+        *-200* _Кредитний лиміт_ - Додати борг
 
-💡 Почніть відстежувати транзакції або використовуйте меню!"""
+        Для редагування категорій витрат, просто використовуйте + -, наприклад:
+        + Їжа - категорія додасться
+        - Ремонт - категорія видалиться
+
+        💡 Почніть відстежувати транзакції в застосунку та використовуйте меню для налаштувань"""
             else:
-                complete_msg = """🎉 *Profile Created!*
+                complete_caption = """🎉 *Profile Created!*
 
-You're now ready to use Finn!
+        You are now ready for proper financial management.
 
-🚀 *Quick Start:*
-`150 lunch` - Add expense
-`+5000 salary` - Add income
-`++1000` - Add savings  
-`-200 loan` - Add debt
+        🚀 *Quick Start:*
+        *150* [comment if needed] - Add expense
+        *+5000* _Salary_ - Add income
+        *++1000* - Add to savings
+        *-200* _Credit Limit_ - Add debt
 
-💡 Start tracking transactions or use the menu!"""
+        To edit expense categories, simply use + -, for example:
+        + Food - category will be added
+        - Repair - category will be deleted
+
+        💡 Start tracking transactions with our app, and use the menu for settings"""
+            
+            # Send the photo with caption
+            self.send_photo_from_url(chat_id, profile_image_url, complete_caption)
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
             
-            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            # No need to send separate message since caption includes everything
 
         
         if data.startswith("cat_"):
