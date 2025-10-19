@@ -2956,18 +2956,29 @@ def add_transaction():
         return jsonify({'error': str(e)}), 500
     
 @flask_app.route('/api/delete-transaction', methods=['POST'])
-def delete_transaction():
-    try:
-        data = request.json
-        transaction_id = data.get('transaction_id')
-        user_id = data.get('user_id')
-        
-        # Your logic to delete the transaction from your data store
-        # This would remove it from transactions.json and update calculations
-        
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+def delete_transaction(self, user_id, transaction_index):
+    """Delete a transaction from both memory AND PostgreSQL"""
+    
+    # 1. Delete from memory
+    if user_id in self.transactions and transaction_index < len(self.transactions[user_id]):
+        deleted_transaction = self.transactions[user_id].pop(transaction_index)
+        print(f"🗑️ Deleted transaction from memory: {deleted_transaction}")
+    
+    # 2. Delete from PostgreSQL
+    conn = self.get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            # You need a way to identify the exact transaction in PostgreSQL
+            # This might require adding transaction IDs or unique identifiers
+            cur.execute('DELETE FROM transactions WHERE user_id = %s AND amount = %s AND description = %s', 
+                       (user_id, deleted_transaction['amount'], deleted_transaction['description']))
+            conn.commit()
+            conn.close()
+            print("🗑️ Deleted transaction from PostgreSQL")
+        except Exception as e:
+            print(f"❌ Error deleting from PostgreSQL: {e}")
+    self.sync_transactions_to_postgres()
 
 @flask_app.route('/api/add-income', methods=['POST']) 
 def add_income():
