@@ -1941,21 +1941,21 @@ This will help me provide better financial recommendations!"""
             
             user_lang = self.get_user_language(chat_id)
             if user_lang == 'uk':
-                image_caption = """👋 *Привіт! Я Finn!*"
+                image_caption = """👋 *Ласкаво просимо до Finn!*"
 
 Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
-*Крок 1/3: Поточний баланс*
+*Крок 1/4: Поточний баланс*
 
-Скільки у вас на балансі зараз? (готівка + карта)
+Скільки готівки у вас є зараз? (в гривнях)
 
 💡 *Введіть суму:*
 `5000` - якщо у вас 5,000₴
-`0` - якщо на балансі 0"""
+`0` - якщо готівки немає"""
             else:
                 image_caption = """👋 *Hi! I'm Finn!*
 
 Let's create your financial profile. This will just take a minute!
-*Step 1/3: Current Balance*
+*Step 1/4: Current Balance*
 
 How much cash do you have right now? (in UAH)
 
@@ -1979,7 +1979,7 @@ How much cash do you have right now? (in UAH)
             if user_lang == 'uk':
                 debt_msg = """✅ *Баланс збережено!*
 
-*Крок 2/3: Борги*
+*Крок 2/4: Борги*
 
 Чи є у вас борги? (кредити, позики тощо)
 
@@ -1989,7 +1989,7 @@ How much cash do you have right now? (in UAH)
             else:
                 debt_msg = """✅ *Balance saved!*
 
-*Step 2/3: Debts*
+*Step 2/4: Debts*
 
 Do you have any debts? (loans, credits, etc.)
 
@@ -2008,7 +2008,7 @@ Do you have any debts? (loans, credits, etc.)
             if user_lang == 'uk':
                 savings_msg = """✅ *Борги збережено!*
 
-*Крок 3/3: Заощадження*
+*Крок 3/4: Заощадження*
 
 Чи є у вас заощадження? (банк, крипто, інвестиції)
 
@@ -2018,7 +2018,7 @@ Do you have any debts? (loans, credits, etc.)
             else:
                 savings_msg = """✅ *Debts saved!*
 
-*Step 3/3: Savings*
+*Step 3/4: Savings*
 
 Do you have any savings? (bank, crypto, investments)
 
@@ -2035,38 +2035,29 @@ Do you have any savings? (bank, crypto, investments)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
-                complete_msg = """🎉 Профіль створено!
+                complete_msg = """🎉 *Профіль створено!*
 
-Тепер ти готовий до правильного управління фінансами.
+Тепер ви готові до роботи з Finn! 
 
-🚀 Швидкий старт:
-*150* [коментар у разі потреби] - Додати витрату
-*+5000* ЗП - Додати дохід
-*++1000* - Додати заощадження
-*-200* Кредитний лиміт - Додати борг
+🚀 *Швидкий старт:*
+`150 обід` - Додати витрату
+`+5000 зарплата` - Додати дохід
+`++1000` - Додати заощадження
+`-200 кредит` - Додати борг
 
-Для редагування категорій витрат, просто використовуйте + -, наприклад:
-
-Їжа - категорія додасться
-Ремонт - категорія видалиться
-
-💡 Почніть відстежувати транзакції в застосунку та використовуйте меню для налаштувань"""
+💡 Почніть відстежувати транзакції або використовуйте меню!"""
             else:
-                complete_msg = """🎉 Profile Created!
+                complete_msg = """🎉 *Profile Created!*
 
-You are now ready for proper financial management.
+You're now ready to use Finn!
 
-🚀 Quick Start:
-*150* [comment if needed] - Add expense
-*+5000* Salary - Add income
-*++1000* - Add to savings
-*-200* - Add debt
+🚀 *Quick Start:*
+`150 lunch` - Add expense
+`+5000 salary` - Add income
+`++1000` - Add savings  
+`-200 loan` - Add debt
 
-To edit expense categories, simply use + -, for example:
-Food - category will be added
-Repair - category will be deleted
-
-💡 Start tracking transactions with our app, and use the menu for settings"""
+💡 Start tracking transactions or use the menu!"""
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
