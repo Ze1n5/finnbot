@@ -234,38 +234,34 @@ class SimpleFinnBot:
             self.user_categories = {}
             self.user_languages = {}
 
-    def save_transactions(self):
-        """Save ONLY NEW transactions to PostgreSQL - don't replace all"""
+    def sync_transactions_to_postgres(self):
+        """Full sync - replace PostgreSQL with current memory state"""
         conn = self.get_db_connection()
         if not conn:
-            print("❌ Cannot save - no database connection")
             return
         
         try:
             cur = conn.cursor()
             
-            # Save ONLY transactions that don't already exist
+            # Delete ALL transactions for all users
+            cur.execute('DELETE FROM transactions')
+            
+            # Insert current memory state (even if empty)
             transaction_count = 0
             for user_id, transactions in self.transactions.items():
                 for txn in transactions:
-                    # Check if transaction already exists
                     cur.execute(
-                        'SELECT id FROM transactions WHERE user_id = %s AND amount = %s AND description = %s AND category = %s',
-                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'))
+                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                        (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
                     )
-                    if not cur.fetchone():  # Only insert if it doesn't exist
-                        cur.execute(
-                            'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
-                            (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
-                        )
-                        transaction_count += 1
+                    transaction_count += 1
             
             conn.commit()
             conn.close()
-            print(f"💾 Added {transaction_count} NEW transactions to PostgreSQL")
+            print(f"🔄 Full sync: {transaction_count} transactions to PostgreSQL")
             
         except Exception as e:
-            print(f"❌ Error saving to database: {e}")
+            print(f"❌ Error syncing to PostgreSQL: {e}")
 
     def save_incomes(self):
         """Save incomes to PostgreSQL"""
@@ -719,14 +715,6 @@ class SimpleFinnBot:
             print(f"❌ Error loading from PostgreSQL: {e}")
             self.transactions = {}
 
-    def save_user_transaction(self, user_id, transaction):
-        """Add transaction for a specific user and save to persistent storage"""
-        if user_id not in self.transactions:
-            self.transactions[user_id] = []
-            
-        self.transactions[user_id].append(transaction)
-        self.save_transactions() 
-
     def load_user_categories(self):
         """Load user categories from JSON file"""
         try:
@@ -1035,7 +1023,7 @@ class SimpleFinnBot:
                             for i, transaction in enumerate(user_transactions):
                                 transaction['id'] = i + 1
                             
-                            self.save_transactions()
+                            self.sync_transactions_to_postgres()
                             # IMPORTANT: Clear delete mode to force refresh
                             self.delete_mode[chat_id] = False
                         else:
@@ -2108,7 +2096,7 @@ You're now ready to use Finn!
                         "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
-                    self.save_transactions()
+                    self.sync_transactions_to_postgres()
                     print(f"✅ Saved {transaction_type} transaction for user {chat_id}")
                     
                     # Sync to Railway
@@ -2232,7 +2220,7 @@ You're now ready to use Finn!
                 del self.delete_mode[chat_id]
             
             # Save all changes
-            self.save_transactions()
+            self.sync_transactions_to_postgres()
             self.save_incomes()
             self.save_user_categories()
             
@@ -3057,7 +3045,7 @@ def save_all_data():
     """Save all data before shutdown"""
     print("💾 Saving all data before shutdown...")
     try:
-        bot_instance.save_transactions()
+        bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
         bot_instance.save_user_languages()
