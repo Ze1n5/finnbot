@@ -2029,55 +2029,50 @@ Do you have any savings? (bank, crypto, investments)
             self.onboarding_state[chat_id] = 'awaiting_savings'
             self.send_message(chat_id, savings_msg, parse_mode='Markdown')
 
-                # Handle savings confirmation
+        # Handle savings confirmation
         elif data == "confirm_savings":
             # Complete onboarding
             user_lang = self.get_user_language(chat_id)
             
-            # Send profile created image with caption
-            profile_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/profile_created.jpg"
-            
             if user_lang == 'uk':
-                complete_caption = """🎉 *Профіль створено!*
+                complete_msg = """🎉 Профіль створено!
 
-        Тепер ти готовий до правильного управління фінансами.
+Тепер ти готовий до правильного управління фінансами.
 
-        🚀 *Швидкий старт:*
-        *150* [коментар у разі потреби] - Додати витрату
-        *+5000* _ЗП_ - Додати дохід
-        *++1000* - Додати заощадження
-        *-200* _Кредитний лиміт_ - Додати борг
+🚀 Швидкий старт:
+*150* [коментар у разі потреби] - Додати витрату
+*+5000* ЗП - Додати дохід
+*++1000* - Додати заощадження
+*-200* Кредитний лиміт - Додати борг
 
-        Для редагування категорій витрат, просто використовуйте + -, наприклад:
-        + Їжа - категорія додасться
-        - Ремонт - категорія видалиться
+Для редагування категорій витрат, просто використовуйте + -, наприклад:
 
-        💡 Почніть відстежувати транзакції в застосунку та використовуйте меню для налаштувань"""
+Їжа - категорія додасться
+Ремонт - категорія видалиться
+
+💡 Почніть відстежувати транзакції в застосунку та використовуйте меню для налаштувань"""
             else:
-                complete_caption = """🎉 *Profile Created!*
+                complete_msg = """🎉 Profile Created!
 
-        You are now ready for proper financial management.
+You are now ready for proper financial management.
 
-        🚀 *Quick Start:*
-        *150* [comment if needed] - Add expense
-        *+5000* _Salary_ - Add income
-        *++1000* - Add to savings
-        *-200* _Credit Limit_ - Add debt
+🚀 Quick Start:
+*150* [comment if needed] - Add expense
+*+5000* Salary - Add income
+*++1000* - Add to savings
+*-200* - Add debt
 
-        To edit expense categories, simply use + -, for example:
-        + Food - category will be added
-        - Repair - category will be deleted
+To edit expense categories, simply use + -, for example:
+Food - category will be added
+Repair - category will be deleted
 
-        💡 Start tracking transactions with our app, and use the menu for settings"""
-            
-            # Send the photo with caption
-            self.send_photo_from_url(chat_id, profile_image_url, complete_caption)
+💡 Start tracking transactions with our app, and use the menu for settings"""
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
             
-            # No need to send separate message since caption includes everything
+            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         
         if data.startswith("cat_"):
