@@ -388,12 +388,8 @@ class SimpleFinnBot:
         if keyboard:
             data["reply_markup"] = json.dumps(keyboard)
         
-        try:
-            response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
-            return response.json()
-        except Exception as e:
-            print(f"❌ Error sending photo: {e}")
-            return None
+        response = requests.post(f"{BASE_URL}/sendPhoto", json=data)
+        return response
 
     def categorize_transaction(self, category_name, description=""):
         """Categorize transaction into needs/wants/future"""
@@ -2063,45 +2059,40 @@ Do you have any savings? (bank, crypto, investments)
             self.send_message(chat_id, savings_msg, parse_mode='Markdown')
 
         # Handle savings confirmation
-        # Handle savings confirmation
         elif data == "confirm_savings":
             # Complete onboarding
             user_lang = self.get_user_language(chat_id)
             
-            # Send profile created image with caption AND confirmation
-            profile_image_url = "https://raw.githubusercontent.com/Ze1n5/finnbot/main/Images/profile_created.jpg"
-            
             if user_lang == 'uk':
-                complete_caption = """🎉 *Профіль створено!*
+                complete_msg = """🎉 *Профіль створено!*
 
-        Тепер ви готові до роботи з Finn! 
+Тепер ви готові до роботи з Finn! 
 
-        🚀 *Швидкий старт:*
-        `150 обід` - Додати витрату
-        `+5000 зарплата` - Додати дохід
-        `++1000` - Додати заощадження
-        `-200 кредит` - Додати борг
+🚀 *Швидкий старт:*
+`150 обід` - Додати витрату
+`+5000 зарплата` - Додати дохід
+`++1000` - Додати заощадження
+`-200 кредит` - Додати борг
 
-        💡 Почніть відстежувати транзакції або використовуйте меню!"""
+💡 Почніть відстежувати транзакції або використовуйте меню!"""
             else:
-                complete_caption = """🎉 *Profile Created!*
+                complete_msg = """🎉 *Profile Created!*
 
-        You're now ready to use Finn!
+You're now ready to use Finn!
 
-        🚀 *Quick Start:*
-        `150 lunch` - Add expense
-        `+5000 salary` - Add income
-        `++1000` - Add savings  
-        `-200 loan` - Add debt
+🚀 *Quick Start:*
+`150 lunch` - Add expense
+`+5000 salary` - Add income
+`++1000` - Add savings  
+`-200 loan` - Add debt
 
-        💡 Start tracking transactions or use the menu!"""
-            
-            # Send the photo with caption AND main menu
-            self.send_photo_from_url(chat_id, profile_image_url, complete_caption, keyboard=self.get_main_menu())            
+💡 Start tracking transactions or use the menu!"""
             
             # Clear onboarding state
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
+            
+            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         
         if data.startswith("cat_"):
