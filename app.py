@@ -479,7 +479,7 @@ def webhook():
         def process_and_save():
             bot_instance.process_update(update_data)
             # KEEP THIS - it saves NEW transactions to PostgreSQL
-            bot_instance.save_transactions()
+            bot_instance.sync_transactions_to_postgres()
             bot_instance.save_incomes()
             print("💾 Data saved after webhook processing")
         
