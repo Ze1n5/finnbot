@@ -146,7 +146,6 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
-    
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
         print("💾 User languages would be saved here")
@@ -184,10 +183,15 @@ class SimpleFinnBot:
         conn = self.get_db_connection()
         if not conn:
             print("❌ No database connection - starting with empty data")
-            self.transactions = {}
-            self.user_incomes = {}
-            self.user_categories = {}
-            self.user_languages = {}
+            # Initialize empty if no connection
+            if not hasattr(self, 'transactions'):
+                self.transactions = {}
+            if not hasattr(self, 'user_incomes'): 
+                self.user_incomes = {}
+            if not hasattr(self, 'user_categories'):
+                self.user_categories = {}
+            if not hasattr(self, 'user_languages'):
+                self.user_languages = {}
             return
         
         try:
@@ -198,71 +202,97 @@ class SimpleFinnBot:
             db_count = cur.fetchone()[0]
             print(f"🔍 DEBUG: Database has {db_count} transactions")
             
-            # Load transactions FROM POSTGRESQL ONLY
-            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            # Load transactions WITH THEIR ORIGINAL TIMESTAMPS
+            cur.execute('SELECT user_id, amount, description, category, type, created_at FROM transactions ORDER BY created_at')
             transactions_data = cur.fetchall()
             
-            self.transactions = {}
-            for user_id, amount, description, category, trans_type in transactions_data:
+            # Create temporary transactions dictionary
+            new_transactions = {}
+            for user_id, amount, description, category, trans_type, created_at in transactions_data:
                 user_id = int(user_id)
-                if user_id not in self.transactions:
-                    self.transactions[user_id] = []
+                if user_id not in new_transactions:
+                    new_transactions[user_id] = []
                 
-                self.transactions[user_id].append({
+                new_transactions[user_id].append({
                     'amount': float(amount),
                     'description': description,
                     'category': category,
                     'type': trans_type,
-                    'date': datetime.now().isoformat()
+                    'date': created_at.isoformat() if created_at else datetime.now().isoformat()  # Use original timestamp
                 })
+                print(f"🔍 DEBUG: Loaded transaction with original timestamp: {created_at}")
             
             # Load incomes
             cur.execute('SELECT user_id, amount FROM incomes')
             incomes_data = cur.fetchall()
             
-            self.user_incomes = {}
+            new_user_incomes = {}
             for user_id, amount in incomes_data:
-                self.user_incomes[int(user_id)] = float(amount)
+                new_user_incomes[int(user_id)] = float(amount)
             
             conn.close()
+            
+            # ONLY update the instance variables after successful load
+            self.transactions = new_transactions
+            self.user_incomes = new_user_incomes
+            
             print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error loading from database: {e}")
-            # Don't fall back to files!
-            self.transactions = {}
-            self.user_incomes = {}
-            self.user_categories = {}
-            self.user_languages = {}
+            # Initialize empty on error
+            if not hasattr(self, 'transactions'):
+                self.transactions = {}
+            if not hasattr(self, 'user_incomes'):
+                self.user_incomes = {}
+            if not hasattr(self, 'user_categories'):
+                self.user_categories = {}
+            if not hasattr(self, 'user_languages'):
+                self.user_languages = {}
 
     def sync_transactions_to_postgres(self):
-        """Full sync - replace PostgreSQL with current memory state"""
+        """Additive sync - only add new transactions, don't delete existing ones"""
         conn = self.get_db_connection()
         if not conn:
+            print("❌ No database connection for sync")
             return
         
         try:
             cur = conn.cursor()
             
-            # Delete ALL transactions for all users
-            cur.execute('DELETE FROM transactions')
-            
-            # Insert current memory state (even if empty)
+            # Count what's in memory to sync
             transaction_count = 0
             for user_id, transactions in self.transactions.items():
+                transaction_count += len(transactions)
+            
+            print(f"🔍 DEBUG: Syncing {transaction_count} transactions from memory to PostgreSQL")
+            
+            # ONLY insert new transactions - DON'T delete existing ones
+            saved_count = 0
+            for user_id, transactions in self.transactions.items():
                 for txn in transactions:
+                    # Check if this transaction already exists to avoid duplicates
                     cur.execute(
-                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                        'SELECT id FROM transactions WHERE user_id = %s AND amount = %s AND description = %s AND category = %s AND type = %s',
                         (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
                     )
-                    transaction_count += 1
+                    existing = cur.fetchone()
+                    
+                    if not existing:  # Only insert if it doesn't exist
+                        cur.execute(
+                            'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                            (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                        )
+                        saved_count += 1
             
             conn.commit()
             conn.close()
-            print(f"🔄 Full sync: {transaction_count} transactions to PostgreSQL")
+            print(f"🔄 Additive sync: Added {saved_count} new transactions to PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error syncing to PostgreSQL: {e}")
+            import traceback
+            traceback.print_exc()
 
     def save_incomes(self):
         """Save incomes to PostgreSQL"""
@@ -288,8 +318,15 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error saving incomes to database: {e}")
 
-    def __init__(self):
+    def __init__(self, load_data=True):
+        print(f"🔍 DEBUG: SimpleFinnBot.__init__ called with load_data={load_data}")
+        import traceback
+        print("🔍 Call stack for bot initialization:")
+        for line in traceback.format_stack()[:-1]:
+            if "finnbot" in line.lower() or "simple" in line.lower():
+                print(line.strip())
         # Income categories (shared for all users)
+        self._transactions = {}
         self.income_categories = {
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
@@ -312,7 +349,6 @@ class SimpleFinnBot:
         # User-specific data
         self.learned_patterns = {}
         self.onboarding_state = {}
-        self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
         self.user_incomes = {}
@@ -322,8 +358,15 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data
-        self.load_all_data()
+        # Only load data if explicitly requested
+        if load_data:
+            self.load_all_data()
+        else:
+            # Initialize empty data structures
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
         
         # 50/30/20 tracking
         self.monthly_totals = {}
@@ -351,28 +394,25 @@ class SimpleFinnBot:
     def save_user_transaction(self, chat_id, transaction):
         """Save a single transaction for a user"""
         try:
-            print(f"🔍 DEBUG save_user_transaction: Starting - chat_id: {chat_id}, transaction: {transaction}")
+            print(f"🔍 DEBUG save_user_transaction: chat_id={chat_id}, transaction={transaction}")
+            print(f"🔍 DEBUG: Full call stack:")
+            import traceback
+            traceback.print_stack()
             
             # Initialize if needed
             if chat_id not in self.transactions:
-                print(f"🔍 DEBUG: Initializing transactions for user {chat_id}")
+                print(f"🔍 DEBUG: Creating new transactions list for user {chat_id}")
                 self.transactions[chat_id] = []
             
             # Add transaction
             self.transactions[chat_id].append(transaction)
-            print(f"🔍 DEBUG: Added transaction to memory")
+            print(f"🔍 DEBUG: Added transaction to memory. User now has {len(self.transactions[chat_id])} transactions")
             
             # Sync to database
-            print(f"🔍 DEBUG: About to call sync_transactions_to_postgres")
             self.sync_transactions_to_postgres()
-            print(f"🔍 DEBUG: Successfully synced to PostgreSQL")
-            
-            print(f"✅ Saved {transaction['type']} transaction for user {chat_id}")
             
         except Exception as e:
             print(f"❌ Error in save_user_transaction: {e}")
-            import traceback
-            traceback.print_exc()  # This will show the full error stack
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
@@ -1998,11 +2038,32 @@ How much cash do you have right now? (in UAH)
             # Wait a moment then send the balance question
             time.sleep(1)
             self.onboarding_state[chat_id] = 'awaiting_balance'
-            self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
+            # Use the actual message text instead of the undefined variable
+            balance_question = """👋 *Hi! I'm Finn!*
+
+            Let's create your financial profile. This will just take a minute!
+            *Step 1/4: Current Balance*
+
+            How much cash do you have right now? (in UAH)
+
+            💡 *Enter amount:*
+            `5000` - if you have 5,000₴
+            `0` - if no cash"""
+            self.send_message(chat_id, balance_question, parse_mode='Markdown')
 
         # Handle balance confirmation
         elif data == "confirm_balance":
-            # Move to debt question
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted balance confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting balance confirmation message: {e}")
+            
+            # Move to debt question (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2031,7 +2092,17 @@ Do you have any debts? (loans, credits, etc.)
 
         # Handle debt confirmation  
         elif data == "confirm_debt":
-            # Move to savings question
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted debt confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting debt confirmation message: {e}")
+            
+            # Move to savings question (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2060,7 +2131,17 @@ Do you have any savings? (bank, crypto, investments)
 
         # Handle savings confirmation
         elif data == "confirm_savings":
-            # Complete onboarding
+            # Delete the confirmation message
+            try:
+                requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+                print(f"🔍 DEBUG: Deleted savings confirmation message {message_id}")
+            except Exception as e:
+                print(f"⚠️ Error deleting savings confirmation message: {e}")
+            
+            # Complete onboarding (your existing code)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2225,12 +2306,37 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            # Clear all user data
-            user_id_str = str(chat_id)
+            print(f"🔍 DEBUG: Clearing all transactions for user {chat_id}")
             
-            # Clear transactions
+            # 1. Clear from memory FIRST
             if chat_id in self.transactions:
-                del self.transactions[chat_id]
+                print(f"🔍 DEBUG: Before memory clear - {len(self.transactions[chat_id])} transactions in memory")
+                self.transactions[chat_id] = []  # Empty the list
+                print(f"🔍 DEBUG: After memory clear - {len(self.transactions[chat_id])} transactions in memory")
+            
+            # 2. Clear from PostgreSQL database
+            conn = self.get_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    # Delete ALL transactions for this user
+                    cur.execute('DELETE FROM transactions WHERE user_id = %s', (chat_id,))
+                    conn.commit()
+                    conn.close()
+                    print(f"✅ Deleted all transactions from PostgreSQL for user {chat_id}")
+                except Exception as e:
+                    print(f"❌ Error deleting transactions from PostgreSQL: {e}")
+            
+            # 3. CLEAR ONBOARDING STATE - THIS IS THE KEY FIX!
+            if chat_id in self.onboarding_state:
+                del self.onboarding_state[chat_id]
+                print(f"🔍 DEBUG: Cleared onboarding state for user {chat_id}")
+            
+            # 4. Force immediate sync to ensure clean state
+            self.sync_transactions_to_postgres()
+            
+            # Clear other user data...
+            user_id_str = str(chat_id)
             
             # Clear income
             if user_id_str in self.user_incomes:
@@ -2248,31 +2354,24 @@ You're now ready to use Finn!
             if chat_id in self.delete_mode:
                 del self.delete_mode[chat_id]
             
-            # Save all changes
-            self.sync_transactions_to_postgres()
+            # Save changes
             self.save_incomes()
             self.save_user_categories()
             
             if user_lang == 'uk':
                 success_msg = """✅ *Бота перезапущено!*
                 
-        Всі ваші дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
-
-        🚀 *Давайте почнемо знову!*
-        Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
+        Всі ваші транзакції та дані було успішно видалено. Бот готовий до роботи з чистої сторінки!"""
             else:
                 success_msg = """✅ *Bot restarted!*
                 
-        All your data has been successfully deleted. The bot is ready to start fresh!
-
-        🚀 *Let's start fresh!*
-        Add your first transaction or use the menu to get started."""
+        All your transactions and data have been successfully deleted. The bot is ready to start fresh!"""
             
             self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
             # Delete the confirmation message
             try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
                     "message_id": message_id
                 })
@@ -2327,9 +2426,6 @@ You're now ready to use Finn!
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
-
-# Initialize bot instance
-bot_instance = SimpleFinnBot()
 
 # Webhook route
 @flask_app.route('/webhook', methods=['POST', 'GET'])
@@ -2941,31 +3037,23 @@ def add_transaction():
         transaction_data = request.json
         print(f"📥 Received transaction: {transaction_data}")
         
-        # Read current transactions
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = {}
+        # Use the bot instance instead of JSON file
+        user_id = transaction_data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
         
-        # Add new transaction (your data structure is {user_id: [transactions]})
-        user_id = str(transaction_data.get('user_id', 'default_user'))
-        if user_id not in transactions:
-            transactions[user_id] = []
-        
-        transactions[user_id].append({
+        transaction = {
             'amount': transaction_data.get('amount', 0),
             'description': transaction_data.get('description', ''),
             'category': transaction_data.get('category', 'Other'),
             'type': transaction_data.get('type', 'expense'),
-            'timestamp': transaction_data.get('timestamp', '')
-        })
+            'date': transaction_data.get('timestamp', datetime.now().isoformat())
+        }
         
-        # Save back to file
-        with open('transactions.json', 'w') as f:
-            json.dump(transactions, f)
+        # Use the bot's method to save transaction
+        bot_instance.save_user_transaction(user_id, transaction)
         
-        print("✅ Transaction added successfully")
+        print("✅ Transaction added successfully via bot instance")
         return jsonify({'status': 'success', 'message': 'Transaction added'})
         
     except Exception as e:
@@ -3070,10 +3158,34 @@ def check_reminders_periodically():
             print(f"❌ Reminder error: {e}")
             time.sleep(3600)
 
+_bot_instance = None
+
+def get_bot_instance():
+    """Get or create the bot instance (singleton pattern)"""
+    global _bot_instance
+    if _bot_instance is None:
+        _bot_instance = SimpleFinnBot()
+    return _bot_instance
+
 def save_all_data():
     """Save all data before shutdown"""
-    print("💾 Saving all data before shutdown...")
+    bot_instance = get_bot_instance()
+    print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
     try:
+        # Import the bot instance here to avoid circular imports
+        from bot_instance import bot_instance
+        
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
+        
+        # ADD THIS: Check where transactions are coming from
+        if bot_instance.transactions:
+            for user_id, transactions in bot_instance.transactions.items():
+                for transaction in transactions:
+                    if 'Starting' in transaction.get('description', ''):
+                        print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
+        
+        print("💾 Saving all data before shutdown...")
         bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
@@ -3082,18 +3194,70 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
-# Register shutdown handlers to auto-save data
-atexit.register(save_all_data)
-import signal
-signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
-signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
+# ========== BOT INSTANCE AND SHUTDOWN HANDLER ==========
 
-# Start the periodic checker
+# Global variable for singleton instance
+_bot_instance = None
+
+def get_bot_instance():
+    """Get or create the bot instance"""
+    global _bot_instance
+    if _bot_instance is None:
+        _bot_instance = SimpleFinnBot()
+    return _bot_instance
+
+def save_all_data():
+    """Save all data before shutdown"""
+    try:
+        bot_instance = get_bot_instance()
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
+        
+        # Check where transactions are coming from
+        if bot_instance.transactions:
+            for user_id, transactions in bot_instance.transactions.items():
+                for transaction in transactions:
+                    if 'Starting' in transaction.get('description', ''):
+                        print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
+        
+        print("💾 Saving all data before shutdown...")
+        bot_instance.sync_transactions_to_postgres()
+        bot_instance.save_incomes()
+        bot_instance.save_user_categories()
+        bot_instance.save_user_languages()
+        print("✅ All data saved successfully!")
+    except Exception as e:
+        print(f"❌ Error during shutdown save: {e}")
+
+# Create the bot instance
+bot_instance = get_bot_instance()
+
+# Register shutdown handler
+import atexit
+atexit.register(save_all_data)
+
+# ========== REMINDER SYSTEM ==========
+
+# Define welcome_msg for onboarding
+welcome_msg = """👋 *Hi! I'm Finn!*
+
+Let's create your financial profile. This will just take a minute!
+*Step 1/4: Current Balance*
+
+How much cash do you have right now? (in UAH)
+
+💡 *Enter amount:*
+`5000` - if you have 5,000₴
+`0` - if no cash"""
+
+# Start reminder system
 if not hasattr(bot_instance, 'reminder_started'):
+    bot_instance.reminder_started = True
     reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
     reminder_thread.start()
-    bot_instance.reminder_started = True
     print("✅ Periodic reminder checker started")
+
+# ========== APPLICATION STARTUP ==========
 
 if __name__ == "__main__":
     if not BOT_TOKEN:

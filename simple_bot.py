@@ -395,9 +395,13 @@ class SimpleFinnBot:
         """Save a single transaction for a user"""
         try:
             print(f"🔍 DEBUG save_user_transaction: chat_id={chat_id}, transaction={transaction}")
-            print(f"🔍 DEBUG: Full call stack:")
+            
+            # Safe stack trace (optional)
             import traceback
-            traceback.print_stack()
+            stack_summary = traceback.extract_stack()
+            print("🔍 DEBUG: Call stack (simplified):")
+            for frame in stack_summary[-5:]:  # Show last 5 frames only
+                print(f"   {frame.filename}:{frame.lineno} in {frame.name}")
             
             # Initialize if needed
             if chat_id not in self.transactions:
@@ -3167,38 +3171,6 @@ def get_bot_instance():
         _bot_instance = SimpleFinnBot()
     return _bot_instance
 
-def save_all_data():
-    """Save all data before shutdown"""
-    bot_instance = get_bot_instance()
-    print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
-    try:
-        # Import the bot instance here to avoid circular imports
-        from bot_instance import bot_instance
-        
-        print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
-        print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
-        
-        # ADD THIS: Check where transactions are coming from
-        if bot_instance.transactions:
-            for user_id, transactions in bot_instance.transactions.items():
-                for transaction in transactions:
-                    if 'Starting' in transaction.get('description', ''):
-                        print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
-        
-        print("💾 Saving all data before shutdown...")
-        bot_instance.sync_transactions_to_postgres()
-        bot_instance.save_incomes()
-        bot_instance.save_user_categories()
-        bot_instance.save_user_languages()
-        print("✅ All data saved successfully!")
-    except Exception as e:
-        print(f"❌ Error during shutdown save: {e}")
-
-# ========== BOT INSTANCE AND SHUTDOWN HANDLER ==========
-
-# Global variable for singleton instance
-_bot_instance = None
-
 def get_bot_instance():
     """Get or create the bot instance"""
     global _bot_instance
@@ -3235,20 +3207,6 @@ bot_instance = get_bot_instance()
 # Register shutdown handler
 import atexit
 atexit.register(save_all_data)
-
-# ========== REMINDER SYSTEM ==========
-
-# Define welcome_msg for onboarding
-welcome_msg = """👋 *Hi! I'm Finn!*
-
-Let's create your financial profile. This will just take a minute!
-*Step 1/4: Current Balance*
-
-How much cash do you have right now? (in UAH)
-
-💡 *Enter amount:*
-`5000` - if you have 5,000₴
-`0` - if no cash"""
 
 # Start reminder system
 if not hasattr(bot_instance, 'reminder_started'):
