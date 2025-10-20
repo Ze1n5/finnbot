@@ -237,32 +237,48 @@ class SimpleFinnBot:
 
     def sync_transactions_to_postgres(self):
         """Full sync - replace PostgreSQL with current memory state"""
+        print(f"🔍 DEBUG sync_transactions_to_postgres: Starting sync")
+        print(f"🔍 DEBUG: Current transactions in memory: {self.transactions}")
+        
         conn = self.get_db_connection()
         if not conn:
+            print("❌ No database connection for sync")
             return
         
         try:
             cur = conn.cursor()
             
-            # Delete ALL transactions for all users
-            cur.execute('DELETE FROM transactions')
-            
-            # Insert current memory state (even if empty)
+            # Count transactions before sync
             transaction_count = 0
             for user_id, transactions in self.transactions.items():
+                transaction_count += len(transactions)
+                print(f"🔍 DEBUG: User {user_id} has {len(transactions)} transactions")
+            
+            print(f"🔍 DEBUG: Total transactions to sync: {transaction_count}")
+            
+            # Delete ALL transactions
+            cur.execute('DELETE FROM transactions')
+            print(f"🔍 DEBUG: Cleared existing transactions from PostgreSQL")
+            
+            # Insert current memory state
+            saved_count = 0
+            for user_id, transactions in self.transactions.items():
                 for txn in transactions:
+                    print(f"🔍 DEBUG: Saving transaction: {txn}")
                     cur.execute(
                         'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
                         (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
                     )
-                    transaction_count += 1
+                    saved_count += 1
             
             conn.commit()
             conn.close()
-            print(f"🔄 Full sync: {transaction_count} transactions to PostgreSQL")
+            print(f"🔄 Full sync: {saved_count} transactions to PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error syncing to PostgreSQL: {e}")
+            import traceback
+            traceback.print_exc()
 
     def save_incomes(self):
         """Save incomes to PostgreSQL"""
@@ -351,28 +367,22 @@ class SimpleFinnBot:
     def save_user_transaction(self, chat_id, transaction):
         """Save a single transaction for a user"""
         try:
-            print(f"🔍 DEBUG save_user_transaction: Starting - chat_id: {chat_id}, transaction: {transaction}")
+            print(f"🔍 DEBUG save_user_transaction: chat_id={chat_id}, transaction={transaction}")
             
             # Initialize if needed
             if chat_id not in self.transactions:
-                print(f"🔍 DEBUG: Initializing transactions for user {chat_id}")
+                print(f"🔍 DEBUG: Creating new transactions list for user {chat_id}")
                 self.transactions[chat_id] = []
             
             # Add transaction
             self.transactions[chat_id].append(transaction)
-            print(f"🔍 DEBUG: Added transaction to memory")
+            print(f"🔍 DEBUG: Added transaction to memory. User now has {len(self.transactions[chat_id])} transactions")
             
             # Sync to database
-            print(f"🔍 DEBUG: About to call sync_transactions_to_postgres")
             self.sync_transactions_to_postgres()
-            print(f"🔍 DEBUG: Successfully synced to PostgreSQL")
-            
-            print(f"✅ Saved {transaction['type']} transaction for user {chat_id}")
             
         except Exception as e:
             print(f"❌ Error in save_user_transaction: {e}")
-            import traceback
-            traceback.print_exc()  # This will show the full error stack
 
     def send_photo_from_url(self, chat_id, photo_url, caption=None, keyboard=None):
         """Send photo from a public URL"""
