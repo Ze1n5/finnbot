@@ -184,7 +184,7 @@ class SimpleFinnBot:
         conn = self.get_db_connection()
         if not conn:
             print("❌ No database connection - starting with empty data")
-            # Don't reset existing data if no connection
+            # Initialize empty if no connection
             if not hasattr(self, 'transactions'):
                 self.transactions = {}
             if not hasattr(self, 'user_incomes'): 
@@ -203,7 +203,7 @@ class SimpleFinnBot:
             db_count = cur.fetchone()[0]
             print(f"🔍 DEBUG: Database has {db_count} transactions")
             
-            # Load transactions - DON'T reset self.transactions immediately
+            # Load transactions
             cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
             transactions_data = cur.fetchall()
             
@@ -240,8 +240,15 @@ class SimpleFinnBot:
             
         except Exception as e:
             print(f"❌ Error loading from database: {e}")
-            # Don't reset existing data on error - keep whatever we had
-            print(f"⚠️ Keeping existing data due to load error")
+            # Initialize empty on error
+            if not hasattr(self, 'transactions'):
+                self.transactions = {}
+            if not hasattr(self, 'user_incomes'):
+                self.user_incomes = {}
+            if not hasattr(self, 'user_categories'):
+                self.user_categories = {}
+            if not hasattr(self, 'user_languages'):
+                self.user_languages = {}
 
     def sync_transactions_to_postgres(self):
         """Additive sync - only add new transactions, don't delete existing ones"""
@@ -335,7 +342,6 @@ class SimpleFinnBot:
         # User-specific data
         self.learned_patterns = {}
         self.onboarding_state = {}
-        self.transactions = {}
         self.pending = {}
         self.delete_mode = {}
         self.user_incomes = {}
