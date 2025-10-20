@@ -2038,7 +2038,18 @@ How much cash do you have right now? (in UAH)
             # Wait a moment then send the balance question
             time.sleep(1)
             self.onboarding_state[chat_id] = 'awaiting_balance'
-            self.send_message(chat_id, welcome_msg, parse_mode='Markdown')
+            # Use the actual message text instead of the undefined variable
+            balance_question = """👋 *Hi! I'm Finn!*
+
+            Let's create your financial profile. This will just take a minute!
+            *Step 1/4: Current Balance*
+
+            How much cash do you have right now? (in UAH)
+
+            💡 *Enter amount:*
+            `5000` - if you have 5,000₴
+            `0` - if no cash"""
+            self.send_message(chat_id, balance_question, parse_mode='Markdown')
 
         # Handle balance confirmation
         elif data == "confirm_balance":
@@ -3183,12 +3194,70 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
-# Start the periodic checker
+# ========== BOT INSTANCE AND SHUTDOWN HANDLER ==========
+
+# Global variable for singleton instance
+_bot_instance = None
+
+def get_bot_instance():
+    """Get or create the bot instance"""
+    global _bot_instance
+    if _bot_instance is None:
+        _bot_instance = SimpleFinnBot()
+    return _bot_instance
+
+def save_all_data():
+    """Save all data before shutdown"""
+    try:
+        bot_instance = get_bot_instance()
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
+        
+        # Check where transactions are coming from
+        if bot_instance.transactions:
+            for user_id, transactions in bot_instance.transactions.items():
+                for transaction in transactions:
+                    if 'Starting' in transaction.get('description', ''):
+                        print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
+        
+        print("💾 Saving all data before shutdown...")
+        bot_instance.sync_transactions_to_postgres()
+        bot_instance.save_incomes()
+        bot_instance.save_user_categories()
+        bot_instance.save_user_languages()
+        print("✅ All data saved successfully!")
+    except Exception as e:
+        print(f"❌ Error during shutdown save: {e}")
+
+# Create the bot instance
+bot_instance = get_bot_instance()
+
+# Register shutdown handler
+import atexit
+atexit.register(save_all_data)
+
+# ========== REMINDER SYSTEM ==========
+
+# Define welcome_msg for onboarding
+welcome_msg = """👋 *Hi! I'm Finn!*
+
+Let's create your financial profile. This will just take a minute!
+*Step 1/4: Current Balance*
+
+How much cash do you have right now? (in UAH)
+
+💡 *Enter amount:*
+`5000` - if you have 5,000₴
+`0` - if no cash"""
+
+# Start reminder system
 if not hasattr(bot_instance, 'reminder_started'):
+    bot_instance.reminder_started = True
     reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
     reminder_thread.start()
-    bot_instance.reminder_started = True
     print("✅ Periodic reminder checker started")
+
+# ========== APPLICATION STARTUP ==========
 
 if __name__ == "__main__":
     if not BOT_TOKEN:
