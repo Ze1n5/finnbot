@@ -472,10 +472,9 @@ def debug_storage():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """Receive updates from Telegram for SimpleFinnBot"""
-    if request.method == 'POST':
-        update_data = request.get_json()
-        print(f"📨 Received webhook update")
-        
+    update_data = request.get_json()
+    print(f"🔍 DEBUG WEBHOOK: Processing update: {update_data}")
+    if request.method == 'POST':    
         def process_and_save():
             bot_instance.process_update(update_data)
             # KEEP THIS - it saves NEW transactions to PostgreSQL
