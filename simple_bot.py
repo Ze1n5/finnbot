@@ -146,7 +146,6 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
-    
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
         print("💾 User languages would be saved here")
@@ -319,8 +318,15 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error saving incomes to database: {e}")
 
-    def __init__(self):
+    def __init__(self, load_data=True):
+        print(f"🔍 DEBUG: SimpleFinnBot.__init__ called with load_data={load_data}")
+        import traceback
+        print("🔍 Call stack for bot initialization:")
+        for line in traceback.format_stack()[:-1]:
+            if "finnbot" in line.lower() or "simple" in line.lower():
+                print(line.strip())
         # Income categories (shared for all users)
+        self._transactions = {}
         self.income_categories = {
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
@@ -352,8 +358,15 @@ class SimpleFinnBot:
         self.daily_reminders = {}
         self.protected_savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
         
-        # Load existing data
-        self.load_all_data()
+        # Only load data if explicitly requested
+        if load_data:
+            self.load_all_data()
+        else:
+            # Initialize empty data structures
+            self.transactions = {}
+            self.user_incomes = {}
+            self.user_categories = {}
+            self.user_languages = {}
         
         # 50/30/20 tracking
         self.monthly_totals = {}
@@ -3141,6 +3154,14 @@ def save_all_data():
     """Save all data before shutdown"""
     print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
     print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
+    
+    # ADD THIS: Check where transactions are coming from
+    if bot_instance.transactions:
+        for user_id, transactions in bot_instance.transactions.items():
+            for transaction in transactions:
+                if 'Starting' in transaction.get('description', ''):
+                    print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
+    
     print("💾 Saving all data before shutdown...")
     try:
         bot_instance.sync_transactions_to_postgres()
