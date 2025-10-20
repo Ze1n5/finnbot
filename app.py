@@ -7,9 +7,11 @@ import atexit
 import signal
 from datetime import datetime
 from flask import Flask, jsonify, request
-from simple_bot import SimpleFinnBot
 import psycopg2
 from urllib.parse import urlparse
+from simple_bot import get_bot_instance, save_all_data
+
+bot_instance = get_bot_instance()
 
 def get_db_connection():
     """Get PostgreSQL connection"""
@@ -149,10 +151,6 @@ print(f"📁 Persistent directory: {PERSISTENT_DIR}")
 # ========== FLASK APP INITIALIZATION ==========
 app = Flask(__name__)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
-# ========== BOT INSTANCE INITIALIZATION ==========
-print("🤖 Initializing SimpleFinnBot...")
-bot_instance = SimpleFinnBot()
 
 # Force reload of data to ensure consistency
 print("🔄 Reloading bot data for consistency...")

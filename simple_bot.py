@@ -3147,20 +3147,34 @@ def check_reminders_periodically():
             print(f"❌ Reminder error: {e}")
             time.sleep(3600)
 
+_bot_instance = None
+
+def get_bot_instance():
+    """Get or create the bot instance (singleton pattern)"""
+    global _bot_instance
+    if _bot_instance is None:
+        _bot_instance = SimpleFinnBot()
+    return _bot_instance
+
 def save_all_data():
     """Save all data before shutdown"""
+    bot_instance = get_bot_instance()
     print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
-    print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
-    
-    # ADD THIS: Check where transactions are coming from
-    if bot_instance.transactions:
-        for user_id, transactions in bot_instance.transactions.items():
-            for transaction in transactions:
-                if 'Starting' in transaction.get('description', ''):
-                    print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
-    
-    print("💾 Saving all data before shutdown...")
     try:
+        # Import the bot instance here to avoid circular imports
+        from bot_instance import bot_instance
+        
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
+        print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
+        
+        # ADD THIS: Check where transactions are coming from
+        if bot_instance.transactions:
+            for user_id, transactions in bot_instance.transactions.items():
+                for transaction in transactions:
+                    if 'Starting' in transaction.get('description', ''):
+                        print(f"🚨🚨🚨 CRITICAL: Found initial transaction during shutdown: {transaction}")
+        
+        print("💾 Saving all data before shutdown...")
         bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
@@ -3168,12 +3182,6 @@ def save_all_data():
         print("✅ All data saved successfully!")
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
-
-# Register shutdown handlers to auto-save data
-atexit.register(save_all_data)
-import signal
-signal.signal(signal.SIGTERM, lambda signum, frame: save_all_data())
-signal.signal(signal.SIGINT, lambda signum, frame: save_all_data())
 
 # Start the periodic checker
 if not hasattr(bot_instance, 'reminder_started'):
