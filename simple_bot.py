@@ -2272,12 +2272,13 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            # Clear ALL transactions from memory AND PostgreSQL
             print(f"🔍 DEBUG: Clearing all transactions for user {chat_id}")
             
-            # 1. Clear from memory
+            # 1. Clear from memory FIRST
             if chat_id in self.transactions:
-                self.transactions[chat_id] = []  # Empty the list but keep the key
+                print(f"🔍 DEBUG: Before memory clear - {len(self.transactions[chat_id])} transactions in memory")
+                self.transactions[chat_id] = []  # Empty the list
+                print(f"🔍 DEBUG: After memory clear - {len(self.transactions[chat_id])} transactions in memory")
             
             # 2. Clear from PostgreSQL database
             conn = self.get_db_connection()
@@ -2291,6 +2292,9 @@ You're now ready to use Finn!
                     print(f"✅ Deleted all transactions from PostgreSQL for user {chat_id}")
                 except Exception as e:
                     print(f"❌ Error deleting transactions from PostgreSQL: {e}")
+            
+            # 3. Force immediate sync to ensure clean state
+            self.sync_transactions_to_postgres()
             
             # Clear other user data (your existing code)
             user_id_str = str(chat_id)
