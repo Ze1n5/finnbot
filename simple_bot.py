@@ -203,13 +203,13 @@ class SimpleFinnBot:
             db_count = cur.fetchone()[0]
             print(f"🔍 DEBUG: Database has {db_count} transactions")
             
-            # Load transactions
-            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            # Load transactions WITH THEIR ORIGINAL TIMESTAMPS
+            cur.execute('SELECT user_id, amount, description, category, type, created_at FROM transactions ORDER BY created_at')
             transactions_data = cur.fetchall()
             
             # Create temporary transactions dictionary
             new_transactions = {}
-            for user_id, amount, description, category, trans_type in transactions_data:
+            for user_id, amount, description, category, trans_type, created_at in transactions_data:
                 user_id = int(user_id)
                 if user_id not in new_transactions:
                     new_transactions[user_id] = []
@@ -219,8 +219,9 @@ class SimpleFinnBot:
                     'description': description,
                     'category': category,
                     'type': trans_type,
-                    'date': datetime.now().isoformat()
+                    'date': created_at.isoformat() if created_at else datetime.now().isoformat()  # Use original timestamp
                 })
+                print(f"🔍 DEBUG: Loaded transaction with original timestamp: {created_at}")
             
             # Load incomes
             cur.execute('SELECT user_id, amount FROM incomes')
