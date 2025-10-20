@@ -714,14 +714,15 @@ class SimpleFinnBot:
         try:
             cur = conn.cursor()
             
-            # DEBUG: Check what's in PostgreSQL on startup
+            # DEBUG: Check database count first
             cur.execute('SELECT COUNT(*) FROM transactions')
-            total_count = cur.fetchone()[0]
-            print(f"🔍 DEBUG: PostgreSQL has {total_count} total transactions on startup")
+            db_count = cur.fetchone()[0]
+            print(f"🔍 DEBUG: Database has {db_count} transactions")
             
-            cur.execute('SELECT COUNT(*) FROM transactions WHERE user_id = %s', (chat_id,))
-            user_count = cur.fetchone()[0]
-            print(f"🔍 DEBUG: PostgreSQL has {user_count} transactions for user {chat_id} on startup")            
+            # Load transactions FROM POSTGRESQL
+            cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
+            transactions_data = cur.fetchall()
+            
             self.transactions = {}
             for user_id, amount, description, category, trans_type in transactions_data:
                 user_id = int(user_id)
@@ -2001,17 +2002,7 @@ How much cash do you have right now? (in UAH)
 
         # Handle balance confirmation
         elif data == "confirm_balance":
-            # Delete the confirmation message
-            try:
-                requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
-                print(f"🔍 DEBUG: Deleted balance confirmation message {message_id}")
-            except Exception as e:
-                print(f"⚠️ Error deleting balance confirmation message: {e}")
-            
-            # Move to debt question (your existing code)
+            # Move to debt question
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2040,17 +2031,7 @@ Do you have any debts? (loans, credits, etc.)
 
         # Handle debt confirmation  
         elif data == "confirm_debt":
-            # Delete the confirmation message
-            try:
-                requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
-                print(f"🔍 DEBUG: Deleted debt confirmation message {message_id}")
-            except Exception as e:
-                print(f"⚠️ Error deleting debt confirmation message: {e}")
-            
-            # Move to savings question (your existing code)
+            # Move to savings question
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2079,17 +2060,7 @@ Do you have any savings? (bank, crypto, investments)
 
         # Handle savings confirmation
         elif data == "confirm_savings":
-            # Delete the confirmation message
-            try:
-                requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
-                print(f"🔍 DEBUG: Deleted savings confirmation message {message_id}")
-            except Exception as e:
-                print(f"⚠️ Error deleting savings confirmation message: {e}")
-            
-            # Complete onboarding (your existing code)
+            # Complete onboarding
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -2254,12 +2225,12 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            # ONLY clear from memory, NOT from PostgreSQL
-            if chat_id in self.transactions:
-                self.transactions[chat_id] = []
-            
-            # Clear other user data (keep your existing code)
+            # Clear all user data
             user_id_str = str(chat_id)
+            
+            # Clear transactions
+            if chat_id in self.transactions:
+                del self.transactions[chat_id]
             
             # Clear income
             if user_id_str in self.user_incomes:
@@ -2277,52 +2248,55 @@ You're now ready to use Finn!
             if chat_id in self.delete_mode:
                 del self.delete_mode[chat_id]
             
-            # Save changes
+            # Save all changes
+            self.sync_transactions_to_postgres()
             self.save_incomes()
             self.save_user_categories()
             
             if user_lang == 'uk':
                 success_msg = """✅ *Бота перезапущено!*
                 
-        Поточні дані очищено. Ваші транзакції збережено в базі даних.
+        Всі ваші дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
 
-        🚀 *Давайте продовжимо!*"""
+        🚀 *Давайте почнемо знову!*
+        Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
             else:
                 success_msg = """✅ *Bot restarted!*
                 
-        Current session data cleared. Your transactions are saved in the database.
+        All your data has been successfully deleted. The bot is ready to start fresh!
 
-        🚀 *Let's continue!*"""
+        🚀 *Let's start fresh!*
+        Add your first transaction or use the menu to get started."""
             
             self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
             # Delete the confirmation message
             try:
-                requests.post(f"{BASE_URL}/deleteMessage", json={
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
                     "message_id": message_id
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting restart message: {e}")
 
-                elif data == "cancel_restart":
-                    user_lang = self.get_user_language(chat_id)
-                    
-                    if user_lang == 'uk':
-                        cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
-                    else:
-                        cancel_msg = "❌ Restart cancelled. Your data remains untouched."
-                    
-                    self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
-                    
-                    # Delete the confirmation message
-                    try:
-                        delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
-                            "chat_id": chat_id,
-                            "message_id": message_id
-                        })
-                    except Exception as e:
-                        print(f"⚠️ Error deleting restart message: {e}")
+        elif data == "cancel_restart":
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+            else:
+                cancel_msg = "❌ Restart cancelled. Your data remains untouched."
+            
+            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
+            
+            # Delete the confirmation message
+            try:
+                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                    "chat_id": chat_id,
+                    "message_id": message_id
+                })
+            except Exception as e:
+                print(f"⚠️ Error deleting restart message: {e}")
 
         elif data.startswith("lang_"):
             language = data[5:]  # 'en' or 'uk'
@@ -2334,6 +2308,18 @@ You're now ready to use Finn!
                 confirmation = "✅ Мову встановлено українську!"
             
             self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+        elif data.startswith("lang_"):
+            language = data[5:]  # 'en' or 'uk'
+            self.set_user_language(chat_id, language)
+            
+            if language == 'en':
+                confirmation = "✅ Language set to English!"
+            else:
+                confirmation = "✅ Мову встановлено українську!"
+            
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+            
+            # Delete the language selection message
             try:
                 delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
