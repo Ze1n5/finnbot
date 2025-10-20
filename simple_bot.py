@@ -244,10 +244,7 @@ class SimpleFinnBot:
             print(f"⚠️ Keeping existing data due to load error")
 
     def sync_transactions_to_postgres(self):
-        """Full sync - replace PostgreSQL with current memory state"""
-        print(f"🔍 DEBUG sync_transactions_to_postgres: Starting sync")
-        print(f"🔍 DEBUG: Current transactions in memory: {self.transactions}")
-        
+        """Additive sync - only add new transactions, don't delete existing ones"""
         conn = self.get_db_connection()
         if not conn:
             print("❌ No database connection for sync")
@@ -256,32 +253,34 @@ class SimpleFinnBot:
         try:
             cur = conn.cursor()
             
-            # Count transactions before sync
+            # Count what's in memory to sync
             transaction_count = 0
             for user_id, transactions in self.transactions.items():
                 transaction_count += len(transactions)
-                print(f"🔍 DEBUG: User {user_id} has {len(transactions)} transactions")
             
-            print(f"🔍 DEBUG: Total transactions to sync: {transaction_count}")
+            print(f"🔍 DEBUG: Syncing {transaction_count} transactions from memory to PostgreSQL")
             
-            # Delete ALL transactions
-            cur.execute('DELETE FROM transactions')
-            print(f"🔍 DEBUG: Cleared existing transactions from PostgreSQL")
-            
-            # Insert current memory state
+            # ONLY insert new transactions - DON'T delete existing ones
             saved_count = 0
             for user_id, transactions in self.transactions.items():
                 for txn in transactions:
-                    print(f"🔍 DEBUG: Saving transaction: {txn}")
+                    # Check if this transaction already exists to avoid duplicates
                     cur.execute(
-                        'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                        'SELECT id FROM transactions WHERE user_id = %s AND amount = %s AND description = %s AND category = %s AND type = %s',
                         (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
                     )
-                    saved_count += 1
+                    existing = cur.fetchone()
+                    
+                    if not existing:  # Only insert if it doesn't exist
+                        cur.execute(
+                            'INSERT INTO transactions (user_id, amount, description, category, type) VALUES (%s, %s, %s, %s, %s)',
+                            (user_id, txn.get('amount', 0), txn.get('description', ''), txn.get('category', 'Other'), txn.get('type', 'expense'))
+                        )
+                        saved_count += 1
             
             conn.commit()
             conn.close()
-            print(f"🔄 Full sync: {saved_count} transactions to PostgreSQL")
+            print(f"🔄 Additive sync: Added {saved_count} new transactions to PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error syncing to PostgreSQL: {e}")
