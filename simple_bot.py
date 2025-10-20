@@ -2299,10 +2299,15 @@ You're now ready to use Finn!
                 except Exception as e:
                     print(f"❌ Error deleting transactions from PostgreSQL: {e}")
             
-            # 3. Force immediate sync to ensure clean state
+            # 3. CLEAR ONBOARDING STATE - THIS IS THE KEY FIX!
+            if chat_id in self.onboarding_state:
+                del self.onboarding_state[chat_id]
+                print(f"🔍 DEBUG: Cleared onboarding state for user {chat_id}")
+            
+            # 4. Force immediate sync to ensure clean state
             self.sync_transactions_to_postgres()
             
-            # Clear other user data (your existing code)
+            # Clear other user data...
             user_id_str = str(chat_id)
             
             # Clear income
@@ -2321,7 +2326,7 @@ You're now ready to use Finn!
             if chat_id in self.delete_mode:
                 del self.delete_mode[chat_id]
             
-            # Save all changes
+            # Save changes
             self.save_incomes()
             self.save_user_categories()
             
