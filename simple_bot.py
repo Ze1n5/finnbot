@@ -2255,12 +2255,28 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            # Clear all user data
-            user_id_str = str(chat_id)
+            # Clear ALL transactions from memory AND PostgreSQL
+            print(f"🔍 DEBUG: Clearing all transactions for user {chat_id}")
             
-            # Clear transactions
+            # 1. Clear from memory
             if chat_id in self.transactions:
-                del self.transactions[chat_id]
+                self.transactions[chat_id] = []  # Empty the list but keep the key
+            
+            # 2. Clear from PostgreSQL database
+            conn = self.get_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    # Delete ALL transactions for this user
+                    cur.execute('DELETE FROM transactions WHERE user_id = %s', (chat_id,))
+                    conn.commit()
+                    conn.close()
+                    print(f"✅ Deleted all transactions from PostgreSQL for user {chat_id}")
+                except Exception as e:
+                    print(f"❌ Error deleting transactions from PostgreSQL: {e}")
+            
+            # Clear other user data (your existing code)
+            user_id_str = str(chat_id)
             
             # Clear income
             if user_id_str in self.user_incomes:
@@ -2279,21 +2295,20 @@ You're now ready to use Finn!
                 del self.delete_mode[chat_id]
             
             # Save all changes
-            self.sync_transactions_to_postgres()
             self.save_incomes()
             self.save_user_categories()
             
             if user_lang == 'uk':
                 success_msg = """✅ *Бота перезапущено!*
                 
-        Всі ваші дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
+        Всі ваші транзакції та дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
 
         🚀 *Давайте почнемо знову!*
         Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
             else:
                 success_msg = """✅ *Bot restarted!*
                 
-        All your data has been successfully deleted. The bot is ready to start fresh!
+        All your transactions and data have been successfully deleted. The bot is ready to start fresh!
 
         🚀 *Let's start fresh!*
         Add your first transaction or use the menu to get started."""
