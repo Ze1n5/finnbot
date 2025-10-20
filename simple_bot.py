@@ -2254,27 +2254,11 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            # Clear ALL transactions from memory AND PostgreSQL
-            print(f"🔍 DEBUG: Clearing all transactions for user {chat_id}")
-            
-            # 1. Clear from memory
+            # ONLY clear from memory, NOT from PostgreSQL
             if chat_id in self.transactions:
-                self.transactions[chat_id] = []  # Empty the list but keep the key
+                self.transactions[chat_id] = []
             
-            # 2. Clear from PostgreSQL database
-            conn = self.get_db_connection()
-            if conn:
-                try:
-                    cur = conn.cursor()
-                    # Delete ALL transactions for this user
-                    cur.execute('DELETE FROM transactions WHERE user_id = %s', (chat_id,))
-                    conn.commit()
-                    conn.close()
-                    print(f"✅ Deleted all transactions from PostgreSQL for user {chat_id}")
-                except Exception as e:
-                    print(f"❌ Error deleting transactions from PostgreSQL: {e}")
-            
-            # Clear other user data (your existing code)
+            # Clear other user data (keep your existing code)
             user_id_str = str(chat_id)
             
             # Clear income
@@ -2293,54 +2277,52 @@ You're now ready to use Finn!
             if chat_id in self.delete_mode:
                 del self.delete_mode[chat_id]
             
-            # Save all changes
+            # Save changes
             self.save_incomes()
             self.save_user_categories()
             
             if user_lang == 'uk':
                 success_msg = """✅ *Бота перезапущено!*
                 
-        Всі ваші транзакції та дані було успішно видалено. Бот готовий до роботи з чистої сторінки!
+        Поточні дані очищено. Ваші транзакції збережено в базі даних.
 
-        🚀 *Давайте почнемо знову!*
-        Додайте вашу першу транзакцію або використовуйте меню для початку роботи."""
+        🚀 *Давайте продовжимо!*"""
             else:
                 success_msg = """✅ *Bot restarted!*
                 
-        All your transactions and data have been successfully deleted. The bot is ready to start fresh!
+        Current session data cleared. Your transactions are saved in the database.
 
-        🚀 *Let's start fresh!*
-        Add your first transaction or use the menu to get started."""
+        🚀 *Let's continue!*"""
             
             self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
             
             # Delete the confirmation message
             try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
                     "message_id": message_id
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting restart message: {e}")
 
-        elif data == "cancel_restart":
-            user_lang = self.get_user_language(chat_id)
-            
-            if user_lang == 'uk':
-                cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
-            else:
-                cancel_msg = "❌ Restart cancelled. Your data remains untouched."
-            
-            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
-            
-            # Delete the confirmation message
-            try:
-                delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
-            except Exception as e:
-                print(f"⚠️ Error deleting restart message: {e}")
+                elif data == "cancel_restart":
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    if user_lang == 'uk':
+                        cancel_msg = "❌ Перезапуск скасовано. Ваші дані залишилися недоторканими."
+                    else:
+                        cancel_msg = "❌ Restart cancelled. Your data remains untouched."
+                    
+                    self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
+                    
+                    # Delete the confirmation message
+                    try:
+                        delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                            "chat_id": chat_id,
+                            "message_id": message_id
+                        })
+                    except Exception as e:
+                        print(f"⚠️ Error deleting restart message: {e}")
 
         elif data.startswith("lang_"):
             language = data[5:]  # 'en' or 'uk'
