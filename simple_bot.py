@@ -381,6 +381,9 @@ class SimpleFinnBot:
         """Save a single transaction for a user"""
         try:
             print(f"🔍 DEBUG save_user_transaction: chat_id={chat_id}, transaction={transaction}")
+            print(f"🔍 DEBUG: Full call stack:")
+            import traceback
+            traceback.print_stack()
             
             # Initialize if needed
             if chat_id not in self.transactions:
@@ -3012,31 +3015,23 @@ def add_transaction():
         transaction_data = request.json
         print(f"📥 Received transaction: {transaction_data}")
         
-        # Read current transactions
-        try:
-            with open('transactions.json', 'r') as f:
-                transactions = json.load(f)
-        except:
-            transactions = {}
+        # Use the bot instance instead of JSON file
+        user_id = transaction_data.get('user_id')
+        if not user_id:
+            return jsonify({"error": "user_id is required"}), 400
         
-        # Add new transaction (your data structure is {user_id: [transactions]})
-        user_id = str(transaction_data.get('user_id', 'default_user'))
-        if user_id not in transactions:
-            transactions[user_id] = []
-        
-        transactions[user_id].append({
+        transaction = {
             'amount': transaction_data.get('amount', 0),
             'description': transaction_data.get('description', ''),
             'category': transaction_data.get('category', 'Other'),
             'type': transaction_data.get('type', 'expense'),
-            'timestamp': transaction_data.get('timestamp', '')
-        })
+            'date': transaction_data.get('timestamp', datetime.now().isoformat())
+        }
         
-        # Save back to file
-        with open('transactions.json', 'w') as f:
-            json.dump(transactions, f)
+        # Use the bot's method to save transaction
+        bot_instance.save_user_transaction(user_id, transaction)
         
-        print("✅ Transaction added successfully")
+        print("✅ Transaction added successfully via bot instance")
         return jsonify({'status': 'success', 'message': 'Transaction added'})
         
     except Exception as e:
