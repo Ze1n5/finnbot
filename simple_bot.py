@@ -3138,6 +3138,8 @@ def check_reminders_periodically():
 
 def save_all_data():
     """Save all data before shutdown"""
+    print(f"🔍 DEBUG PRE-SHUTDOWN: Current transactions in memory: {bot_instance.transactions}")
+    print(f"🔍 DEBUG PRE-SHUTDOWN: Onboarding state: {bot_instance.onboarding_state}")
     print("💾 Saving all data before shutdown...")
     try:
         bot_instance.sync_transactions_to_postgres()
