@@ -2416,9 +2416,6 @@ You're now ready to use Finn!
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
 
-# Initialize bot instance
-bot_instance = SimpleFinnBot()
-
 # Webhook route
 @flask_app.route('/webhook', methods=['POST', 'GET'])
 def webhook():
