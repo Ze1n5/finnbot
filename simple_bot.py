@@ -2038,22 +2038,9 @@ How much cash do you have right now? (in UAH)
             
             # Send the welcome image
             self.send_photo_from_url(chat_id, welcome_image_url, image_caption)
-            
-            # Wait a moment then send the balance question
+            # Wait a moment then set the onboarding state
             time.sleep(1)
             self.onboarding_state[chat_id] = 'awaiting_balance'
-            # Use the actual message text instead of the undefined variable
-            balance_question = """👋 *Hi! I'm Finn!*
-
-            Let's create your financial profile. This will just take a minute!
-            *Step 1/4: Current Balance*
-
-            How much cash do you have right now? (in UAH)
-
-            💡 *Enter amount:*
-            `5000` - if you have 5,000₴
-            `0` - if no cash"""
-            self.send_message(chat_id, balance_question, parse_mode='Markdown')
 
         # Handle balance confirmation
         elif data == "confirm_balance":
