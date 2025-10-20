@@ -172,7 +172,7 @@ def save_all_data():
     print("💾 Saving all data before shutdown...")
     try:
         print(f"📊 Before save - Transactions: {sum(len(txns) for txns in bot_instance.transactions.values())}")
-        bot_instance.save_transactions()
+        bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         bot_instance.save_user_categories()
         bot_instance.save_user_languages()
@@ -352,7 +352,7 @@ def debug_transactions():
 def save_data():
     """Manual save endpoint"""
     try:
-        bot_instance.save_transactions()
+        bot_instance.sync_transactions_to_postgres()
         bot_instance.save_incomes()
         return jsonify({"status": "saved"})
     except Exception as e:
