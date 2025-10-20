@@ -184,10 +184,15 @@ class SimpleFinnBot:
         conn = self.get_db_connection()
         if not conn:
             print("❌ No database connection - starting with empty data")
-            self.transactions = {}
-            self.user_incomes = {}
-            self.user_categories = {}
-            self.user_languages = {}
+            # Don't reset existing data if no connection
+            if not hasattr(self, 'transactions'):
+                self.transactions = {}
+            if not hasattr(self, 'user_incomes'): 
+                self.user_incomes = {}
+            if not hasattr(self, 'user_categories'):
+                self.user_categories = {}
+            if not hasattr(self, 'user_languages'):
+                self.user_languages = {}
             return
         
         try:
@@ -198,17 +203,18 @@ class SimpleFinnBot:
             db_count = cur.fetchone()[0]
             print(f"🔍 DEBUG: Database has {db_count} transactions")
             
-            # Load transactions FROM POSTGRESQL ONLY
+            # Load transactions - DON'T reset self.transactions immediately
             cur.execute('SELECT user_id, amount, description, category, type FROM transactions ORDER BY created_at')
             transactions_data = cur.fetchall()
             
-            self.transactions = {}
+            # Create temporary transactions dictionary
+            new_transactions = {}
             for user_id, amount, description, category, trans_type in transactions_data:
                 user_id = int(user_id)
-                if user_id not in self.transactions:
-                    self.transactions[user_id] = []
+                if user_id not in new_transactions:
+                    new_transactions[user_id] = []
                 
-                self.transactions[user_id].append({
+                new_transactions[user_id].append({
                     'amount': float(amount),
                     'description': description,
                     'category': category,
@@ -220,20 +226,22 @@ class SimpleFinnBot:
             cur.execute('SELECT user_id, amount FROM incomes')
             incomes_data = cur.fetchall()
             
-            self.user_incomes = {}
+            new_user_incomes = {}
             for user_id, amount in incomes_data:
-                self.user_incomes[int(user_id)] = float(amount)
+                new_user_incomes[int(user_id)] = float(amount)
             
             conn.close()
+            
+            # ONLY update the instance variables after successful load
+            self.transactions = new_transactions
+            self.user_incomes = new_user_incomes
+            
             print(f"📊 Loaded {len(transactions_data)} transactions and {len(incomes_data)} incomes from PostgreSQL")
             
         except Exception as e:
             print(f"❌ Error loading from database: {e}")
-            # Don't fall back to files!
-            self.transactions = {}
-            self.user_incomes = {}
-            self.user_categories = {}
-            self.user_languages = {}
+            # Don't reset existing data on error - keep whatever we had
+            print(f"⚠️ Keeping existing data due to load error")
 
     def sync_transactions_to_postgres(self):
         """Full sync - replace PostgreSQL with current memory state"""
