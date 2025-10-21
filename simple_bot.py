@@ -32,9 +32,7 @@ flask_app = Flask(__name__)
 def log_request_info():
     print(f"🌐 Incoming: {request.method} {request.path} - From: {request.remote_addr}")
 
-@flask_app.route('/api/debug-simple')
-def debug_simple():
-    return jsonify({"status": "OK", "message": "Debug route is working!"})
+
 
 def sync_to_railway(transaction_data):
     """Send transaction data to Railway web app"""
@@ -864,19 +862,42 @@ class SimpleFinnBot:
         try:
             # Use your Railway app URL
             railway_url = "https://finnbot-production.up.railway.app"
-            response = requests.post(f"{railway_url}/api/add-category", 
-                                    json={"emoji": emoji, "name": category_name})
+            print(f"🔍 Attempting to add category: {emoji} {category_name}")
+            
+            response = requests.post(
+                f"{railway_url}/api/add-category", 
+                json={"emoji": emoji, "name": category_name},
+                timeout=10,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            print(f"🔍 Category API response status: {response.status_code}")
+            print(f"🔍 Category API response headers: {response.headers}")
+            print(f"🔍 Category API response text: {response.text[:200]}")  # First 200 chars
             
             if response.status_code == 200:
-                return True, "Category added successfully"
+                try:
+                    data = response.json()
+                    print(f"✅ Category added successfully: {data}")
+                    return True, "Category added successfully"
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON decode error: {e}")
+                    return False, "Invalid response from server"
             else:
-                error_data = response.json()
-                return False, error_data.get("error", "Failed to add category")
+                print(f"❌ API returned error status: {response.status_code}")
+                # Try to get error message
+                try:
+                    error_data = response.json()
+                    return False, error_data.get("error", f"API error: {response.status_code}")
+                except:
+                    return False, f"API error: {response.status_code} - {response.text}"
                 
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request error: {e}")
+            return False, f"Network error: {str(e)}"
         except Exception as e:
-            print(f"❌ Error adding category: {e}")
+            print(f"❌ Unexpected error: {e}")
             return False, f"Error: {str(e)}"
-
     def remove_user_category(self, user_id, category_name):
         """Remove a custom category from the database"""
         try:
@@ -3118,6 +3139,31 @@ def delete_category():
     except Exception as e:
         print(f"❌ Error deleting category: {e}")
         return jsonify({"error": f"Failed to delete category: {str(e)}"}), 500
+    
+# Add this route RIGHT AFTER your category routes
+@flask_app.route('/api/test-category', methods=['GET', 'POST'])
+def test_category():
+    """Test if category API is working"""
+    try:
+        if request.method == 'POST':
+            test_data = {"emoji": "🍕", "name": "TestFood"}
+            response = requests.post(
+                "https://finnbot-production.up.railway.app/api/add-category",
+                json=test_data,
+                timeout=10
+            )
+            return jsonify({
+                "test_status": response.status_code,
+                "test_response": response.text,
+                "endpoint_working": True
+            })
+        else:
+            return jsonify({
+                "message": "Category test endpoint is working",
+                "endpoint_accessible": True
+            })
+    except Exception as e:
+        return jsonify({"error": str(e), "endpoint_working": False})
 # ========== MINI-APP ROUTES ==========
 
 @flask_app.route('/mini-app')
