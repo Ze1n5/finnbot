@@ -858,56 +858,35 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - WORKAROUND WITH DEFAULT EMOJI"""
+        """Add a new custom category - CLEAN VERSION (after DB fix)"""
         try:
-            print(f"🔍 Adding category: {category_name}")
-            
             conn = self.get_db_connection()
             if not conn:
                 return False, "No database connection"
             
             cur = conn.cursor()
             
-            # Check if category already exists (by name)
+            # Check if category already exists
             cur.execute("SELECT name FROM categories WHERE name = %s", (category_name,))
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # WORKAROUND: Use a default emoji for now
-            # We'll use different default emojis to avoid unique constraints
-            default_emojis = ["📝", "📌", "📍", "🔖", "🎯", "⭐", "🌟", "💫", "✨"]
-            
-            # Find an available emoji
-            available_emoji = None
-            for emoji in default_emojis:
-                cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
-                if not cur.fetchone():
-                    available_emoji = emoji
-                    break
-            
-            # If all emojis are taken, use a numbered emoji
-            if not available_emoji:
-                cur.execute("SELECT COUNT(*) FROM categories WHERE emoji LIKE '📝%'")
-                count = cur.fetchone()[0]
-                available_emoji = f"📝{count + 1}"
-            
-            # Insert with the available emoji
+            # Insert with NULL emoji (after DB is fixed)
             cur.execute(
-                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                (available_emoji, category_name)
+                "INSERT INTO categories (emoji, name) VALUES (NULL, %s)",
+                (category_name,)
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Category '{category_name}' added successfully with emoji {available_emoji}")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
             print(f"❌ Error adding category: {e}")
             return False, f"Failed to add category: {str(e)}"
-
+        
     def remove_user_category(self, user_id, category_name):
         """Remove a custom category"""
         try:
