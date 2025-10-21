@@ -184,6 +184,33 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/fix-categories-table')
+def fix_categories_table():
+    """Fix the categories table to allow same emoji for multiple categories"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Remove the unique constraint on emoji column
+        cur.execute("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_emoji_key;")
+        
+        # Add a new unique constraint on (emoji, name) combination instead
+        cur.execute("""
+            ALTER TABLE categories 
+            ADD CONSTRAINT categories_emoji_name_unique UNIQUE (emoji, name);
+        """)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Categories table fixed - same emoji now allowed for multiple categories"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/hard-reset', methods=['POST'])
 def hard_reset():
     """COMPLETELY clear all transactions from PostgreSQL"""

@@ -858,9 +858,9 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name, emoji="🏷️"):
-        """Add a new custom category - SIMPLE VERSION with single emoji"""
+        """Add a new custom category - SIMPLE with one emoji"""
         try:
-            print(f"🔍 Adding category: {emoji} {category_name}")
+            print(f"🔍 Adding category: 🏷️ {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
@@ -874,11 +874,10 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Since we're using the same emoji for all, we need to handle this differently
-            # Option 1: Use the same emoji but ensure unique names
+            # Insert with the same emoji for all spending categories
             cur.execute(
                 "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                (emoji, category_name)
+                ("🏷️", category_name)  # Always use 🏷️ for spending categories
             )
             
             conn.commit()
@@ -889,13 +888,10 @@ class SimpleFinnBot:
             
         except Exception as e:
             print(f"❌ Error adding category: {e}")
-            # If it's a unique constraint violation, it means the emoji-name combo exists
-            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-                return False, f"Category '{category_name}' already exists"
             return False, f"Failed to add category: {str(e)}"
-        
+
     def remove_user_category(self, user_id, category_name):
-        """Remove a custom category from the database"""
+        """Remove a custom category"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -909,18 +905,13 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Check if category exists and get its emoji
-            cur.execute("SELECT emoji FROM categories WHERE name = %s", (category_name,))
-            result = cur.fetchone()
+            # Delete the category by name (emoji is always 🏷️ for spending categories)
+            cur.execute("DELETE FROM categories WHERE name = %s", (category_name,))
             
-            if not result:
+            if cur.rowcount == 0:
                 conn.close()
                 return False, f"Category '{category_name}' not found"
             
-            emoji_to_delete = result[0]
-            
-            # Delete the category
-            cur.execute("DELETE FROM categories WHERE emoji = %s", (emoji_to_delete,))
             conn.commit()
             conn.close()
             
@@ -935,7 +926,7 @@ class SimpleFinnBot:
         try:
             conn = self.get_db_connection()
             if not conn:
-                return {"❓": "Other"}  # Fallback
+                return {"🏷️": "Other"}  # Fallback
             
             cur = conn.cursor()
             cur.execute("SELECT emoji, name FROM categories ORDER BY name")
@@ -944,12 +935,12 @@ class SimpleFinnBot:
             
             # Convert to dictionary format {emoji: name}
             categories_dict = {cat[0]: cat[1] for cat in categories_data}
-            print(f"📊 Loaded categories from DB: {categories_dict}")
+            print(f"📊 Loaded {len(categories_dict)} categories from DB")
             return categories_dict
             
         except Exception as e:
             print(f"❌ Error fetching categories from DB: {e}")
-            return {"❓": "Other"}  # Fallback
+            return {"🏷️": "Other"}  # Fallback
 
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
