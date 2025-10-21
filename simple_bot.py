@@ -858,9 +858,9 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name, emoji="🏷️"):
-        """Add a new custom category - SIMPLIFIED VERSION"""
+        """Add a new custom category - SIMPLE VERSION with single emoji"""
         try:
-            print(f"🔍 Adding category directly: {emoji} {category_name}")
+            print(f"🔍 Adding category: {emoji} {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
@@ -874,13 +874,8 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Check if emoji already exists
-            cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
-            if cur.fetchone():
-                conn.close()
-                return False, f"Emoji {emoji} is already used for another category"
-            
-            # Simple insert
+            # Since we're using the same emoji for all, we need to handle this differently
+            # Option 1: Use the same emoji but ensure unique names
             cur.execute(
                 "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
                 (emoji, category_name)
@@ -894,6 +889,9 @@ class SimpleFinnBot:
             
         except Exception as e:
             print(f"❌ Error adding category: {e}")
+            # If it's a unique constraint violation, it means the emoji-name combo exists
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                return False, f"Category '{category_name}' already exists"
             return False, f"Failed to add category: {str(e)}"
         
     def remove_user_category(self, user_id, category_name):
