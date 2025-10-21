@@ -32,6 +32,10 @@ flask_app = Flask(__name__)
 def log_request_info():
     print(f"🌐 Incoming: {request.method} {request.path} - From: {request.remote_addr}")
 
+@flask_app.route('/api/debug-simple')
+def debug_simple():
+    return jsonify({"status": "OK", "message": "Debug route is working!"})
+
 def sync_to_railway(transaction_data):
     """Send transaction data to Railway web app"""
     try:
@@ -2922,6 +2926,7 @@ def add_category():
     """Add a new custom category"""
     try:
         data = request.get_json()
+        print(f"📥 Received category data: {data}")
         
         if not data or 'emoji' not in data or 'name' not in data:
             return jsonify({"error": "Emoji and name are required"}), 400
@@ -2972,6 +2977,7 @@ def add_category():
             categories_dict = {cat[0]: cat[1] for cat in categories}
             conn.close()
             
+            print(f"✅ Added category: {emoji} {name}")
             return jsonify({
                 "message": "Category added successfully",
                 "categories": categories_dict
