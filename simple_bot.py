@@ -858,91 +858,99 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name, emoji="🏷️"):
-        """Add a new custom category directly to database"""
+        """Add a new custom category - SIMPLIFIED VERSION"""
         try:
-            print(f"🔍 Attempting to add category: {emoji} {category_name}")
+            print(f"🔍 Adding category directly: {emoji} {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
-                return False, "Database connection failed"
+                return False, "No database connection"
             
-            with conn.cursor() as cur:
-                # Check if emoji already exists
-                cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
-                if cur.fetchone():
-                    conn.close()
-                    return False, "Category with this emoji already exists"
-                
-                # Check if name already exists
-                cur.execute("SELECT name FROM categories WHERE name = %s", (name,))
-                if cur.fetchone():
-                    conn.close()
-                    return False, "Category with this name already exists"
-                
-                # Insert new category
-                cur.execute(
-                    "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                    (emoji, category_name)
-                )
-                conn.commit()
+            cur = conn.cursor()
+            
+            # Check if category already exists (by name)
+            cur.execute("SELECT name FROM categories WHERE name = %s", (category_name,))
+            if cur.fetchone():
                 conn.close()
-                
-                print(f"✅ Added category directly to database: {emoji} {category_name}")
-                return True, "Category added successfully"
-                
+                return False, f"Category '{category_name}' already exists"
+            
+            # Check if emoji already exists
+            cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
+            if cur.fetchone():
+                conn.close()
+                return False, f"Emoji {emoji} is already used for another category"
+            
+            # Simple insert
+            cur.execute(
+                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
+                (emoji, category_name)
+            )
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Category '{category_name}' added successfully")
+            return True, f"Category '{category_name}' added successfully"
+            
         except Exception as e:
-            print(f"❌ Error adding category to database: {e}")
-            return False, f"Error: {str(e)}"
+            print(f"❌ Error adding category: {e}")
+            return False, f"Failed to add category: {str(e)}"
         
     def remove_user_category(self, user_id, category_name):
         """Remove a custom category from the database"""
         try:
-            # First, get all categories to find the emoji for this category name
-            railway_url = "https://finnbot-production.up.railway.app"
-            categories_response = requests.get(f"{railway_url}/api/categories")
+            conn = self.get_db_connection()
+            if not conn:
+                return False, "No database connection"
             
-            if categories_response.status_code == 200:
-                categories = categories_response.json()
-                
-                # Find the emoji for this category name
-                emoji_to_delete = None
-                for emoji, name in categories.items():
-                    if name == category_name:
-                        emoji_to_delete = emoji
-                        break
-                
-                if emoji_to_delete:
-                    # Delete the category
-                    delete_response = requests.post(f"{railway_url}/api/delete-category", 
-                                                json={"emoji": emoji_to_delete})
-                    
-                    if delete_response.status_code == 200:
-                        return True, "Category removed successfully"
-                    else:
-                        error_data = delete_response.json()
-                        return False, error_data.get("error", "Failed to remove category")
-                else:
-                    return False, "Category not found"
-            else:
-                return False, "Failed to fetch categories"
+            cur = conn.cursor()
+            
+            # Check if it's a protected category
+            protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+            if category_name in protected_categories:
+                conn.close()
+                return False, f"'{category_name}' is a protected category and cannot be removed"
+            
+            # Check if category exists and get its emoji
+            cur.execute("SELECT emoji FROM categories WHERE name = %s", (category_name,))
+            result = cur.fetchone()
+            
+            if not result:
+                conn.close()
+                return False, f"Category '{category_name}' not found"
+            
+            emoji_to_delete = result[0]
+            
+            # Delete the category
+            cur.execute("DELETE FROM categories WHERE emoji = %s", (emoji_to_delete,))
+            conn.commit()
+            conn.close()
+            
+            return True, f"Category '{category_name}' removed successfully"
                 
         except Exception as e:
             print(f"❌ Error removing category: {e}")
             return False, f"Error: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get all categories from database (for display purposes)"""
+        """Get all categories from database"""
         try:
-            railway_url = "https://finnbot-production.up.railway.app"
-            response = requests.get(f"{railway_url}/api/categories")
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"Error fetching categories: {response.status_code}")
+            conn = self.get_db_connection()
+            if not conn:
                 return {"❓": "Other"}  # Fallback
+            
+            cur = conn.cursor()
+            cur.execute("SELECT emoji, name FROM categories ORDER BY name")
+            categories_data = cur.fetchall()
+            conn.close()
+            
+            # Convert to dictionary format {emoji: name}
+            categories_dict = {cat[0]: cat[1] for cat in categories_data}
+            print(f"📊 Loaded categories from DB: {categories_dict}")
+            return categories_dict
+            
         except Exception as e:
-            print(f"Error fetching categories from DB: {e}")
+            print(f"❌ Error fetching categories from DB: {e}")
             return {"❓": "Other"}  # Fallback
 
     def get_main_menu(self, user_id=None):
