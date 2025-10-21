@@ -2772,7 +2772,7 @@ def serve_mini_app():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Balance Tracker</title>
+    <title>FinnBot - Financial Tracker</title>
     <style>
         * {
             margin: 0;
@@ -2842,12 +2842,6 @@ def serve_mini_app():
             margin-top: 4px;
         }
         
-        .divider {
-            height: 1px;
-            background-color: #e5e5ea;
-            margin: 20px 0;
-        }
-        
         .transactions {
             background: white;
             border-radius: 16px;
@@ -2869,6 +2863,19 @@ def serve_mini_app():
         
         .transaction-info {
             flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .transaction-emoji {
+            font-size: 20px;
+            width: 30px;
+            text-align: center;
+        }
+        
+        .transaction-details {
+            flex: 1;
         }
         
         .transaction-title {
@@ -2877,7 +2884,7 @@ def serve_mini_app():
             margin-bottom: 4px;
         }
         
-        .transaction-date {
+        .transaction-category {
             font-size: 14px;
             color: #8e8e93;
         }
@@ -2885,6 +2892,7 @@ def serve_mini_app():
         .transaction-amount {
             font-size: 16px;
             font-weight: 500;
+            text-align: right;
         }
         
         .amount-negative {
@@ -2894,136 +2902,127 @@ def serve_mini_app():
         .amount-positive {
             color: #34c759;
         }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #8e8e93;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #ff3b30;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="balance-card">
-            <div class="balance-label">Balance</div>
-            <div class="balance-amount">₹10,000</div>
+            <div class="balance-label">Current Balance</div>
+            <div class="balance-amount" id="balanceAmount">0₴</div>
             <div class="income-expense">
                 <div class="expense">
-                    <div class="expense-amount">-1,200</div>
+                    <div class="expense-amount" id="expenseAmount">0₴</div>
                     <div class="expense-label">Spending</div>
                 </div>
                 <div class="income">
-                    <div class="income-amount">+3,000</div>
+                    <div class="income-amount" id="incomeAmount">0₴</div>
                     <div class="income-label">Income</div>
                 </div>
             </div>
         </div>
         
-        <div class="transactions">
-            <div class="transaction">
-                <div class="transaction-info">
-                    <div class="transaction-title">Food</div>
-                    <div class="transaction-date">Oct 10, 2025 10:24</div>
-                </div>
-                <div class="transaction-amount amount-negative">-1,000</div>
-            </div>
-            
-            <div class="divider"></div>
-            
-            <div class="transaction">
-                <div class="transaction-info">
-                    <div class="transaction-title">Salary</div>
-                    <div class="transaction-date">Oct 10, 2025 10:24</div>
-                </div>
-                <div class="transaction-amount amount-positive">+1,000</div>
-            </div>
+        <div class="transactions" id="transactionsContainer">
+            <div class="loading">Loading transactions...</div>
         </div>
     </div>
 
     <script>
-        // Sample transaction data - in a real app, this would come from a database
-        const transactions = [
-            {
-                id: 1,
-                title: "Food",
-                amount: -1000,
-                date: new Date('2025-10-10T10:24:00'),
-                category: "expense"
-            },
-            {
-                id: 2,
-                title: "Salary",
-                amount: 1000,
-                date: new Date('2025-10-10T10:24:00'),
-                category: "income"
-            }
-        ];
-        
-        // Calculate balance, income, and spending
-        function calculateFinances() {
-            let balance = 10000; // Starting balance
-            let income = 0;
-            let spending = 0;
-            
-            transactions.forEach(transaction => {
-                if (transaction.amount > 0) {
-                    income += transaction.amount;
-                } else {
-                    spending += Math.abs(transaction.amount);
-                }
-            });
-            
-            // Update UI
-            document.querySelector('.balance-amount').textContent = `₹${balance.toLocaleString()}`;
-            document.querySelector('.income-amount').textContent = `+${income.toLocaleString()}`;
-            document.querySelector('.expense-amount').textContent = `-${spending.toLocaleString()}`;
-        }
-        
-        // Format date for display
-        function formatDate(date) {
-            const options = { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric'
-            };
-            return date.toLocaleDateString('en-US', options);
-        }
-        
-        // Render transactions
-        function renderTransactions() {
-            const transactionsContainer = document.querySelector('.transactions');
-            
-            // Clear existing transactions (except the first one which is our template)
-            while (transactionsContainer.children.length > 2) {
-                transactionsContainer.removeChild(transactionsContainer.lastChild);
-            }
-            
-            // Add transactions
-            transactions.forEach(transaction => {
-                const transactionEl = document.createElement('div');
-                transactionEl.className = 'transaction';
+        // Load financial data and transactions
+        async function loadFinancialData() {
+            try {
+                // Load balance and totals
+                const financeResponse = await fetch('/api/financial-data');
+                const financeData = await financeResponse.json();
                 
-                transactionEl.innerHTML = `
-                    <div class="transaction-info">
-                        <div class="transaction-title">${transaction.title}</div>
-                        <div class="transaction-date">${formatDate(transaction.date)}</div>
-                    </div>
-                    <div class="transaction-amount ${transaction.amount > 0 ? 'amount-positive' : 'amount-negative'}">
-                        ${transaction.amount > 0 ? '+' : ''}${transaction.amount.toLocaleString()}
+                if (financeResponse.ok) {
+                    updateFinancialDisplay(financeData);
+                } else {
+                    showError('Failed to load financial data');
+                }
+                
+                // Load transactions
+                const transactionsResponse = await fetch('/api/transactions');
+                const transactionsData = await transactionsResponse.json();
+                
+                if (transactionsResponse.ok) {
+                    renderTransactions(transactionsData.transactions);
+                } else {
+                    showError('Failed to load transactions');
+                }
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Network error - please check your connection');
+            }
+        }
+        
+        function updateFinancialDisplay(data) {
+            // Update balance
+            const balanceElement = document.getElementById('balanceAmount');
+            balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
+            balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
+            
+            // Update income and expenses
+            document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
+            document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
+        }
+        
+        function renderTransactions(transactions) {
+            const container = document.getElementById('transactionsContainer');
+            
+            if (!transactions || transactions.length === 0) {
+                container.innerHTML = '<div class="loading">No transactions yet</div>';
+                return;
+            }
+            
+            let transactionsHTML = '';
+            
+            transactions.forEach(transaction => {
+                const amount = transaction.amount;
+                const isPositive = amount >= 0;
+                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
+                
+                transactionsHTML += `
+                    <div class="transaction">
+                        <div class="transaction-info">
+                            <div class="transaction-emoji">${transaction.emoji}</div>
+                            <div class="transaction-details">
+                                <div class="transaction-title">${transaction.name}</div>
+                                <div class="transaction-category">${transaction.category}</div>
+                            </div>
+                        </div>
+                        <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
+                            ${amountDisplay}
+                        </div>
                     </div>
                 `;
-                
-                // Insert before the divider (which is the second child)
-                transactionsContainer.insertBefore(transactionEl, transactionsContainer.children[1]);
-                
-                // Add divider if it's not the last transaction
-                if (transactions.indexOf(transaction) < transactions.length - 1) {
-                    const divider = document.createElement('div');
-                    divider.className = 'divider';
-                    transactionsContainer.insertBefore(divider, transactionsContainer.children[2]);
-                }
             });
+            
+            container.innerHTML = transactionsHTML;
+        }
+        
+        function showError(message) {
+            const container = document.getElementById('transactionsContainer');
+            container.innerHTML = `<div class="error">${message}</div>`;
         }
         
         // Initialize the app
-        calculateFinances();
-        renderTransactions();
+        document.addEventListener('DOMContentLoaded', loadFinancialData);
+        
+        // Refresh data every 30 seconds
+        setInterval(loadFinancialData, 30000);
     </script>
 </body>
 </html>
