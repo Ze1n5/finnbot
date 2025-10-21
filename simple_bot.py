@@ -858,35 +858,55 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - CLEAN VERSION (after DB fix)"""
+        """Add a new custom category - WORKING VERSION WITH DEFAULT EMOJIS"""
         try:
+            print(f"🔍 Adding category: {category_name}")
+            
             conn = self.get_db_connection()
             if not conn:
                 return False, "No database connection"
             
             cur = conn.cursor()
             
-            # Check if category already exists
+            # Check if category already exists (by name)
             cur.execute("SELECT name FROM categories WHERE name = %s", (category_name,))
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with NULL emoji (after DB is fixed)
+            # Use a simple rotating set of emojis to avoid conflicts
+            default_emojis = ["📝", "📌", "📍", "🔖", "🎯", "⭐", "🌟", "💫", "✨", "🎉"]
+            
+            # Find an available emoji by checking which ones aren't used yet
+            available_emoji = None
+            for emoji in default_emojis:
+                cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
+                if not cur.fetchone():
+                    available_emoji = emoji
+                    break
+            
+            # If all default emojis are taken, create a unique one
+            if not available_emoji:
+                import time
+                timestamp = str(int(time.time()))[-3:]  # Last 3 digits of timestamp
+                available_emoji = f"📝{timestamp}"
+            
+            # Insert with the available emoji
             cur.execute(
-                "INSERT INTO categories (emoji, name) VALUES (NULL, %s)",
-                (category_name,)
+                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
+                (available_emoji, category_name)
             )
             
             conn.commit()
             conn.close()
             
+            print(f"✅ Category '{category_name}' added successfully with emoji {available_emoji}")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
             print(f"❌ Error adding category: {e}")
             return False, f"Failed to add category: {str(e)}"
-        
+    
     def remove_user_category(self, user_id, category_name):
         """Remove a custom category"""
         try:
@@ -923,29 +943,21 @@ class SimpleFinnBot:
         try:
             conn = self.get_db_connection()
             if not conn:
-                return {"Other": "Other"}  # Fallback
+                return {"❓": "Other"}  # Fallback
             
             cur = conn.cursor()
             cur.execute("SELECT emoji, name FROM categories ORDER BY name")
             categories_data = cur.fetchall()
             conn.close()
             
-            # Convert to dictionary format {name: name} since we're not using emojis
-            # For categories with emoji, use the name as both key and value
-            # For categories without emoji (NULL), use name as both key and value
-            categories_dict = {}
-            for emoji, name in categories_data:
-                if emoji:  # Categories with emojis (protected ones)
-                    categories_dict[emoji] = name
-                else:  # Custom spending categories without emojis
-                    categories_dict[name] = name
-            
-            print(f"📊 Loaded {len(categories_dict)} categories from DB")
+            # Convert to dictionary format {emoji: name}
+            categories_dict = {cat[0]: cat[1] for cat in categories_data}
+            print(f"📊 Loaded {len(categories_dict)} categories from DB: {categories_dict}")
             return categories_dict
             
         except Exception as e:
             print(f"❌ Error fetching categories from DB: {e}")
-            return {"Other": "Other"}  # Fallback
+            return {"❓": "Other"}  # Fallback
 
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
