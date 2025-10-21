@@ -855,39 +855,74 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading user categories: {e}")
 
-    def get_user_categories(self, user_id):
-        """Get spending categories for a specific user"""
-        user_id_str = str(user_id)
-        if user_id_str not in self.user_categories:
-            # Initialize with default categories for new user
-            self.user_categories[user_id_str] = {
-                "Other": []
-            }
-            self.save_user_categories()
-        return self.user_categories[user_id_str]
-
-    def add_user_category(self, user_id, category_name):
-        """Add a new spending category for a user"""
-        user_categories = self.get_user_categories(user_id)
-        if category_name not in user_categories:
-            user_categories[category_name] = []
-            self.save_user_categories()
-            return True
-        return False
+    def add_user_category(self, user_id, category_name, emoji="🏷️"):
+        """Add a new custom category to the database"""
+        try:
+            # Use your Railway app URL
+            railway_url = "https://finnbot-production.up.railway.app"
+            response = requests.post(f"{railway_url}/api/add-category", 
+                                    json={"emoji": emoji, "name": category_name})
+            
+            if response.status_code == 200:
+                return True, "Category added successfully"
+            else:
+                error_data = response.json()
+                return False, error_data.get("error", "Failed to add category")
+                
+        except Exception as e:
+            print(f"❌ Error adding category: {e}")
+            return False, f"Error: {str(e)}"
 
     def remove_user_category(self, user_id, category_name):
-        """Remove a spending category from a user"""
-        user_categories = self.get_user_categories(user_id)
-        
-        # Protect savings categories from deletion
-        if category_name in self.protected_savings_categories:
-            return False
+        """Remove a custom category from the database"""
+        try:
+            # First, get all categories to find the emoji for this category name
+            railway_url = "https://finnbot-production.up.railway.app"
+            categories_response = requests.get(f"{railway_url}/api/categories")
             
-        if category_name in user_categories and category_name not in ["Food", "Other"]:
-            del user_categories[category_name]
-            self.save_user_categories()
-            return True
-        return False
+            if categories_response.status_code == 200:
+                categories = categories_response.json()
+                
+                # Find the emoji for this category name
+                emoji_to_delete = None
+                for emoji, name in categories.items():
+                    if name == category_name:
+                        emoji_to_delete = emoji
+                        break
+                
+                if emoji_to_delete:
+                    # Delete the category
+                    delete_response = requests.post(f"{railway_url}/api/delete-category", 
+                                                json={"emoji": emoji_to_delete})
+                    
+                    if delete_response.status_code == 200:
+                        return True, "Category removed successfully"
+                    else:
+                        error_data = delete_response.json()
+                        return False, error_data.get("error", "Failed to remove category")
+                else:
+                    return False, "Category not found"
+            else:
+                return False, "Failed to fetch categories"
+                
+        except Exception as e:
+            print(f"❌ Error removing category: {e}")
+            return False, f"Error: {str(e)}"
+
+    def get_user_categories(self, user_id):
+        """Get all categories from database (for display purposes)"""
+        try:
+            railway_url = "https://finnbot-production.up.railway.app"
+            response = requests.get(f"{railway_url}/api/categories")
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Error fetching categories: {response.status_code}")
+                return {"❓": "Other"}  # Fallback
+        except Exception as e:
+            print(f"Error fetching categories from DB: {e}")
+            return {"❓": "Other"}  # Fallback
 
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
@@ -1645,47 +1680,69 @@ This will help me provide better financial recommendations!"""
                 self.send_message(chat_id, delete_text, parse_mode='Markdown')
         
         elif text == "🏷️ Manage Categories":
-            user_categories = self.get_user_categories(chat_id)
+            # Get categories from database
+            categories_from_db = self.get_user_categories(chat_id)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
-                categories_text = "🏷️ *Ваші категорії витрат*\n\n"
-                categories_text += "*🔒 Захищені категорії заощаджень:*\n"
-                categories_text += "• Кріпто • Банк • Особисте • Інвестиції\n\n"
-                categories_text += "*Ваші категорії витрат:*\n"
+                categories_text = "🏷️ *Ваші категорії*\n\n"
+                categories_text += "*🔒 Фіксовані категорії:*\n"
+                categories_text += "• Зарплата • Бізнес • Кріпто • Банк • Особисте • Інвестиції\n\n"
+                categories_text += "*💼 Ваші кастомні категорії:*\n"
             else:
-                categories_text = "🏷️ *Your Spending Categories*\n\n"
-                categories_text += "*🔒 Protected Savings Categories:*\n"
-                categories_text += "• Crypto • Bank • Personal • Investment\n\n"
-                categories_text += "*Your Spending Categories:*\n"
+                categories_text = "🏷️ *Your Categories*\n\n"
+                categories_text += "*🔒 Fixed Categories:*\n"
+                categories_text += "• Salary • Business • Crypto • Bank • Personal • Investment\n\n"
+                categories_text += "*💼 Your Custom Categories:*\n"
             
-            for category, keywords in user_categories.items():
-                categories_text += f"• *{category}*"
-                if keywords:
-                    categories_text += f" - {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}"
-                categories_text += "\n"
+            # Show only custom categories (exclude fixed ones)
+            fixed_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+            if user_lang == 'uk':
+                fixed_categories = ["Зарплата", "Бізнес", "Кріпто", "Банк", "Особисте", "Інвестиції", "Other"]
+            
+            has_custom_categories = False
+            for emoji, name in categories_from_db.items():
+                if name not in fixed_categories:  # Only show custom categories
+                    categories_text += f"• {emoji} *{name}*\n"
+                    has_custom_categories = True
+            
+            if not has_custom_categories:
+                if user_lang == 'uk':
+                    categories_text += "📝 Поки що немає кастомних категорій\n"
+                else:
+                    categories_text += "📝 No custom categories yet\n"
             
             if user_lang == 'uk':
                 categories_text += "\n*Швидкі команди:*\n"
                 categories_text += "• `+Їжа` - Додати нову категорію\n"
-                categories_text += "• `-Шопінг` - Видалити категорію\n"
-                categories_text += "• Захищені категорії не можна змінити"
+                categories_text += "• `-Їжа` - Видалити категорію\n"
+                categories_text += "• Фіксовані категорії не можна змінити"
             else:
                 categories_text += "\n*Quick Commands:*\n"
                 categories_text += "• `+Food` - Add new category\n"
-                categories_text += "• `-Shopping` - Remove category\n"
-                categories_text += "• Protected categories cannot be modified"
-    
+                categories_text += "• `-Food` - Remove category\n"
+                categories_text += "• Fixed categories cannot be modified"
+
             self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
 
         elif text.startswith("+") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
             # Add new spending category
             try:
                 new_category = text[1:].strip()
-                if self.add_user_category(chat_id, new_category):
+                
+                # Check if it's a protected category
+                protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+                if new_category in protected_categories:
+                    self.send_message(chat_id, f"❌ *{new_category}* is a protected category and cannot be modified!", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    return
+                
+                success, message = self.add_user_category(chat_id, new_category)
+                
+                if success:
                     self.send_message(chat_id, f"✅ Added new spending category: *{new_category}*", parse_mode='Markdown', reply_markup=self.get_main_menu())
                 else:
-                    self.send_message(chat_id, f"❌ Spending category *{new_category}* already exists!", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    
             except Exception as e:
                 self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
 
@@ -1693,10 +1750,20 @@ This will help me provide better financial recommendations!"""
             # Remove spending category
             try:
                 category_to_remove = text[1:].strip()
-                if self.remove_user_category(chat_id, category_to_remove):
+                
+                # Check if it's a protected category
+                protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+                if category_to_remove in protected_categories:
+                    self.send_message(chat_id, f"❌ *{category_to_remove}* is a protected category and cannot be removed!", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    return
+                
+                success, message = self.remove_user_category(chat_id, category_to_remove)
+                
+                if success:
                     self.send_message(chat_id, f"✅ Removed spending category: *{category_to_remove}*", parse_mode='Markdown', reply_markup=self.get_main_menu())
                 else:
-                    self.send_message(chat_id, f"❌ Cannot remove *{category_to_remove}* - category not found or is essential", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    
             except Exception as e:
                 self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
 
