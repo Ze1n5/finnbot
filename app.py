@@ -184,6 +184,44 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/remove-emoji-requirement')
+def remove_emoji_requirement():
+    """Update categories table to handle categories without emojis"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Remove any unique constraint on emoji column
+        try:
+            cur.execute("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_emoji_key;")
+        except:
+            pass
+        
+        # Allow NULL values in emoji column
+        try:
+            cur.execute("ALTER TABLE categories ALTER COLUMN emoji DROP NOT NULL;")
+        except:
+            pass
+        
+        # Update existing spending categories to have NULL emoji
+        cur.execute("""
+            UPDATE categories 
+            SET emoji = NULL 
+            WHERE name NOT IN ('Salary', 'Business', 'Crypto', 'Bank', 'Personal', 'Investment', 'Other')
+            AND emoji = '🏷️';
+        """)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Emoji requirement removed from categories table"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/fix-categories-table')
 def fix_categories_table():
     """Fix the categories table to allow same emoji for multiple categories"""

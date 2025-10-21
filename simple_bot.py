@@ -857,10 +857,10 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error loading user categories: {e}")
 
-    def add_user_category(self, user_id, category_name, emoji="🏷️"):
-        """Add a new custom category - SIMPLE with one emoji"""
+    def add_user_category(self, user_id, category_name):
+        """Add a new custom category - NO EMOJI VERSION"""
         try:
-            print(f"🔍 Adding category: 🏷️ {category_name}")
+            print(f"🔍 Adding category: {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
@@ -874,10 +874,10 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with the same emoji for all spending categories
+            # Insert with NULL emoji for spending categories
             cur.execute(
-                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                ("🏷️", category_name)  # Always use 🏷️ for spending categories
+                "INSERT INTO categories (emoji, name) VALUES (NULL, %s)",
+                (category_name,)
             )
             
             conn.commit()
@@ -905,7 +905,7 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Delete the category by name (emoji is always 🏷️ for spending categories)
+            # Delete the category by name
             cur.execute("DELETE FROM categories WHERE name = %s", (category_name,))
             
             if cur.rowcount == 0:
@@ -926,21 +926,29 @@ class SimpleFinnBot:
         try:
             conn = self.get_db_connection()
             if not conn:
-                return {"🏷️": "Other"}  # Fallback
+                return {"Other": "Other"}  # Fallback
             
             cur = conn.cursor()
             cur.execute("SELECT emoji, name FROM categories ORDER BY name")
             categories_data = cur.fetchall()
             conn.close()
             
-            # Convert to dictionary format {emoji: name}
-            categories_dict = {cat[0]: cat[1] for cat in categories_data}
+            # Convert to dictionary format {name: name} since we're not using emojis
+            # For categories with emoji, use the name as both key and value
+            # For categories without emoji (NULL), use name as both key and value
+            categories_dict = {}
+            for emoji, name in categories_data:
+                if emoji:  # Categories with emojis (protected ones)
+                    categories_dict[emoji] = name
+                else:  # Custom spending categories without emojis
+                    categories_dict[name] = name
+            
             print(f"📊 Loaded {len(categories_dict)} categories from DB")
             return categories_dict
             
         except Exception as e:
             print(f"❌ Error fetching categories from DB: {e}")
-            return {"🏷️": "Other"}  # Fallback
+            return {"Other": "Other"}  # Fallback
 
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
@@ -1719,9 +1727,10 @@ This will help me provide better financial recommendations!"""
                 fixed_categories = ["Зарплата", "Бізнес", "Кріпто", "Банк", "Особисте", "Інвестиції", "Other"]
             
             has_custom_categories = False
-            for emoji, name in categories_from_db.items():
-                if name not in fixed_categories:  # Only show custom categories
-                    categories_text += f"• {emoji} *{name}*\n"
+            for key, name in categories_from_db.items():
+                # For custom categories, key and name are the same (no emoji)
+                if key == name and name not in fixed_categories:
+                    categories_text += f"• *{name}*\n"
                     has_custom_categories = True
             
             if not has_custom_categories:
@@ -1754,6 +1763,7 @@ This will help me provide better financial recommendations!"""
                     self.send_message(chat_id, f"❌ *{new_category}* is a protected category and cannot be modified!", parse_mode='Markdown', reply_markup=self.get_main_menu())
                     return
                 
+                # REMOVED: No emoji parameter needed
                 success, message = self.add_user_category(chat_id, new_category)
                 
                 if success:
