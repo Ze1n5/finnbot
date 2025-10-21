@@ -2766,8 +2766,7 @@ def api_transactions():
 
 @flask_app.route('/mini-app')
 def serve_mini_app():
-    return """
-    <!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2957,7 +2956,7 @@ def serve_mini_app():
                 const transactionsData = await transactionsResponse.json();
                 
                 if (transactionsResponse.ok) {
-                    renderTransactions(transactionsData.transactions);
+                    renderTransactions(transactionsData.transactions || transactionsData);
                 } else {
                     showError('Failed to load transactions');
                 }
@@ -2994,13 +2993,17 @@ def serve_mini_app():
                 const isPositive = amount >= 0;
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
+                // Handle different possible data structures
+                const displayName = transaction.category || transaction.name || 'Transaction';
+                const displayDescription = transaction.description || '';
+                
                 transactionsHTML += `
                     <div class="transaction">
                         <div class="transaction-info">
-                            <div class="transaction-emoji">${transaction.emoji}</div>
+                            <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
-                                <div class="transaction-title">${transaction.name}</div>
-                                <div class="transaction-category">${transaction.category}</div>
+                                <div class="transaction-title">${displayName}</div>
+                                ${displayDescription ? `<div class="transaction-category">${displayDescription}</div>` : ''}
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
