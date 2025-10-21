@@ -858,7 +858,7 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - NO EMOJI VERSION"""
+        """Add a new custom category - WORKAROUND WITH DEFAULT EMOJI"""
         try:
             print(f"🔍 Adding category: {category_name}")
             
@@ -874,16 +874,34 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with NULL emoji for spending categories
+            # WORKAROUND: Use a default emoji for now
+            # We'll use different default emojis to avoid unique constraints
+            default_emojis = ["📝", "📌", "📍", "🔖", "🎯", "⭐", "🌟", "💫", "✨"]
+            
+            # Find an available emoji
+            available_emoji = None
+            for emoji in default_emojis:
+                cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
+                if not cur.fetchone():
+                    available_emoji = emoji
+                    break
+            
+            # If all emojis are taken, use a numbered emoji
+            if not available_emoji:
+                cur.execute("SELECT COUNT(*) FROM categories WHERE emoji LIKE '📝%'")
+                count = cur.fetchone()[0]
+                available_emoji = f"📝{count + 1}"
+            
+            # Insert with the available emoji
             cur.execute(
-                "INSERT INTO categories (emoji, name) VALUES (NULL, %s)",
-                (category_name,)
+                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
+                (available_emoji, category_name)
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Category '{category_name}' added successfully")
+            print(f"✅ Category '{category_name}' added successfully with emoji {available_emoji}")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:

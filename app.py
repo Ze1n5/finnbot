@@ -184,6 +184,39 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/fix-categories-constraints')
+def fix_categories_constraints():
+    """Completely fix categories table constraints"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Remove any unique constraint on emoji column
+        try:
+            cur.execute("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_emoji_key;")
+        except Exception as e:
+            print(f"⚠️ Could not drop unique constraint: {e}")
+        
+        # Remove NOT NULL constraint from emoji column
+        try:
+            cur.execute("ALTER TABLE categories ALTER COLUMN emoji DROP NOT NULL;")
+        except Exception as e:
+            print(f"⚠️ Could not drop NOT NULL constraint: {e}")
+        
+        # Add a default value for existing categories that might be NULL
+        cur.execute("UPDATE categories SET emoji = '❓' WHERE emoji IS NULL;")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Categories table constraints fixed"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/remove-emoji-requirement')
 def remove_emoji_requirement():
     """Update categories table to handle categories without emojis"""
