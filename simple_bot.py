@@ -2670,70 +2670,81 @@ def api_transactions():
         for transaction in paginated_transactions:
             amount = float(transaction.get('amount', 0))
             trans_type = transaction.get('type', 'expense')
-            description = transaction.get('description', 'Unknown')
+            description = transaction.get('description', '')
             category = transaction.get('category', 'Other')
             timestamp = transaction.get('date', '')
             
-            # Determine emoji and display name
-            emoji = "💰"
-            display_name = ""
+            # Determine emoji based on category and type
+            emoji = "💰"  # Default
             
+            # INCOME TRANSACTIONS
             if trans_type == 'income':
                 emoji = "💵"
-                # For income: show category in brackets
-                display_name = f"{category}"
-            elif trans_type == 'expense':
-                if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                    emoji = "🏠"
-                elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                    emoji = "🍕"
-                elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                    emoji = "🚗"
-                elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
-                    emoji = "🛍️"
-                else:
-                    emoji = "🛒"
+                display_name = category  # Show category name for income
                 
-                # For expenses: extract the actual description (remove numbers and symbols)
-                # The description might be "100 food" - we want just "food"
-                clean_description = description
-                
-                # Remove numbers and currency symbols
-                clean_description = re.sub(r'[\d+.,₴]', '', clean_description).strip()
-                
-                # Remove common transaction symbols
-                clean_description = re.sub(r'[+-]+', '', clean_description).strip()
-                
-                # If we have a meaningful description after cleaning
-                if clean_description and clean_description.lower() != category:
-                    display_name = f"{category} {clean_description}"
-                else:
-                    display_name = f"{category}"
-                    
+            # SAVINGS TRANSACTIONS  
             elif trans_type == 'savings':
                 emoji = "🏦"
-                display_name = "Savings"
+                display_name = f"Savings • {category}"
+                
+            # DEBT TRANSACTIONS
             elif trans_type == 'debt':
-                emoji = "💳"
+                emoji = "💳" 
                 display_name = "Debt"
             elif trans_type == 'debt_return':
                 emoji = "🔙"
                 display_name = "Debt Return"
+                
+            # SAVINGS WITHDRAWAL
             elif trans_type == 'savings_withdraw':
                 emoji = "📥"
                 display_name = "Savings Withdraw"
+                
+            # EXPENSE TRANSACTIONS - Use custom categories properly
+            else:  # expense
+                # Map categories to emojis
+                category_emoji_map = {
+                    'Food': '🍕',
+                    'Rent': '🏠', 
+                    'Transport': '🚗',
+                    'Shopping': '🛍️',
+                    'Entertainment': '🎬',
+                    'Healthcare': '🏥',
+                    'Utilities': '💡',
+                    'Other': '🛒'
+                }
+                
+                # Use custom emoji if category exists, otherwise default
+                emoji = category_emoji_map.get(category, '🛒')
+                
+                # Clean description - remove numbers and symbols
+                clean_description = re.sub(r'[\d+.,₴\-]', '', description).strip()
+                
+                # Create display name: show category and cleaned description
+                if clean_description and clean_description.lower() != category.lower():
+                    display_name = f"{category} • {clean_description}"
+                else:
+                    display_name = category
             
-            # Truncate long descriptions
-            if len(display_name) > 30:
-                display_name = display_name[:27] + "..."
+            # Format amount with proper sign
+            display_amount = amount
+            if trans_type in ['expense', 'savings', 'debt_return']:
+                display_amount = -abs(amount)  # Negative for expenses
+            elif trans_type in ['income', 'debt', 'savings_withdraw']:
+                display_amount = abs(amount)   # Positive for income/debt
+                
+            # Truncate long display names
+            if len(display_name) > 25:
+                display_name = display_name[:22] + "..."
             
             formatted_transactions.append({
                 "emoji": emoji,
                 "name": display_name,
                 "display_name": display_name,
-                "amount": amount,
+                "amount": display_amount,  # Use formatted amount with proper sign
                 "timestamp": timestamp,
-                "type": trans_type
+                "type": trans_type,
+                "category": category  # Include raw category for frontend
             })
         
         has_more = len(all_transactions_list) > end_idx
@@ -2747,8 +2758,9 @@ def api_transactions():
         
     except Exception as e:
         print(f"❌ Error in transactions API: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to load transactions'}), 500
-
 # Serve mini app main page
 # ========== MINI-APP ROUTES ==========
 
