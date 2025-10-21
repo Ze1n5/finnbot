@@ -858,7 +858,7 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - WORKING VERSION WITH DEFAULT EMOJIS"""
+        """Add a new custom category - NAME ONLY VERSION"""
         try:
             print(f"🔍 Adding category: {category_name}")
             
@@ -874,33 +874,17 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Use a simple rotating set of emojis to avoid conflicts
-            default_emojis = ["📝", "📌", "📍", "🔖", "🎯", "⭐", "🌟", "💫", "✨", "🎉"]
-            
-            # Find an available emoji by checking which ones aren't used yet
-            available_emoji = None
-            for emoji in default_emojis:
-                cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
-                if not cur.fetchone():
-                    available_emoji = emoji
-                    break
-            
-            # If all default emojis are taken, create a unique one
-            if not available_emoji:
-                import time
-                timestamp = str(int(time.time()))[-3:]  # Last 3 digits of timestamp
-                available_emoji = f"📝{timestamp}"
-            
-            # Insert with the available emoji
+            # Insert with category name as both emoji and name (to satisfy DB constraints)
+            # This is a workaround - we're storing the name in both fields
             cur.execute(
                 "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                (available_emoji, category_name)
+                (category_name, category_name)  # Use name for both fields
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Category '{category_name}' added successfully with emoji {available_emoji}")
+            print(f"✅ Category '{category_name}' added successfully")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
@@ -939,26 +923,26 @@ class SimpleFinnBot:
             return False, f"Error: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get all categories from database"""
+        """Get all categories from database - RETURN NAMES ONLY"""
         try:
             conn = self.get_db_connection()
             if not conn:
-                return {"❓": "Other"}  # Fallback
+                return ["Other"]  # Fallback as list of names
             
             cur = conn.cursor()
-            cur.execute("SELECT emoji, name FROM categories ORDER BY name")
+            cur.execute("SELECT name FROM categories ORDER BY name")
             categories_data = cur.fetchall()
             conn.close()
             
-            # Convert to dictionary format {emoji: name}
-            categories_dict = {cat[0]: cat[1] for cat in categories_data}
-            print(f"📊 Loaded {len(categories_dict)} categories from DB: {categories_dict}")
-            return categories_dict
+            # Return a list of category names only
+            category_names = [cat[0] for cat in categories_data]
+            print(f"📊 Loaded {len(category_names)} categories from DB: {category_names}")
+            return category_names
             
         except Exception as e:
             print(f"❌ Error fetching categories from DB: {e}")
-            return {"❓": "Other"}  # Fallback
-
+            return ["Other"]  # Fallback as list
+        
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
         
@@ -1029,16 +1013,15 @@ class SimpleFinnBot:
             if pattern in text_lower:
                 return category
         
-        # Use user-specific spending categories
-        user_categories = self.get_user_categories(user_id)
+        # Use user-specific spending categories (now as names)
+        category_names = self.get_user_categories(user_id)
         
         # Guess expense category
-        for category, keywords in user_categories.items():
-            if category == "Other":
+        for category_name in category_names:
+            if category_name == "Other":
                 continue
-            for keyword in keywords:
-                if keyword in text_lower:
-                    return category
+            if category_name.lower() in text_lower:
+                return category_name
         return "Other"
     
     def calculate_savings_recommendation(self, user_id, income_amount, description=""):
@@ -1715,8 +1698,8 @@ This will help me provide better financial recommendations!"""
                 self.send_message(chat_id, delete_text, parse_mode='Markdown')
         
         elif text == "🏷️ Manage Categories":
-            # Get categories from database
-            categories_from_db = self.get_user_categories(chat_id)
+            # Get categories as names
+            category_names = self.get_user_categories(chat_id)
             user_lang = self.get_user_language(chat_id)
             
             if user_lang == 'uk':
@@ -1736,10 +1719,9 @@ This will help me provide better financial recommendations!"""
                 fixed_categories = ["Зарплата", "Бізнес", "Кріпто", "Банк", "Особисте", "Інвестиції", "Other"]
             
             has_custom_categories = False
-            for key, name in categories_from_db.items():
-                # For custom categories, key and name are the same (no emoji)
-                if key == name and name not in fixed_categories:
-                    categories_text += f"• *{name}*\n"
+            for category_name in category_names:
+                if category_name not in fixed_categories:
+                    categories_text += f"• *{category_name}*\n"
                     has_custom_categories = True
             
             if not has_custom_categories:
@@ -2112,34 +2094,38 @@ This will help me provide better financial recommendations!"""
                     keyboard = {"inline_keyboard": [[
                         {"text": "✅ Confirm Debt", "callback_data": "cat_Debt"}
                     ]]}
+                # In the income transaction part:
                 elif is_income:
                     message = f"💰 Income: +{amount:,.0f}₴\n📝 Description: {text}\n\nSelect category:"
                     
-                    # Create proper inline keyboard for income categories
-                    income_cats = list(self.income_categories.keys())
+                    # Create proper inline keyboard for income categories using names
+                    if user_lang == 'uk':
+                        income_cats = ["Зарплата", "Бізнес"]
+                    else:
+                        income_cats = ["Salary", "Business"]
                     
-                    # FIX: Add proper keyboard creation
                     keyboard_rows = []
                     for i in range(0, len(income_cats), 2):
                         row = []
-                        for cat in income_cats[i:i+2]:
-                            row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                        for cat_name in income_cats[i:i+2]:
+                            row.append({"text": cat_name, "callback_data": f"cat_{cat_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
                 else:
-                    message = f"💰 Expense: -{amount:,.0f}₴\n🏷️ Category: {category}\n📝 Description: {text}\n\nSelect correct category:"
-                    # Get user's spending categories for the keyboard
-                    user_categories = self.get_user_categories(chat_id)
-                    category_list = list(user_categories.keys())
+                    # For expense transactions, show category names
+                    message = f"💰 Expense: -{amount:,.0f}₴\n📝 Description: {text}\n\nSelect correct category:"
                     
-                    # FIX: Add proper keyboard creation
+                    # Get user's spending categories as names
+                    category_names = self.get_user_categories(chat_id)
+                    
+                    # Create keyboard with category names only
                     keyboard_rows = []
-                    for i in range(0, len(category_list), 2):
+                    for i in range(0, len(category_names), 2):
                         row = []
-                        for cat in category_list[i:i+2]:
-                            row.append({"text": cat, "callback_data": f"cat_{cat}"})
+                        for cat_name in category_names[i:i+2]:
+                            row.append({"text": cat_name, "callback_data": f"cat_{cat_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
