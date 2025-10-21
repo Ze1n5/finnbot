@@ -65,6 +65,51 @@ def get_db_connection(self):
     except Exception as e:
         print(f"❌ Database connection error: {e}")
         return None
+    
+def init_categories_table():
+    """Initialize categories table with default 'Other' category"""
+    try:
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            print("❌ No DATABASE_URL - skipping categories table init")
+            return
+            
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        
+        with conn.cursor() as cur:
+            # Create categories table if it doesn't exist
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS categories (
+                    id SERIAL PRIMARY KEY,
+                    emoji VARCHAR(10) UNIQUE NOT NULL,
+                    name VARCHAR(50) UNIQUE NOT NULL,
+                    is_default BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Insert default "Other" category if it doesn't exist
+            cur.execute("""
+                INSERT INTO categories (emoji, name, is_default) 
+                VALUES ('❓', 'Other', TRUE)
+                ON CONFLICT (emoji) DO NOTHING
+            """)
+            
+            conn.commit()
+            conn.close()
+            print("✅ Categories table initialized")
+    except Exception as e:
+        print(f"❌ Error initializing categories table: {e}")
+
+# Call this when your app starts
+init_categories_table()
 
 def try_load_from_db(self):
     """Load data from PostgreSQL"""
@@ -151,10 +196,21 @@ class SimpleFinnBot:
         print("💾 User languages would be saved here")
         # We'll implement this later if needed
 
-    def save_user_categories(self):
-        """Save user categories - placeholder for now""" 
-        print("💾 User categories would be saved here")
-        # We'll implement this later if needed
+    def get_categories_from_db(self):
+        """Fetch categories from the database"""
+        try:
+            # Use your Railway app URL directly
+            railway_url = "https://finnbot-production.up.railway.app"
+            response = requests.get(f"{railway_url}/api/categories")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Error fetching categories: {response.status_code}")
+                return {"❓": "Other"}  # Fallback
+        except Exception as e:
+            print(f"Error fetching categories from DB: {e}")
+            return {"❓": "Other"}  # Fallback
+        
     def get_db_connection(self):
         """Get PostgreSQL connection"""
         database_url = os.environ.get('DATABASE_URL')
@@ -1304,6 +1360,7 @@ class SimpleFinnBot:
                 savings_map = {cat: cat for cat in self.protected_savings_categories}
                 message = f"🔧 Test: Savings ++{test_amount}₴\nSelect category:"
             
+            # FIX: Add proper keyboard creation
             keyboard_rows = []
             for i in range(0, len(savings_cats), 2):
                 row = []
@@ -1728,6 +1785,7 @@ This will help me provide better financial recommendations!"""
                         else:
                             income_cats = list(self.income_categories.keys())
                         
+                        # FIX: Add proper keyboard creation
                         keyboard_rows = []
                         for i in range(0, len(income_cats), 2):
                             row = []
@@ -1754,13 +1812,12 @@ This will help me provide better financial recommendations!"""
                                 savings_cats = self.protected_savings_categories
                                 savings_map = {cat: cat for cat in self.protected_savings_categories}
                             
-                            keyboard_rows = []
-                            for i in range(0, len(savings_cats), 2):
-                                row = []
-                                for cat in savings_cats[i:i+2]:
-                                    internal_name = savings_map[cat]
-                                    row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
-                                keyboard_rows.append(row)
+                            self.get_categories_from_db()
+                            row = []
+                            for cat in savings_cats[i:i+2]:
+                                internal_name = savings_map[cat]
+                                row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                            keyboard_rows.append(row)
                             
                             keyboard = {"inline_keyboard": keyboard_rows}
                             
@@ -1888,7 +1945,7 @@ This will help me provide better financial recommendations!"""
                     
                     print(f"🔍 DEBUG: Savings categories: {savings_cats}")
                     
-                    # Create inline keyboard
+                    # FIX: Add proper keyboard creation
                     keyboard_rows = []
                     for i in range(0, len(savings_cats), 2):
                         row = []
@@ -1956,6 +2013,8 @@ This will help me provide better financial recommendations!"""
                     
                     # Create proper inline keyboard for income categories
                     income_cats = list(self.income_categories.keys())
+                    
+                    # FIX: Add proper keyboard creation
                     keyboard_rows = []
                     for i in range(0, len(income_cats), 2):
                         row = []
@@ -1971,7 +2030,7 @@ This will help me provide better financial recommendations!"""
                     user_categories = self.get_user_categories(chat_id)
                     category_list = list(user_categories.keys())
                     
-                    # Create category selection keyboard
+                    # FIX: Add proper keyboard creation
                     keyboard_rows = []
                     for i in range(0, len(category_list), 2):
                         row = []
@@ -2761,6 +2820,231 @@ def api_transactions():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to load transactions'}), 500
+    
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    """Get all categories from database"""
+    try:
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            return jsonify({"❓": "Other"})
+            
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        
+        with conn.cursor() as cur:
+            cur.execute("SELECT emoji, name, is_default FROM categories ORDER BY name")
+            categories = cur.fetchall()
+            
+            # Convert to dictionary format {emoji: name}
+            categories_dict = {cat[0]: cat[1] for cat in categories}
+            conn.close()
+            return jsonify(categories_dict)
+    except Exception as e:
+        print(f"❌ Error fetching categories: {e}")
+        return jsonify({"❓": "Other"}), 500
+
+@app.route('/api/add-category', methods=['POST'])
+def add_category():
+    """Add a new custom category"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'emoji' not in data or 'name' not in data:
+            return jsonify({"error": "Emoji and name are required"}), 400
+        
+        emoji = data['emoji'].strip()
+        name = data['name'].strip()
+        
+        # Validate inputs
+        if not emoji or not name:
+            return jsonify({"error": "Emoji and name cannot be empty"}), 400
+        
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            return jsonify({"error": "Database not available"}), 500
+            
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        
+        with conn.cursor() as cur:
+            # Check if emoji already exists
+            cur.execute("SELECT emoji FROM categories WHERE emoji = %s", (emoji,))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({"error": "Category with this emoji already exists"}), 400
+            
+            # Check if name already exists
+            cur.execute("SELECT name FROM categories WHERE name = %s", (name,))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({"error": "Category with this name already exists"}), 400
+            
+            # Insert new category
+            cur.execute(
+                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
+                (emoji, name)
+            )
+            conn.commit()
+            
+            # Return updated categories list
+            cur.execute("SELECT emoji, name FROM categories ORDER BY name")
+            categories = cur.fetchall()
+            categories_dict = {cat[0]: cat[1] for cat in categories}
+            conn.close()
+            
+            return jsonify({
+                "message": "Category added successfully",
+                "categories": categories_dict
+            })
+            
+    except Exception as e:
+        print(f"❌ Error adding category: {e}")
+        return jsonify({"error": f"Failed to add category: {str(e)}"}), 500
+
+@app.route('/api/update-category', methods=['POST'])
+def update_category():
+    """Update an existing custom category"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'old_emoji' not in data or 'new_emoji' not in data or 'new_name' not in data:
+            return jsonify({"error": "Old emoji, new emoji, and new name are required"}), 400
+        
+        old_emoji = data['old_emoji']
+        new_emoji = data['new_emoji']
+        new_name = data['new_name']
+        
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            return jsonify({"error": "Database not available"}), 500
+            
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        
+        with conn.cursor() as cur:
+            # Check if it's the default "Other" category
+            cur.execute("SELECT is_default FROM categories WHERE emoji = %s", (old_emoji,))
+            category = cur.fetchone()
+            
+            if not category:
+                conn.close()
+                return jsonify({"error": "Category not found"}), 404
+            
+            if category[0]:  # is_default is True
+                conn.close()
+                return jsonify({"error": "Cannot modify the default 'Other' category"}), 400
+            
+            # Check if new emoji already exists (different category)
+            cur.execute("SELECT emoji FROM categories WHERE emoji = %s AND emoji != %s", 
+                       (new_emoji, old_emoji))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({"error": "Another category with this emoji already exists"}), 400
+            
+            # Check if new name already exists (different category)
+            cur.execute("SELECT name FROM categories WHERE name = %s AND emoji != %s", 
+                       (new_name, old_emoji))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({"error": "Another category with this name already exists"}), 400
+            
+            # Update category
+            cur.execute(
+                "UPDATE categories SET emoji = %s, name = %s WHERE emoji = %s",
+                (new_emoji, new_name, old_emoji)
+            )
+            
+            conn.commit()
+            
+            # Return updated categories
+            cur.execute("SELECT emoji, name FROM categories ORDER BY name")
+            categories = cur.fetchall()
+            categories_dict = {cat[0]: cat[1] for cat in categories}
+            conn.close()
+            
+            return jsonify({
+                "message": "Category updated successfully",
+                "categories": categories_dict
+            })
+            
+    except Exception as e:
+        print(f"❌ Error updating category: {e}")
+        return jsonify({"error": f"Failed to update category: {str(e)}"}), 500
+
+@app.route('/api/delete-category', methods=['POST'])
+def delete_category():
+    """Delete a custom category and reassign its transactions to 'Other'"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'emoji' not in data:
+            return jsonify({"error": "Emoji is required"}), 400
+        
+        emoji = data['emoji']
+        
+        database_url = os.environ.get('DATABASE_URL')
+        if not database_url:
+            return jsonify({"error": "Database not available"}), 500
+            
+        result = urlparse(database_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port
+        )
+        
+        with conn.cursor() as cur:
+            # Check if it's the default "Other" category
+            cur.execute("SELECT is_default FROM categories WHERE emoji = %s", (emoji,))
+            category = cur.fetchone()
+            
+            if not category:
+                conn.close()
+                return jsonify({"error": "Category not found"}), 404
+            
+            if category[0]:  # is_default is True
+                conn.close()
+                return jsonify({"error": "Cannot delete the default 'Other' category"}), 400
+            
+            # Delete the category
+            cur.execute("DELETE FROM categories WHERE emoji = %s", (emoji,))
+            conn.commit()
+            
+            # Return updated categories
+            cur.execute("SELECT emoji, name FROM categories ORDER BY name")
+            categories = cur.fetchall()
+            categories_dict = {cat[0]: cat[1] for cat in categories}
+            conn.close()
+            
+            return jsonify({
+                "message": "Category deleted successfully",
+                "categories": categories_dict
+            })
+            
+    except Exception as e:
+        print(f"❌ Error deleting category: {e}")
+        return jsonify({"error": f"Failed to delete category: {str(e)}"}), 500
 # Serve mini app main page
 # ========== MINI-APP ROUTES ==========
 
@@ -2854,6 +3138,7 @@ def serve_mini_app():
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #f2f2f7;
+            min-height: 60px;
         }
         
         .transaction:last-child {
@@ -2865,33 +3150,45 @@ def serve_mini_app():
             display: flex;
             align-items: center;
             gap: 12px;
+            min-width: 0; /* Important: prevents flex item from overflowing */
         }
         
         .transaction-emoji {
             font-size: 20px;
             width: 30px;
+            flex-shrink: 0;
             text-align: center;
         }
         
         .transaction-details {
             flex: 1;
+            min-width: 0; /* Important: allows text truncation */
+            overflow: hidden;
         }
         
         .transaction-title {
             font-size: 16px;
             font-weight: 500;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .transaction-category {
-            font-size: 14px;
+            font-size: 12px;
             color: #8e8e93;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         .transaction-amount {
             font-size: 16px;
             font-weight: 500;
             text-align: right;
+            flex-shrink: 0;
+            margin-left: 10px;
         }
         
         .amount-negative {
@@ -2995,7 +3292,7 @@ def serve_mini_app():
                 
                 // Handle different possible data structures
                 const displayName = transaction.category || transaction.name || 'Transaction';
-                const displayDescription = transaction.description || '';
+                const displayDescription = transaction.description || transaction.note || '';
                 
                 transactionsHTML += `
                     <div class="transaction">
