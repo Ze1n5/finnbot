@@ -2821,7 +2821,7 @@ def api_transactions():
         traceback.print_exc()
         return jsonify({'error': 'Failed to load transactions'}), 500
     
-@app.route('/api/categories', methods=['GET'])
+@flask_app.route('/api/categories', methods=['GET'])
 def get_categories():
     """Get all categories from database"""
     try:
@@ -2850,7 +2850,7 @@ def get_categories():
         print(f"❌ Error fetching categories: {e}")
         return jsonify({"❓": "Other"}), 500
 
-@app.route('/api/add-category', methods=['POST'])
+@flask_app.route('/api/add-category', methods=['POST'])
 def add_category():
     """Add a new custom category"""
     try:
@@ -2914,7 +2914,7 @@ def add_category():
         print(f"❌ Error adding category: {e}")
         return jsonify({"error": f"Failed to add category: {str(e)}"}), 500
 
-@app.route('/api/update-category', methods=['POST'])
+@flask_app.route('/api/update-category', methods=['POST'])
 def update_category():
     """Update an existing custom category"""
     try:
@@ -2990,7 +2990,7 @@ def update_category():
         print(f"❌ Error updating category: {e}")
         return jsonify({"error": f"Failed to update category: {str(e)}"}), 500
 
-@app.route('/api/delete-category', methods=['POST'])
+@flask_app.route('/api/delete-category', methods=['POST'])
 def delete_category():
     """Delete a custom category and reassign its transactions to 'Other'"""
     try:
@@ -3045,7 +3045,6 @@ def delete_category():
     except Exception as e:
         print(f"❌ Error deleting category: {e}")
         return jsonify({"error": f"Failed to delete category: {str(e)}"}), 500
-# Serve mini app main page
 # ========== MINI-APP ROUTES ==========
 
 @flask_app.route('/mini-app')
