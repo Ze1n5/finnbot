@@ -178,6 +178,40 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
+@app.route('/api/debug-savings-categories')
+def debug_savings_categories():
+    """Debug savings categories"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Check if savings categories exist
+        savings_categories = ["Crypto", "Bank", "Personal", "Investment"]
+        
+        results = {}
+        for category in savings_categories:
+            cur.execute("SELECT id, user_id, is_default FROM categories WHERE name = %s AND user_id IS NULL", (category,))
+            result = cur.fetchone()
+            results[category] = {
+                "exists": bool(result),
+                "id": result[0] if result else None,
+                "user_id": result[1] if result else None,
+                "is_default": result[2] if result else None
+            }
+        
+        conn.close()
+        
+        return jsonify({
+            "savings_categories_status": results,
+            "all_exist": all(item["exists"] for item in results.values())
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/restore-protected-categories')
 def restore_protected_categories():
     """Restore the protected savings categories"""

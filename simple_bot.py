@@ -979,10 +979,11 @@ class SimpleFinnBot:
             return False, f"Failed to add category: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get categories for user/group"""
+        """Get categories for user/group - ROBUST VERSION"""
         try:
             conn = self.get_db_connection()
             if not conn:
+                print("❌ No database connection in get_user_categories")
                 return ["Other"]  # Fallback
             
             cur = conn.cursor()
@@ -994,7 +995,7 @@ class SimpleFinnBot:
             else:  # User
                 user_id_safe = str(user_id)
             
-            # Get categories for this user/group
+            # Get categories for this user/group + shared categories (user_id IS NULL)
             cur.execute("""
                 SELECT name FROM categories 
                 WHERE user_id = %s OR user_id IS NULL 
@@ -1005,12 +1006,13 @@ class SimpleFinnBot:
             conn.close()
             
             category_names = [cat[0] for cat in categories_data]
-            print(f"📊 Loaded {len(category_names)} categories")
+            print(f"📊 Loaded {len(category_names)} categories for user {user_id}")
             return category_names
             
         except Exception as e:
-            print(f"❌ Error fetching categories: {e}")
-            return ["Other"]  # Fallback
+            print(f"❌ Error fetching categories for user {user_id}: {e}")
+            # Return basic categories as fallback
+            return ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
         
     def remove_user_category(self, user_id, category_name):
         """Remove a custom category - PROTECTS SAVINGS CATEGORIES"""
@@ -2127,6 +2129,8 @@ This will help me provide better financial recommendations!"""
                     category = "Debt"
                     transaction_type = "debt"
                 # In your process_message method, find the savings transaction part:
+                # Find the savings transaction part in process_message and replace it with:
+
                 elif is_savings:
                     print(f"🔍 DEBUG: Processing SAVINGS transaction - amount: {amount}")
                     
@@ -2143,15 +2147,20 @@ This will help me provide better financial recommendations!"""
                         }
                     else:
                         savings_cats = ["Crypto", "Bank", "Personal", "Investment"]
-                        savings_map = {cat: cat for cat in ["Crypto", "Bank", "Personal", "Investment"]}
+                        savings_map = {cat: cat for cat in savings_cats}
                     
-                    # Create keyboard with protected savings categories
+                    # FIXED: Create keyboard properly without the 'i' variable issue
                     keyboard_rows = []
-                    for i in range(0, len(savings_cats), 2):
-                        row = []
-                        for cat in savings_cats[i:i+2]:
-                            internal_name = savings_map[cat]
-                            row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                    row = []
+                    for cat in savings_cats:
+                        internal_name = savings_map[cat]
+                        row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
+                        # Add rows with 2 categories each
+                        if len(row) == 2:
+                            keyboard_rows.append(row)
+                            row = []
+                    # Add remaining category if any
+                    if row:
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
@@ -2170,9 +2179,7 @@ This will help me provide better financial recommendations!"""
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
                     self.send_message(chat_id, message, keyboard)
-                    
-                    # ✅ IMPORTANT: Return to prevent further processing
-                    return
+                    return  # IMPORTANT: Return to prevent further processing
 
                 elif is_income:
                     category = "Salary"  # Default income category
