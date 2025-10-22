@@ -2128,42 +2128,8 @@ This will help me provide better financial recommendations!"""
                 elif is_debt:
                     category = "Debt"
                     transaction_type = "debt"
-                # In your process_message method, find the savings transaction part:
-                # Find the savings transaction part in process_message and replace it with:
-
                 elif is_savings:
                     print(f"🔍 DEBUG: Processing SAVINGS transaction - amount: {amount}")
-                    
-                    # Get protected savings categories
-                    user_lang = self.get_user_language(chat_id)
-                    
-                    if user_lang == 'uk':
-                        savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
-                        savings_map = {
-                            "Кріпто": "Crypto",
-                            "Банк": "Bank", 
-                            "Особисте": "Personal",
-                            "Інвестиції": "Investment"
-                        }
-                    else:
-                        savings_cats = ["Crypto", "Bank", "Personal", "Investment"]
-                        savings_map = {cat: cat for cat in savings_cats}
-                    
-                    # FIXED: Create keyboard properly without the 'i' variable issue
-                    keyboard_rows = []
-                    row = []
-                    for cat in savings_cats:
-                        internal_name = savings_map[cat]
-                        row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
-                        # Add rows with 2 categories each
-                        if len(row) == 2:
-                            keyboard_rows.append(row)
-                            row = []
-                    # Add remaining category if any
-                    if row:
-                        keyboard_rows.append(row)
-                    
-                    keyboard = {"inline_keyboard": keyboard_rows}
                     
                     # Store pending transaction
                     self.pending[chat_id] = {
@@ -2173,13 +2139,44 @@ This will help me provide better financial recommendations!"""
                         'type': "savings"
                     }
                     
+                    # Get user language
+                    user_lang = self.get_user_language(chat_id)
+                    
+                    # FIXED: Use preset savings categories - NO DATABASE CALL NEEDED!
+                    if user_lang == 'uk':
+                        savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
+                        savings_map = {
+                            "Кріпто": "Crypto",
+                            "Банк": "Bank", 
+                            "Особисте": "Personal", 
+                            "Інвестиції": "Investment"
+                        }
+                    else:
+                        savings_cats = ["Crypto", "Bank", "Personal", "Investment"]
+                        savings_map = {cat: cat for cat in savings_cats}
+                    
+                    # Create keyboard with preset categories
+                    keyboard_rows = [
+                        [
+                            {"text": savings_cats[0], "callback_data": f"cat_{savings_map[savings_cats[0]]}"},
+                            {"text": savings_cats[1], "callback_data": f"cat_{savings_map[savings_cats[1]]}"}
+                        ],
+                        [
+                            {"text": savings_cats[2], "callback_data": f"cat_{savings_map[savings_cats[2]]}"},
+                            {"text": savings_cats[3], "callback_data": f"cat_{savings_map[savings_cats[3]]}"}
+                        ]
+                    ]
+                    
+                    keyboard = {"inline_keyboard": keyboard_rows}
+                    
+                    # Send message
                     if user_lang == 'uk':
                         message = f"🏦 Заощадження: ++{amount:,.0f}₴\n📝 Опис: {text}\n\nОберіть категорію заощаджень:"
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
                     self.send_message(chat_id, message, keyboard)
-                    return  # IMPORTANT: Return to prevent further processing
+                    return  # Stop further processing
 
                 elif is_income:
                     category = "Salary"  # Default income category
