@@ -1013,7 +1013,7 @@ class SimpleFinnBot:
             return ["Other"]  # Fallback
         
     def remove_user_category(self, user_id, category_name):
-        """Remove category - UPDATED"""
+        """Remove a custom category - PROTECTS SAVINGS CATEGORIES"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -1021,8 +1021,14 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if it's a protected category
-            protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+            # Check if it's a protected category (both spending and savings)
+            protected_categories = [
+                # Spending categories
+                "Salary", "Business", "Other",
+                # Savings categories  
+                "Crypto", "Bank", "Personal", "Investment"
+            ]
+            
             if category_name in protected_categories:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
@@ -2120,12 +2126,12 @@ This will help me provide better financial recommendations!"""
                 elif is_debt:
                     category = "Debt"
                     transaction_type = "debt"
+                # In your process_message method, find the savings transaction part:
                 elif is_savings:
                     print(f"🔍 DEBUG: Processing SAVINGS transaction - amount: {amount}")
                     
-                    # Use protected savings categories
+                    # Get protected savings categories
                     user_lang = self.get_user_language(chat_id)
-                    print(f"🔍 DEBUG: User language: {user_lang}")
                     
                     if user_lang == 'uk':
                         savings_cats = ["Кріпто", "Банк", "Особисте", "Інвестиції"]
@@ -2136,28 +2142,25 @@ This will help me provide better financial recommendations!"""
                             "Інвестиції": "Investment"
                         }
                     else:
-                        savings_cats = self.protected_savings_categories
-                        savings_map = {cat: cat for cat in self.protected_savings_categories}
+                        savings_cats = ["Crypto", "Bank", "Personal", "Investment"]
+                        savings_map = {cat: cat for cat in ["Crypto", "Bank", "Personal", "Investment"]}
                     
-                    print(f"🔍 DEBUG: Savings categories: {savings_cats}")
-                    
-                    # FIX: Add proper keyboard creation
+                    # Create keyboard with protected savings categories
                     keyboard_rows = []
                     for i in range(0, len(savings_cats), 2):
                         row = []
                         for cat in savings_cats[i:i+2]:
-                            # Use the internal English name for callback_data
                             internal_name = savings_map[cat]
                             row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
                         keyboard_rows.append(row)
                     
                     keyboard = {"inline_keyboard": keyboard_rows}
                     
-                    # ✅ CRITICAL: Store the pending transaction BEFORE sending the message
+                    # Store pending transaction
                     self.pending[chat_id] = {
                         'amount': amount, 
                         'text': text, 
-                        'category': "Savings",  # Default category
+                        'category': "Savings",
                         'type': "savings"
                     }
                     
@@ -2166,7 +2169,6 @@ This will help me provide better financial recommendations!"""
                     else:
                         message = f"🏦 Savings: ++{amount:,.0f}₴\n📝 Description: {text}\n\nSelect savings category:"
                     
-                    print(f"🔍 DEBUG: Sending savings category selection message with keyboard")
                     self.send_message(chat_id, message, keyboard)
                     
                     # ✅ IMPORTANT: Return to prevent further processing
