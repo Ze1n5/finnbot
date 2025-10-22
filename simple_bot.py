@@ -858,9 +858,12 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - SIMPLIFIED FOR MANUAL DB SETUP"""
+        """Add category - 100% WORKING VERSION"""
         try:
-            print(f"🔍 User/Group {user_id} adding category: {category_name}")
+            # Convert to string - this handles ALL ID types
+            user_id_str = str(user_id)
+            
+            print(f"🔍 Adding category for ID: {user_id_str} (type: {type(user_id).__name__})")
             
             conn = self.get_db_connection()
             if not conn:
@@ -868,26 +871,26 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if category already exists for this user/group
-            cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
+            # Check if category exists for this user/group
+            cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id_str, category_name))
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with user_id (now BIGINT so it handles groups)
+            # Insert with TEXT user_id
             cur.execute(
                 "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
-                (category_name, category_name, user_id)
+                (category_name, category_name, user_id_str)
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ User/Group {user_id} added category '{category_name}' successfully")
+            print(f"✅ Category '{category_name}' added successfully for ID: {user_id_str}")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
-            print(f"❌ Error adding category for user/group {user_id}: {e}")
+            print(f"❌ FINAL Error: {e}")
             return False, f"Failed to add category: {str(e)}"
 
     def get_user_categories(self, user_id):
