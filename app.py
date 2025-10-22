@@ -178,6 +178,33 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
+@app.route('/api/fix-emoji-null')
+def fix_emoji_null():
+    """Remove NOT NULL constraint from emoji column"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Remove NOT NULL constraint from emoji
+        cur.execute("ALTER TABLE categories ALTER COLUMN emoji DROP NOT NULL;")
+        
+        # Set default value for existing NULLs
+        cur.execute("UPDATE categories SET emoji = '📝' WHERE emoji IS NULL;")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "emoji NOT NULL constraint removed"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/init-db')
 def api_init_db():
     """Manual database initialization"""

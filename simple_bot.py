@@ -875,7 +875,7 @@ class SimpleFinnBot:
             return False, f"Failed to add category: {str(e)}"
 
     def add_group_category_safe(self, group_id, category_name):
-        """Safe method for groups - avoids user_id column issues"""
+        """Safe method for groups"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -883,14 +883,13 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Create a UNIQUE identifier that doesn't use large negative numbers
-            # We'll use a hash of the group ID + category name
+            # Create a UNIQUE identifier
             import hashlib
             unique_identifier = hashlib.md5(f"group_{group_id}".encode()).hexdigest()[:20]
             
             print(f"🔍 Group category - Using safe ID: {unique_identifier}")
             
-            # Check if category already exists using the safe identifier
+            # Check if category already exists
             cur.execute(
                 "SELECT name FROM categories WHERE user_id = %s AND name = %s",
                 (unique_identifier, category_name)
@@ -899,16 +898,16 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with the safe identifier
+            # Insert with emoji to satisfy NOT NULL constraint
             cur.execute(
-                "INSERT INTO categories (name, user_id) VALUES (%s, %s)",
-                (category_name, unique_identifier)
+                "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
+                ("📝", category_name, unique_identifier)  # Provide emoji!
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Group category '{category_name}' added successfully with safe ID")
+            print(f"✅ Group category '{category_name}' added successfully")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
@@ -924,7 +923,6 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # For regular users, we can use their ID directly (it's small enough)
             user_id_str = str(user_id)
             
             print(f"🔍 User category - Using ID: {user_id_str}")
@@ -937,9 +935,10 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
+            # Insert with emoji to satisfy NOT NULL constraint
             cur.execute(
-                "INSERT INTO categories (name, user_id) VALUES (%s, %s)",
-                (category_name, user_id_str)
+                "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
+                ("📝", category_name, user_id_str)  # Provide emoji!
             )
             
             conn.commit()
