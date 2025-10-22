@@ -184,6 +184,77 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/debug-categories-columns')
+def debug_categories_columns():
+    """Check the actual column names in categories table"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Get column names
+        cur.execute("""
+            SELECT column_name, data_type, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'categories'
+        """)
+        
+        columns = cur.fetchall()
+        
+        # Check if user_id column exists
+        column_names = [col[0] for col in columns]
+        
+        conn.close()
+        
+        return jsonify({
+            "columns": [
+                {"name": col[0], "type": col[1], "nullable": col[2]} 
+                for col in columns
+            ],
+            "column_names": column_names,
+            "user_id_exists": "user_id" in column_names
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/force-add-user-id-column')
+def force_add_user_id_column():
+    """Force add user_id column to categories table"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Check if user_id column exists
+        cur.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'categories' AND column_name = 'user_id'
+        """)
+        
+        if not cur.fetchone():
+            # Add user_id column
+            cur.execute("ALTER TABLE categories ADD COLUMN user_id BIGINT;")
+            print("✅ Added user_id column to categories table")
+        else:
+            print("✅ user_id column already exists")
+        
+        # Update existing categories to have NULL user_id (they become shared)
+        cur.execute("UPDATE categories SET user_id = NULL WHERE user_id IS NULL;")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "user_id column verified/added"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/init-protected-categories')
 def init_protected_categories():
     """Initialize protected categories for all users"""

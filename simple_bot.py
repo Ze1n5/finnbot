@@ -868,7 +868,7 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if category already exists for this user
+            # Check if category already exists for this user - FIXED: user_id not userid
             cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             if cur.fetchone():
                 conn.close()
@@ -877,7 +877,7 @@ class SimpleFinnBot:
             # Insert with user_id to make it user-specific
             cur.execute(
                 "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
-                (category_name, category_name, user_id)  # Store user_id to make it private
+                (category_name, category_name, user_id)
             )
             
             conn.commit()
@@ -899,13 +899,13 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if it's a protected category (these are shared for all users)
+            # Check if it's a protected category
             protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
             if category_name in protected_categories:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Delete the category only for this specific user
+            # Delete the category only for this specific user - FIXED: user_id not userid
             cur.execute("DELETE FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             
             if cur.rowcount == 0:
@@ -930,9 +930,7 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Get user's specific categories + shared protected categories
-            # Protected categories have user_id = NULL (shared for all users)
-            # User's custom categories have user_id = their actual user ID
+            # Get user's specific categories + shared protected categories - FIXED: user_id not userid
             cur.execute("""
                 SELECT name FROM categories 
                 WHERE user_id = %s OR user_id IS NULL 
