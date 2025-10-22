@@ -858,18 +858,46 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add category - FINAL WORKING SOLUTION"""
+        """Add category - SIMPLE NO EMOJI VERSION"""
         try:
             print(f"🔍 Adding category: '{category_name}' for ID: {user_id}")
             
-            # DETECT if this is a group (negative ID)
-            if user_id < 0:
-                # USE DIFFERENT METHOD FOR GROUPS
-                return self.add_group_category_safe(user_id, category_name)
-            else:
-                # Use normal method for users
-                return self.add_regular_category_safe(user_id, category_name)
-                
+            conn = self.get_db_connection()
+            if not conn:
+                return False, "No database connection"
+            
+            cur = conn.cursor()
+            
+            # Handle user_id based on type
+            if user_id < 0:  # Group
+                import hashlib
+                user_id_safe = hashlib.md5(f"group_{user_id}".encode()).hexdigest()[:20]
+            else:  # User
+                user_id_safe = str(user_id)
+            
+            print(f"🔍 Using safe ID: {user_id_safe}")
+            
+            # Check if category already exists
+            cur.execute(
+                "SELECT name FROM categories WHERE user_id = %s AND name = %s",
+                (user_id_safe, category_name)
+            )
+            if cur.fetchone():
+                conn.close()
+                return False, f"Category '{category_name}' already exists"
+            
+            # Insert with NULL emoji (we don't need emojis)
+            cur.execute(
+                "INSERT INTO categories (emoji, name, user_id) VALUES (NULL, %s, %s)",
+                (category_name, user_id_safe)
+            )
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Category '{category_name}' added successfully (NO EMOJI)")
+            return True, f"Category '{category_name}' added successfully"
+            
         except Exception as e:
             print(f"❌ Error: {e}")
             return False, f"Failed to add category: {str(e)}"

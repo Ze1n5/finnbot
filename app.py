@@ -178,6 +178,45 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
+@app.route('/api/remove-emoji-constraints')
+def remove_emoji_constraints():
+    """Remove all emoji constraints from categories table"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # 1. Remove UNIQUE constraint on emoji
+        try:
+            cur.execute("ALTER TABLE categories DROP CONSTRAINT categories_emoji_key;")
+            print("✅ Removed emoji unique constraint")
+        except:
+            print("✅ No emoji unique constraint to remove")
+        
+        # 2. Remove NOT NULL constraint from emoji
+        try:
+            cur.execute("ALTER TABLE categories ALTER COLUMN emoji DROP NOT NULL;")
+            print("✅ Removed emoji NOT NULL constraint")
+        except:
+            print("✅ emoji already nullable")
+        
+        # 3. Set all emoji values to NULL (we don't need them)
+        cur.execute("UPDATE categories SET emoji = NULL;")
+        print("✅ Set all emojis to NULL")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "ALL emoji constraints removed! Categories will now use names only."
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/fix-emoji-null')
 def fix_emoji_null():
     """Remove NOT NULL constraint from emoji column"""
