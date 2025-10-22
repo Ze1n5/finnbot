@@ -1986,6 +1986,7 @@ This will help me provide better financial recommendations!"""
                         
                     else:
                         # For savings transactions, show category selection
+                        # For savings transactions, show category selection
                         if trans_type == 'savings':
                             user_lang = self.get_user_language(chat_id)
                             
@@ -2001,11 +2002,17 @@ This will help me provide better financial recommendations!"""
                                 savings_cats = self.protected_savings_categories
                                 savings_map = {cat: cat for cat in self.protected_savings_categories}
                             
-                            row = []
-                            for cat in savings_cats[i:i+2]:
-                                internal_name = savings_map[cat]
-                                row.append({"text": cat, "callback_data": f"cat_{internal_name}"})
-                            keyboard_rows.append(row)
+                            # FIXED: Create keyboard properly without undefined 'i'
+                            keyboard_rows = [
+                                [
+                                    {"text": savings_cats[0], "callback_data": f"cat_{savings_map[savings_cats[0]]}"},
+                                    {"text": savings_cats[1], "callback_data": f"cat_{savings_map[savings_cats[1]]}"}
+                                ],
+                                [
+                                    {"text": savings_cats[2], "callback_data": f"cat_{savings_map[savings_cats[2]]}"},
+                                    {"text": savings_cats[3], "callback_data": f"cat_{savings_map[savings_cats[3]]}"}
+                                ]
+                            ]
                             
                             keyboard = {"inline_keyboard": keyboard_rows}
                             
