@@ -184,6 +184,85 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/init-protected-categories')
+def init_protected_categories():
+    """Initialize protected categories for all users"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        protected_categories = [
+            ("💰", "Salary", True),
+            ("💼", "Business", True),
+            ("₿", "Crypto", True),
+            ("🏦", "Bank", True),
+            ("👤", "Personal", True),
+            ("📈", "Investment", True),
+            ("❓", "Other", True)
+        ]
+        
+        for emoji, name, is_default in protected_categories:
+            # Insert protected categories with NULL user_id (shared for all users)
+            cur.execute("""
+                INSERT INTO categories (emoji, name, is_default, user_id) 
+                VALUES (%s, %s, %s, NULL)
+                ON CONFLICT (user_id, name) DO NOTHING
+            """, (emoji, name, is_default))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Protected categories initialized"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/make-categories-user-specific')
+def make_categories_user_specific():
+    """Update categories table to be user-specific"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Add user_id column to categories table
+        try:
+            cur.execute("ALTER TABLE categories ADD COLUMN user_id BIGINT;")
+        except:
+            print("⚠️ user_id column may already exist")
+        
+        # Set user_id for existing categories (assign to a default user or keep as shared)
+        # For now, we'll set existing categories to NULL (shared/legacy)
+        cur.execute("UPDATE categories SET user_id = NULL WHERE user_id IS NULL;")
+        
+        # Remove the unique constraint on name and add unique constraint on (user_id, name)
+        try:
+            cur.execute("ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key;")
+        except:
+            pass
+        
+        # Add unique constraint for user_id and name combination
+        try:
+            cur.execute("""
+                ALTER TABLE categories 
+                ADD CONSTRAINT categories_user_name_unique UNIQUE (user_id, name);
+            """)
+        except:
+            print("⚠️ Constraint may already exist")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "Categories table updated to be user-specific"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/fix-categories-constraints')
 def fix_categories_constraints():
     """Completely fix categories table constraints"""

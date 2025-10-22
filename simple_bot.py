@@ -858,9 +858,9 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - NAME ONLY VERSION"""
+        """Add a new custom category - USER SPECIFIC"""
         try:
-            print(f"🔍 Adding category: {category_name}")
+            print(f"🔍 User {user_id} adding category: {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
@@ -868,31 +868,30 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if category already exists (by name)
-            cur.execute("SELECT name FROM categories WHERE name = %s", (category_name,))
+            # Check if category already exists for this user
+            cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with category name as both emoji and name (to satisfy DB constraints)
-            # This is a workaround - we're storing the name in both fields
+            # Insert with user_id to make it user-specific
             cur.execute(
-                "INSERT INTO categories (emoji, name) VALUES (%s, %s)",
-                (category_name, category_name)  # Use name for both fields
+                "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
+                (category_name, category_name, user_id)  # Store user_id to make it private
             )
             
             conn.commit()
             conn.close()
             
-            print(f"✅ Category '{category_name}' added successfully")
+            print(f"✅ User {user_id} added category '{category_name}' successfully")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
-            print(f"❌ Error adding category: {e}")
+            print(f"❌ Error adding category for user {user_id}: {e}")
             return False, f"Failed to add category: {str(e)}"
-    
+
     def remove_user_category(self, user_id, category_name):
-        """Remove a custom category"""
+        """Remove a custom category - USER SPECIFIC"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -900,14 +899,14 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if it's a protected category
+            # Check if it's a protected category (these are shared for all users)
             protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
             if category_name in protected_categories:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Delete the category by name
-            cur.execute("DELETE FROM categories WHERE name = %s", (category_name,))
+            # Delete the category only for this specific user
+            cur.execute("DELETE FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             
             if cur.rowcount == 0:
                 conn.close()
@@ -919,29 +918,38 @@ class SimpleFinnBot:
             return True, f"Category '{category_name}' removed successfully"
                 
         except Exception as e:
-            print(f"❌ Error removing category: {e}")
+            print(f"❌ Error removing category for user {user_id}: {e}")
             return False, f"Error: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get all categories from database - RETURN NAMES ONLY"""
+        """Get categories for specific user"""
         try:
             conn = self.get_db_connection()
             if not conn:
-                return ["Other"]  # Fallback as list of names
+                return ["Other"]  # Fallback
             
             cur = conn.cursor()
-            cur.execute("SELECT name FROM categories ORDER BY name")
+            
+            # Get user's specific categories + shared protected categories
+            # Protected categories have user_id = NULL (shared for all users)
+            # User's custom categories have user_id = their actual user ID
+            cur.execute("""
+                SELECT name FROM categories 
+                WHERE user_id = %s OR user_id IS NULL 
+                ORDER BY name
+            """, (user_id,))
+            
             categories_data = cur.fetchall()
             conn.close()
             
             # Return a list of category names only
             category_names = [cat[0] for cat in categories_data]
-            print(f"📊 Loaded {len(category_names)} categories from DB: {category_names}")
+            print(f"📊 User {user_id} loaded {len(category_names)} categories: {category_names}")
             return category_names
             
         except Exception as e:
-            print(f"❌ Error fetching categories from DB: {e}")
-            return ["Other"]  # Fallback as list
+            print(f"❌ Error fetching categories for user {user_id}: {e}")
+            return ["Other"]  # Fallback
         
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
@@ -1008,12 +1016,13 @@ class SimpleFinnBot:
         """Guess spending category for a specific user"""
         text_lower = text.lower()
         
-        # Check learned patterns first
-        for pattern, category in self.learned_patterns.items():
+        # Check learned patterns first (these are already user-specific)
+        user_patterns = self.learned_patterns.get(user_id, {})
+        for pattern, category in user_patterns.items():
             if pattern in text_lower:
                 return category
         
-        # Use user-specific spending categories (now as names)
+        # Use user-specific spending categories
         category_names = self.get_user_categories(user_id)
         
         # Guess expense category
