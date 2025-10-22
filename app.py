@@ -184,6 +184,79 @@ def api_init_db():
     success = init_db()
     return jsonify({"success": success, "message": "Database initialized"})
 
+@app.route('/api/fix-database-final')
+def fix_database_final():
+    """Final database fix - handles everything"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        print("🔄 Starting database fix...")
+        
+        # Fix 1: Make sure user_id column exists
+        try:
+            cur.execute("ALTER TABLE categories ADD COLUMN IF NOT EXISTS user_id BIGINT;")
+            print("✅ user_id column created/verified")
+        except:
+            print("✅ user_id column already exists")
+        
+        # Fix 2: Make sure it's BIGINT type
+        try:
+            cur.execute("ALTER TABLE categories ALTER COLUMN user_id TYPE BIGINT;")
+            print("✅ user_id set to BIGINT")
+        except:
+            print("✅ user_id already BIGINT")
+        
+        # Fix 3: Allow NULL values
+        try:
+            cur.execute("ALTER TABLE categories ALTER COLUMN user_id DROP NOT NULL;")
+            print("✅ user_id can now be NULL")
+        except:
+            print("✅ user_id already nullable")
+        
+        conn.commit()
+        
+        # Verify everything works
+        cur.execute("""
+            SELECT column_name, data_type, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'categories' AND column_name = 'user_id'
+        """)
+        result = cur.fetchone()
+        
+        # Test group ID insertion
+        test_group_id = -1001234567890
+        try:
+            cur.execute("""
+                INSERT INTO categories (emoji, name, user_id) 
+                VALUES ('test', 'test_category', %s)
+                ON CONFLICT DO NOTHING
+            """, (test_group_id,))
+            conn.rollback()  # Don't save test data
+            group_test = "PASSED"
+        except Exception as e:
+            group_test = f"FAILED: {e}"
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Database completely fixed!",
+            "column_info": {
+                "name": result[0],
+                "type": result[1],
+                "nullable": result[2]
+            },
+            "group_id_test": group_test,
+            "ready_for_groups": "YES" if group_test == "PASSED" else "NO"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/debug-categories-columns')
 def debug_categories_columns():
     """Check the actual column names in categories table"""

@@ -858,9 +858,9 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add a new custom category - USER SPECIFIC"""
+        """Add a new custom category - SIMPLIFIED FOR MANUAL DB SETUP"""
         try:
-            print(f"🔍 User {user_id} adding category: {category_name}")
+            print(f"🔍 User/Group {user_id} adding category: {category_name}")
             
             conn = self.get_db_connection()
             if not conn:
@@ -868,13 +868,13 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Check if category already exists for this user - FIXED: user_id not userid
+            # Check if category already exists for this user/group
             cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # Insert with user_id to make it user-specific
+            # Insert with user_id (now BIGINT so it handles groups)
             cur.execute(
                 "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
                 (category_name, category_name, user_id)
@@ -883,15 +883,42 @@ class SimpleFinnBot:
             conn.commit()
             conn.close()
             
-            print(f"✅ User {user_id} added category '{category_name}' successfully")
+            print(f"✅ User/Group {user_id} added category '{category_name}' successfully")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
-            print(f"❌ Error adding category for user {user_id}: {e}")
+            print(f"❌ Error adding category for user/group {user_id}: {e}")
             return False, f"Failed to add category: {str(e)}"
 
+    def get_user_categories(self, user_id):
+        """Get categories for specific user/group"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                return ["Other"]  # Fallback
+            
+            cur = conn.cursor()
+            
+            # Get user's specific categories + shared protected categories
+            cur.execute("""
+                SELECT name FROM categories 
+                WHERE user_id = %s OR user_id IS NULL 
+                ORDER BY name
+            """, (user_id,))
+            
+            categories_data = cur.fetchall()
+            conn.close()
+            
+            category_names = [cat[0] for cat in categories_data]
+            print(f"📊 User/Group {user_id} loaded {len(category_names)} categories")
+            return category_names
+            
+        except Exception as e:
+            print(f"❌ Error fetching categories: {e}")
+            return ["Other"]  # Fallback
+
     def remove_user_category(self, user_id, category_name):
-        """Remove a custom category - USER SPECIFIC"""
+        """Remove a custom category"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -905,7 +932,7 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Delete the category only for this specific user - FIXED: user_id not userid
+            # Delete the category only for this specific user/group
             cur.execute("DELETE FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
             
             if cur.rowcount == 0:
@@ -918,36 +945,8 @@ class SimpleFinnBot:
             return True, f"Category '{category_name}' removed successfully"
                 
         except Exception as e:
-            print(f"❌ Error removing category for user {user_id}: {e}")
+            print(f"❌ Error removing category: {e}")
             return False, f"Error: {str(e)}"
-
-    def get_user_categories(self, user_id):
-        """Get categories for specific user"""
-        try:
-            conn = self.get_db_connection()
-            if not conn:
-                return ["Other"]  # Fallback
-            
-            cur = conn.cursor()
-            
-            # Get user's specific categories + shared protected categories - FIXED: user_id not userid
-            cur.execute("""
-                SELECT name FROM categories 
-                WHERE user_id = %s OR user_id IS NULL 
-                ORDER BY name
-            """, (user_id,))
-            
-            categories_data = cur.fetchall()
-            conn.close()
-            
-            # Return a list of category names only
-            category_names = [cat[0] for cat in categories_data]
-            print(f"📊 User {user_id} loaded {len(category_names)} categories: {category_names}")
-            return category_names
-            
-        except Exception as e:
-            print(f"❌ Error fetching categories for user {user_id}: {e}")
-            return ["Other"]  # Fallback
         
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
