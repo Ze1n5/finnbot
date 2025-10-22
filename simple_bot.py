@@ -858,27 +858,85 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add category - ABSOLUTELY WORKING VERSION"""
+        """Add category - FINAL WORKING SOLUTION"""
         try:
-            print(f"🔍 Attempting to add category: '{category_name}' for user/group: {user_id}")
+            print(f"🔍 Adding category: '{category_name}' for ID: {user_id}")
             
+            # DETECT if this is a group (negative ID)
+            if user_id < 0:
+                # USE DIFFERENT METHOD FOR GROUPS
+                return self.add_group_category_safe(user_id, category_name)
+            else:
+                # Use normal method for users
+                return self.add_regular_category_safe(user_id, category_name)
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return False, f"Failed to add category: {str(e)}"
+
+    def add_group_category_safe(self, group_id, category_name):
+        """Safe method for groups - avoids user_id column issues"""
+        try:
             conn = self.get_db_connection()
             if not conn:
                 return False, "No database connection"
             
             cur = conn.cursor()
             
-            # Convert to string to avoid ANY integer issues
-            user_id_str = str(user_id)
-            print(f"🔍 Using string ID: {user_id_str}")
+            # Create a UNIQUE identifier that doesn't use large negative numbers
+            # We'll use a hash of the group ID + category name
+            import hashlib
+            unique_identifier = hashlib.md5(f"group_{group_id}".encode()).hexdigest()[:20]
             
-            # SIMPLE CHECK: Just see if the category name exists for this user
-            cur.execute("SELECT name FROM categories WHERE user_id = %s AND name = %s", (user_id_str, category_name))
+            print(f"🔍 Group category - Using safe ID: {unique_identifier}")
+            
+            # Check if category already exists using the safe identifier
+            cur.execute(
+                "SELECT name FROM categories WHERE user_id = %s AND name = %s",
+                (unique_identifier, category_name)
+            )
             if cur.fetchone():
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # SIMPLE INSERT: Just insert the data
+            # Insert with the safe identifier
+            cur.execute(
+                "INSERT INTO categories (name, user_id) VALUES (%s, %s)",
+                (category_name, unique_identifier)
+            )
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✅ Group category '{category_name}' added successfully with safe ID")
+            return True, f"Category '{category_name}' added successfully"
+            
+        except Exception as e:
+            print(f"❌ Group category error: {e}")
+            return False, f"Failed to add category: {str(e)}"
+
+    def add_regular_category_safe(self, user_id, category_name):
+        """Safe method for regular users"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                return False, "No database connection"
+            
+            cur = conn.cursor()
+            
+            # For regular users, we can use their ID directly (it's small enough)
+            user_id_str = str(user_id)
+            
+            print(f"🔍 User category - Using ID: {user_id_str}")
+            
+            cur.execute(
+                "SELECT name FROM categories WHERE user_id = %s AND name = %s",
+                (user_id_str, category_name)
+            )
+            if cur.fetchone():
+                conn.close()
+                return False, f"Category '{category_name}' already exists"
+            
             cur.execute(
                 "INSERT INTO categories (name, user_id) VALUES (%s, %s)",
                 (category_name, user_id_str)
@@ -887,17 +945,14 @@ class SimpleFinnBot:
             conn.commit()
             conn.close()
             
-            print(f"✅ SUCCESS: Category '{category_name}' added for ID: {user_id_str}")
             return True, f"Category '{category_name}' added successfully"
             
         except Exception as e:
-            print(f"❌ CRITICAL ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-            return False, f"Database error: {str(e)}"
+            print(f"❌ User category error: {e}")
+            return False, f"Failed to add category: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get categories for specific user/group"""
+        """Get categories for user/group"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -905,18 +960,30 @@ class SimpleFinnBot:
             
             cur = conn.cursor()
             
-            # Get user's specific categories + shared protected categories
-            cur.execute("""
-                SELECT name FROM categories 
-                WHERE user_id = %s OR user_id IS NULL 
-                ORDER BY name
-            """, (user_id,))
+            # Handle groups differently
+            if user_id < 0:
+                import hashlib
+                unique_identifier = hashlib.md5(f"group_{user_id}".encode()).hexdigest()[:20]
+                
+                cur.execute("""
+                    SELECT name FROM categories 
+                    WHERE user_id = %s OR user_id IS NULL 
+                    ORDER BY name
+                """, (unique_identifier,))
+            else:
+                # Regular user
+                user_id_str = str(user_id)
+                cur.execute("""
+                    SELECT name FROM categories 
+                    WHERE user_id = %s OR user_id IS NULL 
+                    ORDER BY name
+                """, (user_id_str,))
             
             categories_data = cur.fetchall()
             conn.close()
             
             category_names = [cat[0] for cat in categories_data]
-            print(f"📊 User/Group {user_id} loaded {len(category_names)} categories")
+            print(f"📊 Loaded {len(category_names)} categories")
             return category_names
             
         except Exception as e:
@@ -924,7 +991,7 @@ class SimpleFinnBot:
             return ["Other"]  # Fallback
 
     def remove_user_category(self, user_id, category_name):
-        """Remove a custom category"""
+        """Remove category - UPDATED FOR GROUPS"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -938,8 +1005,22 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Delete the category only for this specific user/group
-            cur.execute("DELETE FROM categories WHERE user_id = %s AND name = %s", (user_id, category_name))
+            # Handle groups differently
+            if user_id < 0:
+                import hashlib
+                unique_identifier = hashlib.md5(f"group_{user_id}".encode()).hexdigest()[:20]
+                
+                cur.execute(
+                    "DELETE FROM categories WHERE user_id = %s AND name = %s",
+                    (unique_identifier, category_name)
+                )
+            else:
+                # Regular user
+                user_id_str = str(user_id)
+                cur.execute(
+                    "DELETE FROM categories WHERE user_id = %s AND name = %s",
+                    (user_id_str, category_name)
+                )
             
             if cur.rowcount == 0:
                 conn.close()
