@@ -178,6 +178,48 @@ def save_all_data():
     except Exception as e:
         print(f"❌ Error during shutdown save: {e}")
 
+@app.route('/api/restore-protected-categories')
+def restore_protected_categories():
+    """Restore the protected savings categories"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "No database connection"}), 500
+        
+        cur = conn.cursor()
+        
+        # Protected savings categories (user_id = NULL means shared for all users)
+        protected_categories = [
+            ("Crypto", None, True),
+            ("Bank", None, True),
+            ("Personal", None, True),
+            ("Investment", None, True)
+        ]
+        
+        added_count = 0
+        for name, user_id, is_default in protected_categories:
+            # Insert if not exists
+            cur.execute("""
+                INSERT INTO categories (name, user_id, is_default) 
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, name) DO NOTHING
+            """, (name, user_id, is_default))
+            
+            if cur.rowcount > 0:
+                added_count += 1
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": f"Restored {added_count} protected savings categories",
+            "categories_added": ["Crypto", "Bank", "Personal", "Investment"]
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/remove-emoji-constraints')
 def remove_emoji_constraints():
     """Remove all emoji constraints from categories table"""
