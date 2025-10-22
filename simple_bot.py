@@ -858,7 +858,7 @@ class SimpleFinnBot:
             print(f"❌ Error loading user categories: {e}")
 
     def add_user_category(self, user_id, category_name):
-        """Add category - 100% WORKING VERSION"""
+        """Add category - WORKING VERSION"""
         try:
             print(f"🔍 Adding category: '{category_name}' for ID: {user_id}")
             
@@ -886,11 +886,10 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"Category '{category_name}' already exists"
             
-            # **USE THE CATEGORY NAME AS EMOJI** to satisfy the NOT NULL constraint
-            # This is a workaround - we're storing the category name in the emoji field
+            # **CORRECT INSERT** - only use existing columns
             cur.execute(
-                "INSERT INTO categories (emoji, name, user_id) VALUES (%s, %s, %s)",
-                (category_name, category_name, user_id_safe)  # Use category_name for both!
+                "INSERT INTO categories (name, user_id) VALUES (%s, %s)",
+                (category_name, user_id_safe)
             )
             
             conn.commit()
@@ -902,7 +901,7 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Error: {e}")
             return False, f"Failed to add category: {str(e)}"
-
+        
     def add_group_category_safe(self, group_id, category_name):
         """Safe method for groups"""
         try:
@@ -980,7 +979,7 @@ class SimpleFinnBot:
             return False, f"Failed to add category: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get categories - UPDATED FOR NEW TABLE STRUCTURE"""
+        """Get categories for user/group"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -1014,7 +1013,7 @@ class SimpleFinnBot:
             return ["Other"]  # Fallback
         
     def remove_user_category(self, user_id, category_name):
-        """Remove category - UPDATED FOR GROUPS"""
+        """Remove category - UPDATED"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -1028,22 +1027,17 @@ class SimpleFinnBot:
                 conn.close()
                 return False, f"'{category_name}' is a protected category and cannot be removed"
             
-            # Handle groups differently
-            if user_id < 0:
+            # Handle user_id based on type
+            if user_id < 0:  # Group
                 import hashlib
-                unique_identifier = hashlib.md5(f"group_{user_id}".encode()).hexdigest()[:20]
-                
-                cur.execute(
-                    "DELETE FROM categories WHERE user_id = %s AND name = %s",
-                    (unique_identifier, category_name)
-                )
-            else:
-                # Regular user
-                user_id_str = str(user_id)
-                cur.execute(
-                    "DELETE FROM categories WHERE user_id = %s AND name = %s",
-                    (user_id_str, category_name)
-                )
+                user_id_safe = hashlib.md5(f"group_{user_id}".encode()).hexdigest()[:20]
+            else:  # User
+                user_id_safe = str(user_id)
+            
+            cur.execute(
+                "DELETE FROM categories WHERE user_id = %s AND name = %s",
+                (user_id_safe, category_name)
+            )
             
             if cur.rowcount == 0:
                 conn.close()
