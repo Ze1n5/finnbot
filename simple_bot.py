@@ -980,7 +980,7 @@ class SimpleFinnBot:
             return False, f"Failed to add category: {str(e)}"
 
     def get_user_categories(self, user_id):
-        """Get categories - NO EMOJI VERSION"""
+        """Get categories - UPDATED FOR NEW TABLE STRUCTURE"""
         try:
             conn = self.get_db_connection()
             if not conn:
@@ -1006,13 +1006,13 @@ class SimpleFinnBot:
             conn.close()
             
             category_names = [cat[0] for cat in categories_data]
-            print(f"📊 Loaded {len(category_names)} categories (NO EMOJIS)")
+            print(f"📊 Loaded {len(category_names)} categories")
             return category_names
             
         except Exception as e:
             print(f"❌ Error fetching categories: {e}")
             return ["Other"]  # Fallback
-
+        
     def remove_user_category(self, user_id, category_name):
         """Remove category - UPDATED FOR GROUPS"""
         try:
