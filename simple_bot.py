@@ -197,21 +197,6 @@ class SimpleFinnBot:
         """Save user languages - placeholder for now"""
         print("💾 User languages would be saved here")
         # We'll implement this later if needed
-
-    def get_categories_from_db(self):
-        """Fetch categories from the database"""
-        try:
-            # Use your Railway app URL directly
-            railway_url = "https://finnbot-production.up.railway.app"
-            response = requests.get(f"{railway_url}/api/categories")
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"Error fetching categories: {response.status_code}")
-                return {"❓": "Other"}  # Fallback
-        except Exception as e:
-            print(f"Error fetching categories from DB: {e}")
-            return {"❓": "Other"}  # Fallback
         
     def get_db_connection(self):
         """Get PostgreSQL connection"""
@@ -2016,7 +2001,6 @@ This will help me provide better financial recommendations!"""
                                 savings_cats = self.protected_savings_categories
                                 savings_map = {cat: cat for cat in self.protected_savings_categories}
                             
-                            self.get_categories_from_db()
                             row = []
                             for cat in savings_cats[i:i+2]:
                                 internal_name = savings_map[cat]
