@@ -1061,12 +1061,36 @@ class SimpleFinnBot:
                 ["🔄 Restart Bot", "🌍 Language"]
             ]
         
+        # Check if this is a group (negative chat ID)
+        is_group = user_id and user_id < 0
+        
         return {
             "keyboard": keyboard,
             "resize_keyboard": True,
             "one_time_keyboard": False,
-            "selective": False
+            "selective": is_group  # True for groups, False for private
         }
+    
+    def send_menu_to_chat(self, chat_id, text, parse_mode=None):
+        """Send menu to chat, handling both private and group chats"""
+        try:
+            # Get chat info to determine type
+            chat_info = requests.post(f"{BASE_URL}/getChat", json={"chat_id": chat_id}).json()
+            chat_type = chat_info.get("result", {}).get("type", "private")
+            
+            if chat_type == "private":
+                # Private chat - send normal menu
+                return self.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=self.get_main_menu(chat_id))
+            else:
+                # Group chat - send message with selective keyboard
+                menu = self.get_main_menu()
+                menu["selective"] = True  # Show menu only to the user who triggered it
+                return self.send_message(chat_id, text, parse_mode=parse_mode, reply_markup=menu)
+                
+        except Exception as e:
+            print(f"⚠️ Error sending menu: {e}")
+            # Fallback - send without menu
+            return self.send_message(chat_id, text, parse_mode=parse_mode)
     
     def extract_amount(self, text):
     # Clean the text first
@@ -1260,7 +1284,9 @@ class SimpleFinnBot:
         """Process message from webhook"""
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
-        print(f"📨 Processing message from {chat_id}: '{text}'")
+        chat_type = msg["chat"].get("type", "private")
+        
+        print(f"🔍 DEBUG: Chat ID: {chat_id}, Type: {chat_type}, Text: '{text}'")
 
         
         # Handle delete mode first if active
@@ -1271,7 +1297,7 @@ class SimpleFinnBot:
                 
                 if text == "0":
                     self.delete_mode[chat_id] = False
-                    self.send_message(chat_id, "✅ Exit delete mode. Back to normal operation.", reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, "✅ Exit delete mode. Back to normal operation.", reply_markup=self.get_main_menu(chat_id))
 
                 
                 else:
@@ -1301,7 +1327,7 @@ class SimpleFinnBot:
                                 symbol = "🛒"
                                 amount_display = f"-{deleted['amount']:,.0f}₴"
                             
-                            self.send_message(chat_id, f"🗑️ {symbol} Deleted: {amount_display} - {deleted['category']}", reply_markup=self.get_main_menu())
+                            self.send_message(chat_id, f"🗑️ {symbol} Deleted: {amount_display} - {deleted['category']}", reply_markup=self.get_main_menu(chat_id))
                             
                             # Update IDs for remaining transactions
                             for i, transaction in enumerate(user_transactions):
@@ -1311,13 +1337,13 @@ class SimpleFinnBot:
                             # IMPORTANT: Clear delete mode to force refresh
                             self.delete_mode[chat_id] = False
                         else:
-                            self.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=self.get_main_menu())
+                            self.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=self.get_main_menu(chat_id))
                     else:
-                        self.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=self.get_main_menu())
+                        self.send_message(chat_id, f"❌ Invalid transaction number. Type 0 to exit delete mode.", reply_markup=self.get_main_menu(chat_id))
             else:
                 # Any non-digit text cancels delete mode
                 self.delete_mode[chat_id] = False
-                self.send_message(chat_id, "❌ Delete mode cancelled.", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, "❌ Delete mode cancelled.", reply_markup=self.get_main_menu(chat_id))
             return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
@@ -1568,13 +1594,13 @@ This will help me provide better financial recommendations!"""
         • `++200 savings` - Add savings
         • Use menu below for more options!"""
             
-            self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
         
         elif text == "📊 Financial Summary":
             user_transactions = self.get_user_transactions(chat_id)
             if not user_transactions:
-                self.send_message(chat_id, "No transactions recorded yet.", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, "No transactions recorded yet.", reply_markup=self.get_main_menu(chat_id))
             else:
                 income = 0
                 expenses = 0
@@ -1654,7 +1680,7 @@ This will help me provide better financial recommendations!"""
                         percentage = (amount / savings_deposits) * 100 if savings_deposits > 0 else 0
                         summary_text += f"   {category}: {amount:,.0f}₴ ({percentage:.1f}%)\n"
                 
-                self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
         elif text == "📊 50/30/20 Status" or text == "📊 50/30/20 Status":
             user_id_str = str(chat_id)
@@ -1736,7 +1762,7 @@ This will help me provide better financial recommendations!"""
         elif text == "🗑️ Delete Transaction":
             user_transactions = self.get_user_transactions(chat_id)
             if not user_transactions:
-                self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             else:
                 # Group transactions by type for better organization
                 transactions_by_type = {
@@ -1844,7 +1870,7 @@ This will help me provide better financial recommendations!"""
                 categories_text += "• `-Food` - Remove category\n"
                 categories_text += "• Fixed categories cannot be modified"
 
-            self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
         elif text.startswith("+") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
             # Add new spending category
@@ -1854,19 +1880,19 @@ This will help me provide better financial recommendations!"""
                 # Check if it's a protected category
                 protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
                 if new_category in protected_categories:
-                    self.send_message(chat_id, f"❌ *{new_category}* is a protected category and cannot be modified!", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ *{new_category}* is a protected category and cannot be modified!", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     return
                 
                 # REMOVED: No emoji parameter needed
                 success, message = self.add_user_category(chat_id, new_category)
                 
                 if success:
-                    self.send_message(chat_id, f"✅ Added new spending category: *{new_category}*", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"✅ Added new spending category: *{new_category}*", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                 else:
-                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     
             except Exception as e:
-                self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu(chat_id))
 
         elif text.startswith("-") and len(text) > 1 and not any(char.isdigit() for char in text[1:]):
             # Remove spending category
@@ -1876,18 +1902,18 @@ This will help me provide better financial recommendations!"""
                 # Check if it's a protected category
                 protected_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
                 if category_to_remove in protected_categories:
-                    self.send_message(chat_id, f"❌ *{category_to_remove}* is a protected category and cannot be removed!", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ *{category_to_remove}* is a protected category and cannot be removed!", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     return
                 
                 success, message = self.remove_user_category(chat_id, category_to_remove)
                 
                 if success:
-                    self.send_message(chat_id, f"✅ Removed spending category: *{category_to_remove}*", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"✅ Removed spending category: *{category_to_remove}*", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                 else:
-                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, f"❌ {message}", parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     
             except Exception as e:
-                self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, f"❌ Error: {str(e)}", reply_markup=self.get_main_menu(chat_id))
 
         elif chat_id in self.pending_income:
             try:
@@ -1934,7 +1960,7 @@ This will help me provide better financial recommendations!"""
 
         💡 Start tracking transactions or use the menu below!"""
                 
-                self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                self.send_message(chat_id, success_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                 return  # CRITICAL: Exit after processing income
             
             except ValueError:
@@ -2095,7 +2121,7 @@ This will help me provide better financial recommendations!"""
             `++1000` - Savings
             `-200 loan` - Debt"""
 
-                    self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                    self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     return
             
             # Original transaction processing (keep your existing code)
@@ -2420,7 +2446,7 @@ You're now ready to use Finn!
             if chat_id in self.onboarding_state:
                 del self.onboarding_state[chat_id]
             
-            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+            self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
         
         if data.startswith("cat_"):
@@ -2548,7 +2574,7 @@ You're now ready to use Finn!
             
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
-                self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu())
+                self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu(chat_id))
 
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
@@ -2644,7 +2670,7 @@ You're now ready to use Finn!
         💡 *Tip:* Refresh the mini-app to see clean data."""
                 
                 # Send the confirmation message
-                result = self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                result = self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                 
                 if result and result.status_code == 200:
                     print(f"✅ Success message sent to user {chat_id}")
@@ -2655,7 +2681,7 @@ You're now ready to use Finn!
                 print(f"❌ Error during bot reset: {e}")
                 # Send error message
                 error_msg = "❌ Error during reset. Please try again." if user_lang != 'uk' else "❌ Помилка під час перезапуску. Спробуйте ще раз."
-                self.send_message(chat_id, error_msg, reply_markup=self.get_main_menu())
+                self.send_message(chat_id, error_msg, reply_markup=self.get_main_menu(chat_id))
 
         elif data == "cancel_restart":
             user_lang = self.get_user_language(chat_id)
@@ -2665,7 +2691,7 @@ You're now ready to use Finn!
             else:
                 cancel_msg = "❌ Restart cancelled. Your data remains untouched."
             
-            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu())
+            self.send_message(chat_id, cancel_msg, reply_markup=self.get_main_menu(chat_id))
             
             # Delete the confirmation message
             try:
@@ -2685,7 +2711,7 @@ You're now ready to use Finn!
             else:
                 confirmation = "✅ Мову встановлено українську!"
             
-            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu(chat_id))
         elif data.startswith("lang_"):
             language = data[5:]  # 'en' or 'uk'
             self.set_user_language(chat_id, language)
@@ -2695,7 +2721,7 @@ You're now ready to use Finn!
             else:
                 confirmation = "✅ Мову встановлено українську!"
             
-            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu())
+            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu(chat_id))
             
             # Delete the language selection message
             try:
