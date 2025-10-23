@@ -240,16 +240,25 @@ class SimpleFinnBot:
             print(f"🔍 DEBUG: Processing bot mention")
             return True
         
-        # Check for transaction patterns
-        transaction_patterns = ['++', '+-', '-+']
+        # Check for transaction patterns (++, +-, -+, +, -)
+        transaction_patterns = ['++', '+-', '-+', '+', '-']
         if any(pattern in text for pattern in transaction_patterns):
             print(f"🔍 DEBUG: Processing transaction pattern")
             return True
         
-        # For testing, also process simple numbers (like "150 lunch")
-        if any(char.isdigit() for char in text) and any(char.isalpha() for char in text):
-            print(f"🔍 DEBUG: Processing potential transaction")
+        # Check if it's a simple number (like "300" - expense)
+        if text.strip().replace('.', '').replace(',', '').isdigit():
+            print(f"🔍 DEBUG: Processing simple number (expense)")
             return True
+        
+        # Check if it's a number with description (like "150 lunch")
+        words = text.split()
+        if len(words) >= 1:
+            # Check if first word is a number
+            first_word = words[0].replace('.', '').replace(',', '')
+            if first_word.isdigit():
+                print(f"🔍 DEBUG: Processing number with description")
+                return True
         
         print(f"🔍 DEBUG: Ignoring message not for bot")
         return False
