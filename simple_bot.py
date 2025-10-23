@@ -154,6 +154,55 @@ def try_load_from_db(self):
     except Exception as e:
         print(f"❌ Error loading from database: {e}")
         return False
+    
+def is_message_for_bot(self, text, msg):
+    """Check if message is directed at the bot in groups"""
+    if not text:
+        return False
+    
+    # Get bot info
+    bot_username = self.get_bot_username()
+    
+    # Check for direct commands
+    if text.startswith('/'):
+        return True
+    
+    # Check for bot mention
+    if bot_username and f"@{bot_username}" in text:
+        return True
+    
+    # Check for transaction patterns (++, +-, -+, etc.)
+    transaction_patterns = ['++', '+-', '-+', '+ ', '- ']
+    if any(pattern in text for pattern in transaction_patterns):
+        return True
+    
+    # Check if it's a reply to bot's message
+    if "reply_to_message" in msg:
+        reply_msg = msg["reply_to_message"]
+        if "from" in reply_msg and reply_msg["from"].get("is_bot", False):
+            return True
+    
+    return False
+
+def get_bot_username(self):
+    """Get bot username"""
+    try:
+        response = requests.get(f"{BASE_URL}/getMe")
+        if response.status_code == 200:
+            return response.json()["result"]["username"]
+    except Exception as e:
+        print(f"❌ Error getting bot username: {e}")
+    return None
+
+def clean_bot_mention(self, text):
+    """Remove bot mention from text"""
+    bot_username = self.get_bot_username()
+    if bot_username:
+        # Remove @mention
+        text = text.replace(f"@{bot_username}", "").strip()
+        # Remove leading/trailing whitespace and colons
+        text = re.sub(r'^[\s:]+|[\s:]+$', '', text)
+    return text
 
 def try_save_to_db(self):
     """Save data to PostgreSQL"""
@@ -218,6 +267,55 @@ class SimpleFinnBot:
         except Exception as e:
             print(f"❌ Database connection error: {e}")
             return None
+        
+    def is_message_for_bot(self, text, msg):
+        """Check if message is directed at the bot in groups"""
+        if not text:
+            return False
+        
+        # Get bot info
+        bot_username = self.get_bot_username()
+        
+        # Check for direct commands
+        if text.startswith('/'):
+            return True
+        
+        # Check for bot mention
+        if bot_username and f"@{bot_username}" in text:
+            return True
+        
+        # Check for transaction patterns (++, +-, -+, etc.)
+        transaction_patterns = ['++', '+-', '-+', '+ ', '- ']
+        if any(pattern in text for pattern in transaction_patterns):
+            return True
+        
+        # Check if it's a reply to bot's message
+        if "reply_to_message" in msg:
+            reply_msg = msg["reply_to_message"]
+            if "from" in reply_msg and reply_msg["from"].get("is_bot", False):
+                return True
+        
+        return False
+
+    def get_bot_username(self):
+        """Get bot username"""
+        try:
+            response = requests.get(f"{BASE_URL}/getMe")
+            if response.status_code == 200:
+                return response.json()["result"]["username"]
+        except Exception as e:
+            print(f"❌ Error getting bot username: {e}")
+        return None
+
+    def clean_bot_mention(self, text):
+        """Remove bot mention from text"""
+        bot_username = self.get_bot_username()
+        if bot_username:
+            # Remove @mention
+            text = text.replace(f"@{bot_username}", "").strip()
+            # Remove leading/trailing whitespace and colons
+            text = re.sub(r'^[\s:]+|[\s:]+$', '', text)
+        return text
 
     def load_all_data(self):
         """Load all data from PostgreSQL"""
@@ -1286,7 +1384,18 @@ class SimpleFinnBot:
         text = msg.get("text", "")
         chat_type = msg["chat"].get("type", "private")
         
-        print(f"🔍 DEBUG: Chat ID: {chat_id}, Type: {chat_type}, Text: '{text}'")
+        print(f"📨 Processing message from {chat_id} ({chat_type}): '{text}'")
+
+        # Handle group messages
+        if chat_type in ["group", "supergroup"]:
+            # Check if message is directed at the bot
+            if not self.is_message_for_bot(text, msg):
+                print(f"🔍 Ignoring group message not directed at bot")
+                return
+            
+            # Remove bot mention from text for processing
+            text = self.clean_bot_mention(text)
+            print(f"🔍 Processing group message: '{text}'")
 
         
         # Handle delete mode first if active
@@ -1347,28 +1456,71 @@ class SimpleFinnBot:
             return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
-        elif text == "/start":
-            user_name = msg["chat"].get("first_name", "there")
+        elif text == "/start" or text.startswith("/start@"):
+            chat_type = msg["chat"].get("type", "private")
             
-            # Send welcome image first
-            welcome_image_url = "https://github.com/Ze1n5/finnbot/blob/3d177fe8ea8057ec09103540ff71154e1b21c8fc/Images/welcome.jpg"
-            welcome_caption = f"👋 Welcome {user_name}! I'm Finn - your AI finance assistant 🤖💰\n\nLet's set up your financial profile."
-            
-            # Send the photo
-            self.send_photo_from_url(chat_id, welcome_image_url, welcome_caption)
-            
-            # Then show language selection (after a short delay)
-            time.sleep(1)  # Optional: wait 1 second before showing language selection
-            
-            keyboard = {
-                "inline_keyboard": [
-                    [{"text": "🇺🇸 English", "callback_data": "onboard_lang_en"}],
-                    [{"text": "🇺🇦 Українська", "callback_data": "onboard_lang_uk"}]
-                ]
-            }
-            
-            language_text = "Please choose your language / Будь ласка, оберіть вашу мову:"
-            self.send_message(chat_id, language_text, keyboard)
+            if chat_type == "private":
+                # Your existing private start code...
+                user_name = msg["chat"].get("first_name", "there")
+                
+                # Send welcome image first
+                welcome_image_url = "https://github.com/Ze1n5/finnbot/blob/3d177fe8ea8057ec09103540ff71154e1b21c8fc/Images/welcome.jpg"
+                welcome_caption = f"👋 Welcome {user_name}! I'm Finn - your AI finance assistant 🤖💰\n\nLet's set up your financial profile."
+                
+                # Send the photo
+                self.send_photo_from_url(chat_id, welcome_image_url, welcome_caption)
+                
+                # Then show language selection (after a short delay)
+                time.sleep(1)  # Optional: wait 1 second before showing language selection
+                
+                keyboard = {
+                    "inline_keyboard": [
+                        [{"text": "🇺🇸 English", "callback_data": "onboard_lang_en"}],
+                        [{"text": "🇺🇦 Українська", "callback_data": "onboard_lang_uk"}]
+                    ]
+                }
+                
+                language_text = "Please choose your language / Будь ласка, оберіть вашу мову:"
+                self.send_message(chat_id, language_text, keyboard)
+            else:
+                # Group start command
+                user_lang = self.get_user_language(chat_id)
+                if user_lang == 'uk':
+                    group_welcome = """🤖 *ФіннБот - Фінансовий помічник для груп*
+
+        *Доступні команди:*
+        • `/start` - Це меню
+        • `/help` - Довідка по командам
+        • `/summary` - Фінансовий звіт групи
+
+        *Додавання транзакцій:*
+        • `150 обід` - Витрата
+        • `+5000 зарплата` - Дохід  
+        • `++1000` - Заощадження
+        • `-200 кредит` - Борг
+
+        *Або звертайтеся до бота:*
+        `@finnbot 150 обід`
+        `@finnbot ++500`"""
+                else:
+                    group_welcome = """🤖 *FinnBot - Financial Assistant for Groups*
+
+        *Available Commands:*
+        • `/start` - This menu
+        • `/help` - Command help
+        • `/summary` - Group financial summary
+
+        *Adding Transactions:*
+        • `150 lunch` - Expense
+        • `+5000 salary` - Income
+        • `++1000` - Savings
+        • `-200 loan` - Debt
+
+        *Or mention the bot:*
+        `@finnbot 150 lunch`
+        `@finnbot ++500`"""
+                
+                self.send_message(chat_id, group_welcome, parse_mode='Markdown')
 
         if chat_id in self.onboarding_state:
             state = self.onboarding_state[chat_id]
