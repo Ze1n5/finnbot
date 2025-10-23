@@ -979,7 +979,7 @@ def webhook():
         
         return jsonify({"status": "success"}), 200
 
-@flask_app.route('/api/financial-data')
+@app.route('/api/financial-data')
 def api_financial_data():
     try:
         print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
