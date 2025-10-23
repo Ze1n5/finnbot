@@ -154,55 +154,6 @@ def try_load_from_db(self):
     except Exception as e:
         print(f"❌ Error loading from database: {e}")
         return False
-    
-def is_message_for_bot(self, text, msg):
-    """Check if message is directed at the bot in groups"""
-    if not text:
-        return False
-    
-    # Get bot info
-    bot_username = self.get_bot_username()
-    
-    # Check for direct commands
-    if text.startswith('/'):
-        return True
-    
-    # Check for bot mention
-    if bot_username and f"@{bot_username}" in text:
-        return True
-    
-    # Check for transaction patterns (++, +-, -+, etc.)
-    transaction_patterns = ['++', '+-', '-+', '+ ', '- ']
-    if any(pattern in text for pattern in transaction_patterns):
-        return True
-    
-    # Check if it's a reply to bot's message
-    if "reply_to_message" in msg:
-        reply_msg = msg["reply_to_message"]
-        if "from" in reply_msg and reply_msg["from"].get("is_bot", False):
-            return True
-    
-    return False
-
-def get_bot_username(self):
-    """Get bot username"""
-    try:
-        response = requests.get(f"{BASE_URL}/getMe")
-        if response.status_code == 200:
-            return response.json()["result"]["username"]
-    except Exception as e:
-        print(f"❌ Error getting bot username: {e}")
-    return None
-
-def clean_bot_mention(self, text):
-    """Remove bot mention from text"""
-    bot_username = self.get_bot_username()
-    if bot_username:
-        # Remove @mention
-        text = text.replace(f"@{bot_username}", "").strip()
-        # Remove leading/trailing whitespace and colons
-        text = re.sub(r'^[\s:]+|[\s:]+$', '', text)
-    return text
 
 def try_save_to_db(self):
     """Save data to PostgreSQL"""
@@ -273,28 +224,34 @@ class SimpleFinnBot:
         if not text:
             return False
         
-        # Get bot info
-        bot_username = self.get_bot_username()
+        print(f"🔍 DEBUG is_message_for_bot: text='{text}'")
         
-        # Check for direct commands
+        # Always process commands (they start with /)
         if text.startswith('/'):
+            print(f"🔍 DEBUG: Processing command: {text}")
             return True
+        
+        # Get bot username
+        bot_username = self.get_bot_username()
+        print(f"🔍 DEBUG: Bot username: {bot_username}")
         
         # Check for bot mention
         if bot_username and f"@{bot_username}" in text:
+            print(f"🔍 DEBUG: Processing bot mention")
             return True
         
-        # Check for transaction patterns (++, +-, -+, etc.)
-        transaction_patterns = ['++', '+-', '-+', '+ ', '- ']
+        # Check for transaction patterns
+        transaction_patterns = ['++', '+-', '-+']
         if any(pattern in text for pattern in transaction_patterns):
+            print(f"🔍 DEBUG: Processing transaction pattern")
             return True
         
-        # Check if it's a reply to bot's message
-        if "reply_to_message" in msg:
-            reply_msg = msg["reply_to_message"]
-            if "from" in reply_msg and reply_msg["from"].get("is_bot", False):
-                return True
+        # For testing, also process simple numbers (like "150 lunch")
+        if any(char.isdigit() for char in text) and any(char.isalpha() for char in text):
+            print(f"🔍 DEBUG: Processing potential transaction")
+            return True
         
+        print(f"🔍 DEBUG: Ignoring message not for bot")
         return False
 
     def get_bot_username(self):
@@ -302,7 +259,11 @@ class SimpleFinnBot:
         try:
             response = requests.get(f"{BASE_URL}/getMe")
             if response.status_code == 200:
-                return response.json()["result"]["username"]
+                username = response.json()["result"]["username"]
+                print(f"🔍 DEBUG: Found bot username: {username}")
+                return username
+            else:
+                print(f"❌ Error getting bot info: {response.status_code}")
         except Exception as e:
             print(f"❌ Error getting bot username: {e}")
         return None
@@ -312,9 +273,11 @@ class SimpleFinnBot:
         bot_username = self.get_bot_username()
         if bot_username:
             # Remove @mention
+            original_text = text
             text = text.replace(f"@{bot_username}", "").strip()
             # Remove leading/trailing whitespace and colons
             text = re.sub(r'^[\s:]+|[\s:]+$', '', text)
+            print(f"🔍 DEBUG clean_bot_mention: '{original_text}' -> '{text}'")
         return text
 
     def load_all_data(self):
@@ -1388,14 +1351,19 @@ class SimpleFinnBot:
 
         # Handle group messages
         if chat_type in ["group", "supergroup"]:
+            print(f"🔍 DEBUG GROUP: Checking if message is for bot")
+            
             # Check if message is directed at the bot
             if not self.is_message_for_bot(text, msg):
-                print(f"🔍 Ignoring group message not directed at bot")
+                print(f"🔍 DEBUG GROUP: Ignoring group message not directed at bot")
                 return
             
             # Remove bot mention from text for processing
+            original_text = text
             text = self.clean_bot_mention(text)
-            print(f"🔍 Processing group message: '{text}'")
+            print(f"🔍 DEBUG GROUP: Processing group message. Original: '{original_text}', Cleaned: '{text}'")
+
+        # REST OF YOUR EXISTING CODE CONTINUES HERE...
 
         
         # Handle delete mode first if active
