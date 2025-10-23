@@ -2553,77 +2553,96 @@ You're now ready to use Finn!
         elif data == "confirm_restart":
             user_lang = self.get_user_language(chat_id)
             
-            print(f"🔍 DEBUG: Clearing all transactions for user {chat_id}")
+            print(f"🔍 DEBUG: Starting bot reset for user {chat_id}")
             
-            # 1. Clear from memory FIRST
-            if chat_id in self.transactions:
-                print(f"🔍 DEBUG: Before memory clear - {len(self.transactions[chat_id])} transactions in memory")
-                self.transactions[chat_id] = []  # Empty the list
-                print(f"🔍 DEBUG: After memory clear - {len(self.transactions[chat_id])} transactions in memory")
-            
-            # 2. Clear from PostgreSQL database
-            conn = self.get_db_connection()
-            if conn:
-                try:
-                    cur = conn.cursor()
-                    # Delete ALL transactions for this user
-                    cur.execute('DELETE FROM transactions WHERE user_id = %s', (chat_id,))
-                    conn.commit()
-                    conn.close()
-                    print(f"✅ Deleted all transactions from PostgreSQL for user {chat_id}")
-                except Exception as e:
-                    print(f"❌ Error deleting transactions from PostgreSQL: {e}")
-            
-            # 3. CLEAR ONBOARDING STATE - THIS IS THE KEY FIX!
-            if chat_id in self.onboarding_state:
-                del self.onboarding_state[chat_id]
-                print(f"🔍 DEBUG: Cleared onboarding state for user {chat_id}")
-            
-            # 4. Force immediate sync to ensure clean state
-            self.sync_transactions_to_postgres()
-            
-            # Clear other user data...
-            user_id_str = str(chat_id)
-            
-            # Clear income
-            if user_id_str in self.user_incomes:
-                del self.user_incomes[user_id_str]
-            
-            # Clear user categories (keep only default)
-            if user_id_str in self.user_categories:
-                self.user_categories[user_id_str] = {"Other": []}
-            
-            # Clear pending states
-            if chat_id in self.pending:
-                del self.pending[chat_id]
-            if chat_id in self.pending_income:
-                self.pending_income.discard(chat_id)
-            if chat_id in self.delete_mode:
-                del self.delete_mode[chat_id]
-            
-            # Save changes
-            self.save_incomes()
-            self.save_user_categories()
-            
-            if user_lang == 'uk':
-                success_msg = """✅ *Бота перезапущено!*
-                
-        Всі ваші транзакції та дані було успішно видалено. Бот готовий до роботи з чистої сторінки!"""
-            else:
-                success_msg = """✅ *Bot restarted!*
-                
-        All your transactions and data have been successfully deleted. The bot is ready to start fresh!"""
-            
-            self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
-            
-            # Delete the confirmation message
             try:
-                requests.post(f"{BASE_URL}/deleteMessage", json={
-                    "chat_id": chat_id,
-                    "message_id": message_id
-                })
+                # Delete the confirmation message FIRST
+                try:
+                    delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                        "chat_id": chat_id,
+                        "message_id": message_id
+                    }, timeout=5)
+                    if delete_response.status_code == 200:
+                        print(f"✅ Deleted confirmation message {message_id}")
+                    else:
+                        print(f"⚠️ Failed to delete message: {delete_response.status_code}")
+                except Exception as e:
+                    print(f"⚠️ Error deleting confirmation message: {e}")
+                
+                # 1. Clear from memory
+                if chat_id in self.transactions:
+                    print(f"🔍 DEBUG: Before memory clear - {len(self.transactions[chat_id])} transactions in memory")
+                    self.transactions[chat_id] = []
+                    print(f"🔍 DEBUG: After memory clear - {len(self.transactions[chat_id])} transactions in memory")
+                
+                # 2. Clear from PostgreSQL database
+                conn = self.get_db_connection()
+                if conn:
+                    try:
+                        cur = conn.cursor()
+                        # Delete ALL transactions for this user
+                        cur.execute('DELETE FROM transactions WHERE user_id = %s', (chat_id,))
+                        # Also clear incomes
+                        cur.execute('DELETE FROM incomes WHERE user_id = %s', (chat_id,))
+                        conn.commit()
+                        conn.close()
+                        print(f"✅ Deleted all data from PostgreSQL for user {chat_id}")
+                    except Exception as e:
+                        print(f"❌ Error deleting from PostgreSQL: {e}")
+                
+                # 3. Clear states
+                if chat_id in self.onboarding_state:
+                    del self.onboarding_state[chat_id]
+                
+                user_id_str = str(chat_id)
+                
+                # Clear income from memory
+                if user_id_str in self.user_incomes:
+                    del self.user_incomes[user_id_str]
+                
+                # Clear user categories
+                if user_id_str in self.user_categories:
+                    self.user_categories[user_id_str] = {}
+                
+                # Clear pending states
+                if chat_id in self.pending:
+                    del self.pending[chat_id]
+                if chat_id in self.pending_income:
+                    self.pending_income.discard(chat_id)
+                if chat_id in self.delete_mode:
+                    del self.delete_mode[chat_id]
+                
+                # Save changes
+                self.save_incomes()
+                self.save_user_categories()
+                
+                # Send success message with proper formatting
+                if user_lang == 'uk':
+                    success_msg = """✅ *Бота перезапущено!*
+
+        Всі ваші транзакції та дані було успішно видалено. 
+
+        🚀 Бот готовий до роботи з чистої сторінки!"""
+                else:
+                    success_msg = """✅ *Bot restarted!*
+
+        All your transactions and data have been successfully deleted.
+
+        🚀 The bot is ready to start fresh!"""
+                
+                # Send the confirmation message
+                result = self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
+                
+                if result and result.status_code == 200:
+                    print(f"✅ Success message sent to user {chat_id}")
+                else:
+                    print(f"❌ Failed to send success message to user {chat_id}")
+                    
             except Exception as e:
-                print(f"⚠️ Error deleting restart message: {e}")
+                print(f"❌ Error during bot reset: {e}")
+                # Send error message
+                error_msg = "❌ Error during reset. Please try again." if user_lang != 'uk' else "❌ Помилка під час перезапуску. Спробуйте ще раз."
+                self.send_message(chat_id, error_msg, reply_markup=self.get_main_menu())
 
         elif data == "cancel_restart":
             user_lang = self.get_user_language(chat_id)
