@@ -1115,6 +1115,18 @@ class SimpleFinnBot:
             print(f"❌ Error removing category: {e}")
             return False, f"Error: {str(e)}"
         
+    def show_custom_keyboard(self, chat_id, message=None):
+        """Explicitly show the custom keyboard"""
+        user_lang = self.get_user_language(chat_id)
+        
+        if not message:
+            if user_lang == 'uk':
+                message = "⌨️ Використовуйте меню:"
+            else:
+                message = "⌨️ Use the menu:"
+        
+        return self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
+        
     def get_main_menu(self, user_id=None):
         user_lang = self.get_user_language(user_id) if user_id else 'en'
         
@@ -1371,8 +1383,10 @@ class SimpleFinnBot:
             original_text = text
             text = self.clean_bot_mention(text)
             print(f"🔍 DEBUG GROUP: Processing group message. Original: '{original_text}', Cleaned: '{text}'")
-
-        # REST OF YOUR EXISTING CODE CONTINUES HERE...
+            
+            # AFTER processing any group message, show the custom keyboard
+            if text:  # Only if we have text to process
+                self.show_custom_keyboard(chat_id, "✅ Done! Use the menu below:")
 
         
         # Handle delete mode first if active
@@ -1430,6 +1444,24 @@ class SimpleFinnBot:
                 # Any non-digit text cancels delete mode
                 self.delete_mode[chat_id] = False
                 self.send_message(chat_id, "❌ Delete mode cancelled.", reply_markup=self.get_main_menu(chat_id))
+            return
+
+                # Temporary debug - add this to your process_message method
+        elif text == "/debugkeyboard" or text.startswith("/debugkeyboard@"):
+            chat_type = msg["chat"].get("type", "private")
+            is_group = chat_id < 0
+            
+            debug_info = f"""
+        🔍 KEYBOARD DEBUG:
+        - Chat ID: {chat_id}
+        - Chat Type: {chat_type}
+        - Is Group: {is_group}
+        - User ID from param: {chat_id}
+        - Selective setting: {is_group}
+        """
+            self.send_message(chat_id, debug_info)
+            # Also try to show the keyboard
+            self.show_custom_keyboard(chat_id, "Testing keyboard...")
             return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
