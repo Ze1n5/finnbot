@@ -3311,6 +3311,7 @@ def serve_mini_app():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FinnBot - Financial Tracker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * {
             margin: 0;
@@ -3405,7 +3406,7 @@ def serve_mini_app():
             display: flex;
             align-items: center;
             gap: 12px;
-            min-width: 0; /* Important: prevents flex item from overflowing */
+            min-width: 0;
         }
         
         .transaction-emoji {
@@ -3417,7 +3418,7 @@ def serve_mini_app():
         
         .transaction-details {
             flex: 1;
-            min-width: 0; /* Important: allows text truncation */
+            min-width: 0;
             overflow: hidden;
         }
         
@@ -3465,10 +3466,25 @@ def serve_mini_app():
             padding: 20px;
             color: #ff3b30;
         }
+        
+        .user-info {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            text-align: center;
+            font-size: 14px;
+            color: #8e8e93;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="user-info" id="userInfo">
+            Loading user info...
+        </div>
+        
         <div class="balance-card">
             <div class="balance-label">Current Balance</div>
             <div class="balance-amount" id="balanceAmount">0₴</div>
@@ -3490,27 +3506,56 @@ def serve_mini_app():
     </div>
 
     <script>
+        // Initialize Telegram WebApp
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+
+        // Get user information from Telegram
+        function getUserInfo() {
+            const user = Telegram.WebApp.initDataUnsafe?.user;
+            const user_id = user?.id;
+            
+            if (user_id) {
+                const userName = user.first_name || user.username || 'User';
+                document.getElementById('userInfo').textContent = `👋 Hello, ${userName} (ID: ${user_id})`;
+                return user_id;
+            } else {
+                document.getElementById('userInfo').textContent = '❌ Cannot identify user';
+                return null;
+            }
+        }
+
         // Load financial data and transactions
         async function loadFinancialData() {
             try {
-                // Load balance and totals
-                const financeResponse = await fetch('/api/financial-data');
+                // Get user ID from Telegram
+                const user_id = getUserInfo();
+                
+                if (!user_id) {
+                    showError('Cannot identify user. Please open via Telegram.');
+                    return;
+                }
+
+                console.log('Loading data for user:', user_id);
+
+                // Load balance and totals WITH user_id parameter
+                const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
                 const financeData = await financeResponse.json();
                 
                 if (financeResponse.ok) {
                     updateFinancialDisplay(financeData);
                 } else {
-                    showError('Failed to load financial data');
+                    showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
                 
-                // Load transactions
-                const transactionsResponse = await fetch('/api/transactions');
+                // Load transactions WITH user_id parameter
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
                 const transactionsData = await transactionsResponse.json();
                 
                 if (transactionsResponse.ok) {
                     renderTransactions(transactionsData.transactions || transactionsData);
                 } else {
-                    showError('Failed to load transactions');
+                    showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
                 }
                 
             } catch (error) {
@@ -3522,12 +3567,18 @@ def serve_mini_app():
         function updateFinancialDisplay(data) {
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
-            balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
-            balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
+            if (data.balance !== undefined) {
+                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
+                balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
+            }
             
             // Update income and expenses
-            document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
-            document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
+            if (data.income !== undefined) {
+                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
+            }
+            if (data.spending !== undefined) {
+                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
+            }
         }
         
         function renderTransactions(transactions) {
@@ -3540,16 +3591,13 @@ def serve_mini_app():
                             <div class="transaction-emoji">📭</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">No transactions yet</div>
-                                <div class="transaction-category">Start adding transactions to see them here</div>
+                                <div class="transaction-category">Start adding transactions in the bot</div>
                             </div>
                         </div>
                     </div>
                 `;
                 return;
             }
-            
-            // ... rest of your existing renderTransactions code ...
-        }
             
             let transactionsHTML = '';
             
@@ -3559,8 +3607,8 @@ def serve_mini_app():
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
                 // Handle different possible data structures
-                const displayName = transaction.category || transaction.name || 'Transaction';
-                const displayDescription = transaction.description || transaction.note || '';
+                const displayName = transaction.name || transaction.category || 'Transaction';
+                const displayDescription = transaction.description || '';
                 
                 transactionsHTML += `
                     <div class="transaction">
@@ -3587,10 +3635,20 @@ def serve_mini_app():
         }
         
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', loadFinancialData);
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Mini-app initialized');
+            loadFinancialData();
+        });
         
         // Refresh data every 30 seconds
         setInterval(loadFinancialData, 30000);
+        
+        // Also refresh when the app becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadFinancialData();
+            }
+        });
     </script>
 </body>
 </html>
