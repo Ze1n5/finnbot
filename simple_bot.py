@@ -2600,9 +2600,9 @@ You're now ready to use Finn!
                 if user_id_str in self.user_incomes:
                     del self.user_incomes[user_id_str]
                 
-                # Clear user categories
+                # Clear user categories from memory
                 if user_id_str in self.user_categories:
-                    self.user_categories[user_id_str] = {}
+                    del self.user_categories[user_id_str]
                 
                 # Clear pending states
                 if chat_id in self.pending:
@@ -2612,9 +2612,8 @@ You're now ready to use Finn!
                 if chat_id in self.delete_mode:
                     del self.delete_mode[chat_id]
                 
-                # Save changes
+                # Save changes - ONLY save incomes (user_categories method doesn't exist)
                 self.save_incomes()
-                self.save_user_categories()
                 
                 # Send success message with proper formatting
                 if user_lang == 'uk':
