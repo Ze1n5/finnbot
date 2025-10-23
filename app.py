@@ -1138,7 +1138,7 @@ def check_data_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@flask_app.route('/api/transactions')
+app.route('/api/transactions')
 def api_transactions():
     try:
         page = int(request.args.get('page', 1))
