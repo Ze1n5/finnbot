@@ -2569,13 +2569,22 @@ You're now ready to use Finn!
                 except Exception as e:
                     print(f"⚠️ Error deleting confirmation message: {e}")
                 
-                # 1. Clear from memory
+                # 1. Clear from memory - IMPORTANT: Clear ALL user data
+                user_id_str = str(chat_id)
+                
+                # Clear transactions from memory
                 if chat_id in self.transactions:
                     print(f"🔍 DEBUG: Before memory clear - {len(self.transactions[chat_id])} transactions in memory")
-                    self.transactions[chat_id] = []
+                    self.transactions[chat_id] = []  # Clear this user's transactions
                     print(f"🔍 DEBUG: After memory clear - {len(self.transactions[chat_id])} transactions in memory")
                 
-                # 2. Clear from PostgreSQL database
+                # Also clear from the monthly totals (50/30/20 tracking)
+                if user_id_str in self.monthly_totals:
+                    del self.monthly_totals[user_id_str]
+                if user_id_str in self.monthly_percentages:
+                    del self.monthly_percentages[user_id_str]
+                
+                # 2. Clear from PostgreSQL database - MORE COMPREHENSIVE
                 conn = self.get_db_connection()
                 if conn:
                     try:
@@ -2594,8 +2603,6 @@ You're now ready to use Finn!
                 if chat_id in self.onboarding_state:
                     del self.onboarding_state[chat_id]
                 
-                user_id_str = str(chat_id)
-                
                 # Clear income from memory
                 if user_id_str in self.user_incomes:
                     del self.user_incomes[user_id_str]
@@ -2612,22 +2619,29 @@ You're now ready to use Finn!
                 if chat_id in self.delete_mode:
                     del self.delete_mode[chat_id]
                 
-                # Save changes - ONLY save incomes (user_categories method doesn't exist)
+                # 4. Force reload data to ensure clean state
+                self.load_all_data()
+                
+                # Save changes
                 self.save_incomes()
                 
-                # Send success message with proper formatting
+                # 5. Send success message
                 if user_lang == 'uk':
                     success_msg = """✅ *Бота перезапущено!*
 
         Всі ваші транзакції та дані було успішно видалено. 
 
-        🚀 Бот готовий до роботи з чистої сторінки!"""
+        🚀 Бот готовий до роботи з чистої сторінки!
+
+        💡 *Порада:* Оновіть міні-додаток, щоб побачити чисті дані."""
                 else:
                     success_msg = """✅ *Bot restarted!*
 
         All your transactions and data have been successfully deleted.
 
-        🚀 The bot is ready to start fresh!"""
+        🚀 The bot is ready to start fresh!
+
+        💡 *Tip:* Refresh the mini-app to see clean data."""
                 
                 # Send the confirmation message
                 result = self.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=self.get_main_menu())
@@ -3520,9 +3534,22 @@ def serve_mini_app():
             const container = document.getElementById('transactionsContainer');
             
             if (!transactions || transactions.length === 0) {
-                container.innerHTML = '<div class="loading">No transactions yet</div>';
+                container.innerHTML = `
+                    <div class="transaction">
+                        <div class="transaction-info">
+                            <div class="transaction-emoji">📭</div>
+                            <div class="transaction-details">
+                                <div class="transaction-title">No transactions yet</div>
+                                <div class="transaction-category">Start adding transactions to see them here</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
                 return;
             }
+            
+            // ... rest of your existing renderTransactions code ...
+        }
             
             let transactionsHTML = '';
             
