@@ -1497,6 +1497,143 @@ class SimpleFinnBot:
             # Also try to show the keyboard
             self.show_custom_keyboard(chat_id, "Testing keyboard...")
             return
+        
+        elif text == "/menu" or text.startswith("/menu@"):
+            self.show_menu_keyboard(chat_id, "🏠 Menu:")
+            return
+
+        elif text == "/showmenu" or text.startswith("/showmenu@"):
+            self.show_menu_keyboard(chat_id, "⌨️ Showing menu...")
+            return
+
+        elif text == "/help" or text.startswith("/help@"):
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                help_text = """🤖 *ФіннБот - Довідка для груп*
+
+        *Команди:*
+        • `/menu` - Показати меню
+        • `/summary` - Фінансовий звіт
+        • `/help` - Ця довідка
+
+        *Транзакції:*
+        • `150 обід` - Витрата
+        • `+5000 зарплата` - Дохід
+        • `++1000` - Заощадження
+        • `-200 кредит` - Борг"""
+            else:
+                help_text = """🤖 *FinnBot - Group Help*
+
+        *Commands:*
+        • `/menu` - Show menu
+        • `/summary` - Financial summary  
+        • `/help` - This help
+
+        *Transactions:*
+        • `150 lunch` - Expense
+        • `+5000 salary` - Income
+        • `++1000` - Savings
+        • `-200 loan` - Debt"""
+            
+            self.send_message(chat_id, help_text, parse_mode='Markdown')
+            return
+        
+        elif text == "/summary" or text.startswith("/summary@"):
+            user_transactions = self.get_user_transactions(chat_id)
+            if not user_transactions:
+                user_lang = self.get_user_language(chat_id)
+                if user_lang == 'uk':
+                    self.send_message(chat_id, "📭 Немає транзакцій для відображення.", reply_markup=self.get_main_menu(chat_id))
+                else:
+                    self.send_message(chat_id, "📭 No transactions to display.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                # Use your existing financial summary logic
+                income = 0
+                expenses = 0
+                savings_deposits = 0
+                savings_withdrawn = 0
+                debt_incurred = 0
+                debt_returned = 0
+                expense_by_category = {}
+                
+                for transaction in user_transactions:
+                    if transaction['type'] == 'income':
+                        income += transaction['amount']
+                    elif transaction['type'] == 'savings':
+                        savings_deposits += transaction['amount']
+                    elif transaction['type'] == 'debt':
+                        debt_incurred += abs(transaction['amount'])
+                    elif transaction['type'] == 'debt_return':
+                        debt_returned += abs(transaction['amount'])
+                    elif transaction['type'] == 'savings_withdraw':
+                        savings_withdrawn += transaction['amount']
+                    else:  # Regular expenses
+                        expenses += transaction['amount']
+                        category = transaction['category']
+                        if category not in expense_by_category:
+                            expense_by_category[category] = 0
+                        expense_by_category[category] += transaction['amount']
+                
+                net_savings = savings_deposits - savings_withdrawn
+                net_debt = debt_incurred - debt_returned
+                net_flow = income - expenses - net_savings
+                
+                user_lang = self.get_user_language(chat_id)
+                
+                if user_lang == 'uk':
+                    summary_text = f"""📊 *Фінансовий звіт групи*
+
+        💸 *Аналіз готівкового потоку:*
+        Дохід: {income:,.0f}₴
+        Витрати: {expenses:,.0f}₴
+        Заощадження: {net_savings:,.0f}₴
+        ─────────────────
+        Чистий потік: {net_flow:,.0f}₴
+
+        🏦 *Заощадження:*
+        Внесено: {savings_deposits:,.0f}₴
+        Чисті заощадження: {net_savings:,.0f}₴"""
+                    
+                    if debt_incurred > 0 or debt_returned > 0:
+                        summary_text += f"\n\n💳 *Борги:*\n   Заборгованість: {debt_incurred:,.0f}₴"
+                        if debt_returned > 0:
+                            summary_text += f"\n   Повернено: {debt_returned:,.0f}₴"
+                        summary_text += f"\n   Чистий борг: {net_debt:,.0f}₴"
+                else:
+                    summary_text = f"""📊 *Group Financial Summary*
+
+        💸 *Cash Flow Analysis:*
+        Income: {income:,.0f}₴
+        Expenses: {expenses:,.0f}₴
+        Savings: {net_savings:,.0f}₴
+        ─────────────────
+        Net Cash Flow: {net_flow:,.0f}₴
+
+        🏦 *Savings Account:*
+        Deposited: {savings_deposits:,.0f}₴
+        Net Savings: {net_savings:,.0f}₴"""
+                    
+                    if debt_incurred > 0 or debt_returned > 0:
+                        summary_text += f"\n\n💳 *Debt Account:*\n   Incurred: {debt_incurred:,.0f}₴"
+                        if debt_returned > 0:
+                            summary_text += f"\n   Returned: {debt_returned:,.0f}₴"
+                        summary_text += f"\n   Net Debt: {net_debt:,.0f}₴"
+                
+                # Show menu after summary in groups
+                self.send_message(chat_id, summary_text, parse_mode='Markdown')
+                
+                # ===== STEP 6: Show menu after summary in groups =====
+                chat_type = msg["chat"].get("type", "private")
+                if chat_type in ["group", "supergroup"]:
+                    user_lang = self.get_user_language(chat_id)
+                    if user_lang == 'uk':
+                        menu_msg = "📊 Звіт показано! Що далі?"
+                    else:
+                        menu_msg = "📊 Summary shown! What's next?"
+                    
+                    self.show_menu_keyboard(chat_id, menu_msg)
+                # ===== END STEP 6 =====
+            return
 
         # NORMAL MESSAGE PROCESSING (when not in delete mode)
         elif text == "/start" or text.startswith("/start@"):
