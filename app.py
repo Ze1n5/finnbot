@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from simple_bot import get_bot_instance, save_all_data
 
 bot_instance = get_bot_instance()
+print(f"🔍 DEBUG: Bot instance created: {bool(bot_instance)}")
 
 def get_db_connection():
     """Get PostgreSQL connection"""

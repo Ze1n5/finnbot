@@ -184,6 +184,41 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
+    def send_transaction_guide(self, chat_id):
+        """Send visual transaction guide to user"""
+        user_lang = self.get_user_language(chat_id)
+        
+        if user_lang == 'uk':
+            guide_text = """🎯 *Фінансовий командний центр*
+
+    🛒 `150 обід` - Щоденні витрати
+    💰 `+5000 зарплата` - Дохід  
+    🏦 `++1000` - Зберегти гроші
+    💳 `-2000 кредит` - Новий борг
+    🔙 `+-1500` - Повернути борг
+    📥 `-+800` - Зняти заощадження
+
+    🧮 `100+50=150` - Розрахунки працюють!
+    📝 Додавайте описи: `150 uber до аеропорту`
+
+    🚀 *Ваша фінансова подорож починається зараз!*"""
+        else:
+            guide_text = """🎯 *Financial Command Center*
+
+    🛒 `150 lunch` - Daily expenses
+    💰 `+5000 salary` - Income  
+    🏦 `++1000` - Save money
+    💳 `-2000 loan` - New debt
+    🔙 `+-1500` - Return debt
+    📥 `-+800` - Withdraw savings
+
+    🧮 `100+50=150` - Calculations work!
+    📝 Add descriptions: `150 uber to airport`
+
+    🚀 *Your financial journey starts now!*"""
+        
+        self.send_message(chat_id, guide_text, parse_mode='Markdown')
+
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
         print("💾 User languages would be saved here")
@@ -2619,7 +2654,7 @@ This will help me provide better financial recommendations!"""
             
             user_lang = self.get_user_language(chat_id)
             if user_lang == 'uk':
-                image_caption = """👋 *Ласкаво просимо до Finn!*"
+                image_caption = """👋 *Привіт! Я Finn!*"
 
 Давайте створимо ваш фінансовий профіль. Це займе лише хвилинку!
 *Крок 1/4: Поточний баланс*
@@ -2742,27 +2777,11 @@ Do you have any savings? (bank, crypto, investments)
             
             if user_lang == 'uk':
                 complete_msg = """🎉 *Профіль створено!*
-
-Тепер ви готові до роботи з Finn! 
-
-🚀 *Швидкий старт:*
-`150 обід` - Додати витрату
-`+5000 зарплата` - Додати дохід
-`++1000` - Додати заощадження
-`-200 кредит` - Додати борг
-
+Тепер ви готові до роботи з Finn! 🚀
 💡 Почніть відстежувати транзакції або використовуйте меню!"""
             else:
                 complete_msg = """🎉 *Profile Created!*
-
-You're now ready to use Finn!
-
-🚀 *Quick Start:*
-`150 lunch` - Add expense
-`+5000 salary` - Add income
-`++1000` - Add savings  
-`-200 loan` - Add debt
-
+You're now ready to use Finn! 🚀 
 💡 Start tracking transactions or use the menu!"""
             
             # Clear onboarding state
@@ -2770,6 +2789,8 @@ You're now ready to use Finn!
                 del self.onboarding_state[chat_id]
             
             self.send_message(chat_id, complete_msg, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+            time.sleep(2)
+            self.send_transaction_guide(chat_id)
 
         
         if data.startswith("cat_"):
@@ -3007,6 +3028,8 @@ You're now ready to use Finn!
                 
                 if result and result.status_code == 200:
                     print(f"✅ Success message sent to user {chat_id}")
+                    time.sleep(2)
+                    self.send_transaction_guide(chat_id)
                 else:
                     print(f"❌ Failed to send success message to user {chat_id}")
                     
