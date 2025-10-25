@@ -261,6 +261,7 @@ class SimpleFinnBot:
         user_id_str = str(chat_id)
         user_lang = self.get_user_language(chat_id)
         
+        # Check if we have data for this user
         if (user_id_str not in self.monthly_totals or 
             user_id_str not in self.monthly_percentages or
             self.monthly_totals[user_id_str]['income'] == 0):
@@ -271,8 +272,68 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📊 No data yet for 50/30/20 analysis this month. Add some income and expenses to see your statistics.")
             return
         
-        # Use your existing 50/30/20 logic here
-        # Add the code from your working 50/30/20 command
+        # COPY YOUR EXISTING 50/30/20 LOGIC HERE
+        percentages = self.monthly_percentages.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0})
+        totals = self.monthly_totals.get(user_id_str, {'needs': 0, 'wants': 0, 'future': 0, 'income': 0})
+        
+        # Ensure we have valid percentages
+        needs_pct = percentages.get('needs', 0)
+        wants_pct = percentages.get('wants', 0) 
+        future_pct = percentages.get('future', 0)
+        
+        if user_lang == 'uk':
+            summary = f"""📊 *Статус 50/30/20*
+
+    🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+    🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+    💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
+
+    """
+            # Add status indicators
+            if needs_pct <= 50:
+                summary += "✅ Потреби в межах цілі\n"
+            else:
+                summary += "⚠️ Потреби перевищують ціль\n"
+                
+            if wants_pct <= 30:
+                summary += "✅ Бажання в межах цілі\n"
+            else:
+                summary += "⚠️ Бажання перевищують ціль\n"
+                
+            if future_pct >= 20:
+                summary += "🎯 Майбутнє на цільовому рівні!"
+            else:
+                summary += "💡 Можна покращити майбутнє"
+                
+        else:
+            summary = f"""📊 *50/30/20 Status*
+
+    🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+    🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+    💰 Total Income: {totals.get('income', 0):,.0f}₴
+
+    """
+            # Add status indicators
+            if needs_pct <= 50:
+                summary += "✅ Needs within target\n"
+            else:
+                summary += "⚠️ Needs over target\n"
+                
+            if wants_pct <= 30:
+                summary += "✅ Wants within target\n"
+            else:
+                summary += "⚠️ Wants over target\n"
+                
+            if future_pct >= 20:
+                summary += "🎯 Future on target!"
+            else:
+                summary += "💡 Future can be improved"
+        
+        self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
@@ -287,9 +348,67 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
-        # Use your existing delete transaction logic
-        self.delete_mode[chat_id] = True
-        # ... copy your existing delete transaction display code here ...
+        # COPY YOUR EXISTING DELETE TRANSACTION LOGIC HERE
+        # Group transactions by type for better organization
+        transactions_by_type = {
+            'income': [],
+            'expense': [],
+            'savings': [],
+            'debt': [],
+            'debt_return': [],
+            'savings_withdraw': []
+        }
+        
+        for i, transaction in enumerate(user_transactions):
+            transactions_by_type[transaction['type']].append((i, transaction))
+        
+        delete_text = "🗑️ *Select Transaction to Delete*\n\n"
+        delete_text += "⏹️  `0` - Cancel & Exit\n\n"
+        
+        current_number = 1
+        transaction_map = {}  # Map display numbers to actual indices
+        
+        # Display transactions by type with clear sections
+        for trans_type, trans_list in transactions_by_type.items():
+            if trans_list:
+                # Add transactions for this type
+                for orig_index, transaction in trans_list:
+                    # Get proper symbol and amount display
+                    if trans_type == 'income':
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    elif trans_type == 'savings':
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    elif trans_type == 'debt':
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    elif trans_type == 'debt_return':
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    elif trans_type == 'savings_withdraw':
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    else:  # expense
+                        amount_display = f"{transaction['amount']:,.0f} ₴"
+                    
+                    # Truncate long descriptions
+                    description = transaction['description']
+                    if len(description) > 25:
+                        description = description[:22] + "..."
+                    
+                    delete_text += f"*`{current_number:2d} `* {amount_display} • {transaction['category']}\n"
+                    
+                    transaction_map[current_number] = orig_index
+                    current_number += 1
+                
+                delete_text += "\n"
+        
+        delete_text += "💡 *Type a number to delete, or 0 to cancel*"
+        
+        # Store the mapping for this user
+        self.delete_mode[chat_id] = transaction_map
+        
+        # Split long messages if needed (Telegram has 4096 char limit)
+        if len(delete_text) > 4000:
+            delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
+        
+        self.send_message(chat_id, delete_text, parse_mode='Markdown')
 
     def handle_manage_categories(self, chat_id):
         """Handle Manage Categories button"""
