@@ -197,7 +197,7 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 No transactions to display.", reply_markup=self.get_main_menu(chat_id))
             return
         
-        # Use your existing financial summary logic
+        # Calculate basic totals
         income = 0
         expenses = 0
         savings_deposits = 0
@@ -205,9 +205,31 @@ class SimpleFinnBot:
         debt_incurred = 0
         debt_returned = 0
         
+        # NEW: Track dates for averages
+        income_dates = set()
+        expense_dates = set()
+        all_dates = set()
+        
         for transaction in user_transactions:
+            # Extract date from transaction
+            transaction_date = None
+            if 'date' in transaction:
+                try:
+                    # Parse the date string to get just the date part
+                    if 'T' in transaction['date']:
+                        transaction_date = transaction['date'].split('T')[0]  # Get YYYY-MM-DD
+                    else:
+                        transaction_date = transaction['date'].split(' ')[0]  # Get YYYY-MM-DD
+                except:
+                    transaction_date = None
+            
+            if transaction_date:
+                all_dates.add(transaction_date)
+            
             if transaction['type'] == 'income':
                 income += transaction['amount']
+                if transaction_date:
+                    income_dates.add(transaction_date)
             elif transaction['type'] == 'savings':
                 savings_deposits += transaction['amount']
             elif transaction['type'] == 'debt':
@@ -218,10 +240,21 @@ class SimpleFinnBot:
                 savings_withdrawn += transaction['amount']
             else:  # Regular expenses
                 expenses += transaction['amount']
+                if transaction_date:
+                    expense_dates.add(transaction_date)
         
         net_savings = savings_deposits - savings_withdrawn
         net_debt = debt_incurred - debt_returned
         net_flow = income - expenses - net_savings
+        
+        # NEW: Calculate averages
+        total_days = len(all_dates) if all_dates else 1
+        total_income_days = len(income_dates) if income_dates else 1
+        total_expense_days = len(expense_dates) if expense_dates else 1
+        
+        daily_income_avg = income / total_income_days if total_income_days > 0 else 0
+        daily_expense_avg = expenses / total_expense_days if total_expense_days > 0 else 0
+        daily_net_avg = (income - expenses) / total_days if total_days > 0 else 0
         
         user_lang = self.get_user_language(chat_id)
         
@@ -235,9 +268,25 @@ class SimpleFinnBot:
     ─────────────────
     Чистий потік: {net_flow:,.0f}₴
 
+    📈 *Щоденні середні показники:*
+    Середній дохід/день: {daily_income_avg:,.0f}₴
+    Середні витрати/день: {daily_expense_avg:,.0f}₴
+    Середній чистий потік/день: {daily_net_avg:,.0f}₴
+
     🏦 *Заощадження:*
     Внесено: {savings_deposits:,.0f}₴
     Чисті заощадження: {net_savings:,.0f}₴"""
+            
+            if debt_incurred > 0 or debt_returned > 0:
+                summary_text += f"\n\n💳 *Борги:*\n   Заборгованість: {debt_incurred:,.0f}₴"
+                if debt_returned > 0:
+                    summary_text += f"\n   Повернено: {debt_returned:,.0f}₴"
+                summary_text += f"\n   Чистий борг: {net_debt:,.0f}₴"
+                
+            # Add context about tracking period
+            if all_dates:
+                summary_text += f"\n\n📅 *Період відстеження:* {len(all_dates)} днів"
+            
         else:
             summary_text = f"""📊 *Financial Summary*
 
@@ -248,9 +297,24 @@ class SimpleFinnBot:
     ─────────────────
     Net Cash Flow: {net_flow:,.0f}₴
 
+    📈 *Daily Averages:*
+    Avg Income/Day: {daily_income_avg:,.0f}₴
+    Avg Expenses/Day: {daily_expense_avg:,.0f}₴
+    Avg Net Flow/Day: {daily_net_avg:,.0f}₴
+
     🏦 *Savings Account:*
     Deposited: {savings_deposits:,.0f}₴
     Net Savings: {net_savings:,.0f}₴"""
+            
+            if debt_incurred > 0 or debt_returned > 0:
+                summary_text += f"\n\n💳 *Debt Account:*\n   Incurred: {debt_incurred:,.0f}₴"
+                if debt_returned > 0:
+                    summary_text += f"\n   Returned: {debt_returned:,.0f}₴"
+                summary_text += f"\n   Net Debt: {net_debt:,.0f}₴"
+                
+            # Add context about tracking period
+            if all_dates:
+                summary_text += f"\n\n📅 *Tracking Period:* {len(all_dates)} days"
         
         self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
