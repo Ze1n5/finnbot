@@ -211,6 +211,257 @@ def debug_savings_categories():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@flask_app.route('/api/financial-data', methods=['GET'])
+def api_financial_data():
+    try:
+        # Get user_id from query parameter
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+            
+        print(f"🧮 CALCULATING FINANCIAL DATA FOR USER {user_id}...")
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions ONLY for this specific user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        print(f"📊 User {user_id} has {len(user_transactions)} transactions")
+        
+        # Initialize totals for THIS USER ONLY
+        balance = 0
+        total_income = 0
+        total_expenses = 0
+        total_savings = 0
+        transaction_count = 0
+        recent_transactions = []
+
+        # Calculate totals from THIS USER'S transactions only
+        for transaction in user_transactions:
+            if isinstance(transaction, dict):
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                description = transaction.get('description', 'Unknown')
+                
+                # CORRECTED BALANCE CALCULATION
+                if trans_type == 'income':
+                    balance += amount
+                    total_income += amount
+                elif trans_type == 'expense':
+                    balance -= amount
+                    total_expenses += amount
+                elif trans_type == 'savings':
+                    balance -= amount  # Money moved to savings
+                    total_savings += amount
+                elif trans_type == 'debt':
+                    balance += amount  # You receive money as debt
+                elif trans_type == 'debt_return':
+                    balance -= amount  # You pay back debt
+                elif trans_type == 'savings_withdraw':
+                    balance += amount  # You take money from savings
+                    total_savings -= amount
+                
+                transaction_count += 1
+        
+        # Get recent transactions for display (last 5)
+        for transaction in user_transactions[-5:]:
+            if isinstance(transaction, dict):
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                description = transaction.get('description', 'Unknown')
+                category = transaction.get('category', 'Other')
+                
+                # Determine emoji and display format
+                emoji = "💰"
+                display_name = description
+                
+                if trans_type == 'income':
+                    emoji = "💵"
+                    display_name = category
+                elif trans_type == 'expense':
+                    if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
+                        emoji = "🏠"
+                    elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
+                        emoji = "🍕"
+                    elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
+                        emoji = "🚗"
+                    elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
+                        emoji = "🛍️"
+                    else:
+                        emoji = "🛒"
+                elif trans_type == 'savings':
+                    emoji = "🏦"
+                    display_name = "Savings"
+                elif trans_type == 'debt':
+                    emoji = "💳"
+                    display_name = "Debt"
+                elif trans_type == 'debt_return':
+                    emoji = "🔙"
+                    display_name = "Debt Return"
+                elif trans_type == 'savings_withdraw':
+                    emoji = "📥"
+                    display_name = "Savings Withdraw"
+                
+                # Truncate long descriptions
+                if len(display_name) > 25:
+                    display_name = display_name[:22] + "..."
+                
+                recent_transactions.append({
+                    "emoji": emoji,
+                    "name": display_name,
+                    "amount": amount
+                })
+
+        actual_savings = total_savings
+        
+        print("=" * 50)
+        print(f"✅ USER {user_id} CALCULATION:")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income: {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {actual_savings}")
+        print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
+        print("=" * 50)
+        
+        response_data = {
+            'balance': balance,
+            'income': total_income,
+            'spending': total_expenses,
+            'savings': actual_savings,
+            'transactions': recent_transactions,
+            'transaction_count': transaction_count
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        print(f"❌ CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Calculation error'}), 500
+
+@app.route('/api/transactions', methods=['GET'])
+def api_transactions():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        user_id = request.args.get('user_id', type=int)
+        
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions ONLY for this specific user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        
+        # Sort by date (newest first)
+        user_transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_transactions = user_transactions[start_idx:end_idx]
+        
+        # Format transactions for display
+        formatted_transactions = []
+        for transaction in paginated_transactions:
+            amount = float(transaction.get('amount', 0))
+            trans_type = transaction.get('type', 'expense')
+            description = transaction.get('description', '')
+            category = transaction.get('category', 'Other')
+            timestamp = transaction.get('date', '')
+            
+            # Determine emoji based on category and type
+            emoji = "💰"  # Default
+            
+            # INCOME TRANSACTIONS
+            if trans_type == 'income':
+                emoji = "💵"
+                display_name = category  # Show category name for income
+                
+            # SAVINGS TRANSACTIONS  
+            elif trans_type == 'savings':
+                emoji = "🏦"
+                display_name = f"Savings • {category}"
+                
+            # DEBT TRANSACTIONS
+            elif trans_type == 'debt':
+                emoji = "💳" 
+                display_name = "Debt"
+            elif trans_type == 'debt_return':
+                emoji = "🔙"
+                display_name = "Debt Return"
+                
+            # SAVINGS WITHDRAWAL
+            elif trans_type == 'savings_withdraw':
+                emoji = "📥"
+                display_name = "Savings Withdraw"
+                
+            # EXPENSE TRANSACTIONS - Use custom categories properly
+            else:  # expense
+                # Map categories to emojis
+                category_emoji_map = {
+                    'Food': '🍕',
+                    'Rent': '🏠', 
+                    'Transport': '🚗',
+                    'Shopping': '🛍️',
+                    'Entertainment': '🎬',
+                    'Healthcare': '🏥',
+                    'Utilities': '💡',
+                    'Other': '🛒'
+                }
+                
+                # Use custom emoji if category exists, otherwise default
+                emoji = category_emoji_map.get(category, '🛒')
+                
+                # Clean description - remove numbers and symbols
+                clean_description = re.sub(r'[\d+.,₴\-]', '', description).strip()
+                
+                # Create display name: show category and cleaned description
+                if clean_description and clean_description.lower() != category.lower():
+                    display_name = f"{category} • {clean_description}"
+                else:
+                    display_name = category
+            
+            # Format amount with proper sign
+            display_amount = amount
+            if trans_type in ['expense', 'savings', 'debt_return']:
+                display_amount = -abs(amount)  # Negative for expenses
+            elif trans_type in ['income', 'debt', 'savings_withdraw']:
+                display_amount = abs(amount)   # Positive for income/debt
+                
+            # Truncate long display names
+            if len(display_name) > 25:
+                display_name = display_name[:22] + "..."
+            
+            formatted_transactions.append({
+                "emoji": emoji,
+                "name": display_name,
+                "display_name": display_name,
+                "amount": display_amount,
+                "timestamp": timestamp,
+                "type": trans_type,
+                "category": category
+            })
+        
+        has_more = len(user_transactions) > end_idx
+        
+        return jsonify({
+            'transactions': formatted_transactions,
+            'has_more': has_more,
+            'current_page': page,
+            'total_transactions': len(user_transactions)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in transactions API: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to load transactions'}), 500
 
 @app.route('/api/restore-protected-categories')
 def restore_protected_categories():
@@ -978,139 +1229,6 @@ def webhook():
         threading.Thread(target=process_and_save).start()
         
         return jsonify({"status": "success"}), 200
-
-@app.route('/api/financial-data')
-def api_financial_data():
-    try:
-        print("🧮 CALCULATING FINANCIAL DATA FROM BOT INSTANCE...")
-        
-        if not bot_instance:
-            return jsonify({'error': 'Bot not initialized'}), 500
-        
-        # Get user_id from query parameter or use a default
-        user_id = request.args.get('user_id', type=int)
-        if not user_id:
-            return jsonify({'error': 'user_id parameter required'}), 400
-        
-        # Get transactions ONLY for this specific user
-        user_transactions = bot_instance.transactions.get(user_id, [])
-        print(f"📊 User {user_id} has {len(user_transactions)} transactions")
-        
-        # Initialize totals for THIS USER ONLY
-        balance = 0
-        total_income = 0
-        total_expenses = 0
-        total_savings = 0
-        transaction_count = 0
-        recent_transactions = []
-
-        # Calculate totals from THIS USER'S transactions only
-        for transaction in user_transactions:
-            if isinstance(transaction, dict):
-                amount = float(transaction.get('amount', 0))
-                trans_type = transaction.get('type', 'expense')
-                description = transaction.get('description', 'Unknown')
-                
-                print(f"   📝 {trans_type}: {amount} - {description}")
-                
-                # CORRECTED BALANCE CALCULATION
-                if trans_type == 'income':
-                    balance += amount
-                    total_income += amount
-                elif trans_type == 'expense':
-                    balance -= amount
-                    total_expenses += amount
-                elif trans_type == 'savings':
-                    balance -= amount  # Money moved to savings
-                    total_savings += amount
-                elif trans_type == 'debt':
-                    balance += amount  # You receive money as debt
-                elif trans_type == 'debt_return':
-                    balance -= amount  # You pay back debt
-                elif trans_type == 'savings_withdraw':
-                    balance += amount  # You take money from savings
-                    total_savings -= amount
-                
-                transaction_count += 1
-        
-        # Get recent transactions for display (last 5)
-        for transaction in user_transactions[-5:]:
-            if isinstance(transaction, dict):
-                amount = float(transaction.get('amount', 0))
-                trans_type = transaction.get('type', 'expense')
-                description = transaction.get('description', 'Unknown')
-                category = transaction.get('category', 'Other')
-                
-                # Determine emoji and display format
-                emoji = "💰"
-                display_name = description
-                
-                if trans_type == 'income':
-                    emoji = "💵"
-                    display_name = category
-                elif trans_type == 'expense':
-                    if any(word in description.lower() for word in ['rent', 'house', 'apartment']):
-                        emoji = "🏠"
-                    elif any(word in description.lower() for word in ['food', 'lunch', 'dinner', 'restaurant', 'groceries']):
-                        emoji = "🍕"
-                    elif any(word in description.lower() for word in ['transport', 'bus', 'taxi', 'fuel']):
-                        emoji = "🚗"
-                    elif any(word in description.lower() for word in ['shopping', 'store', 'market']):
-                        emoji = "🛍️"
-                    else:
-                        emoji = "🛒"
-                elif trans_type == 'savings':
-                    emoji = "🏦"
-                    display_name = "Savings"
-                elif trans_type == 'debt':
-                    emoji = "💳"
-                    display_name = "Debt"
-                elif trans_type == 'debt_return':
-                    emoji = "🔙"
-                    display_name = "Debt Return"
-                elif trans_type == 'savings_withdraw':
-                    emoji = "📥"
-                    display_name = "Savings Withdraw"
-                
-                # Truncate long descriptions
-                if len(display_name) > 25:
-                    display_name = display_name[:22] + "..."
-                
-                recent_transactions.append({
-                    "emoji": emoji,
-                    "name": display_name,
-                    "amount": amount
-                })
-
-        # Use total_savings for savings display
-        actual_savings = total_savings
-        
-        print("=" * 50)
-        print(f"✅ USER {user_id} CALCULATION:")
-        print(f"   Balance: {balance}")
-        print(f"   Total Income: {total_income}") 
-        print(f"   Total Expenses: {total_expenses}")
-        print(f"   Total Savings: {actual_savings}")
-        print(f"   Transaction Count: {transaction_count}")
-        print(f"   Recent Transactions: {len(recent_transactions)}")
-        print("=" * 50)
-        
-        response_data = {
-            'balance': balance,
-            'income': total_income,
-            'spending': total_expenses,
-            'savings': actual_savings,
-            'transactions': recent_transactions,
-            'transaction_count': transaction_count
-        }
-        
-        return jsonify(response_data)
-        
-    except Exception as e:
-        print(f"❌ CRITICAL ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Calculation error'}), 500
     
 @app.route('/api/check-data-files')
 def check_data_files():
