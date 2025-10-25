@@ -25,15 +25,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# Initialize Flask app FIRST
-flask_app = Flask(__name__)
-
-@flask_app.before_request
-def log_request_info():
-    print(f"🌐 Incoming: {request.method} {request.path} - From: {request.remote_addr}")
-
-
-
 def sync_to_railway(transaction_data):
     """Send transaction data to Railway web app"""
     try:
@@ -3137,17 +3128,3 @@ if not hasattr(bot_instance, 'reminder_started'):
     reminder_thread = threading.Thread(target=check_reminders_periodically, daemon=True)
     reminder_thread.start()
     print("✅ Periodic reminder checker started")
-
-# ========== APPLICATION STARTUP ==========
-
-if __name__ == "__main__":
-    if not BOT_TOKEN:
-        print("❌ ERROR: BOT_TOKEN environment variable not set")
-        print("⚠️  Running without Telegram bot features")
-    else:
-        print("✅ Bot token found - setting webhook")
-        set_webhook()
-    
-    port = int(os.environ.get('PORT', 8080))
-    print(f"🚀 Starting webhook server on port {port}...")
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
