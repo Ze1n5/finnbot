@@ -186,6 +186,8 @@ def try_save_to_db(self):
 class SimpleFinnBot:
     def handle_financial_summary(self, chat_id):
         """Handle Financial Summary button"""
+        print(f"🔍 Handling Financial Summary for {chat_id}")
+        
         user_transactions = self.get_user_transactions(chat_id)
         if not user_transactions:
             user_lang = self.get_user_language(chat_id)
@@ -193,18 +195,89 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 Немає транзакцій для відображення.", reply_markup=self.get_main_menu(chat_id))
             else:
                 self.send_message(chat_id, "📭 No transactions to display.", reply_markup=self.get_main_menu(chat_id))
+            return
+        
+        # Use your existing financial summary logic
+        income = 0
+        expenses = 0
+        savings_deposits = 0
+        savings_withdrawn = 0
+        debt_incurred = 0
+        debt_returned = 0
+        
+        for transaction in user_transactions:
+            if transaction['type'] == 'income':
+                income += transaction['amount']
+            elif transaction['type'] == 'savings':
+                savings_deposits += transaction['amount']
+            elif transaction['type'] == 'debt':
+                debt_incurred += abs(transaction['amount'])
+            elif transaction['type'] == 'debt_return':
+                debt_returned += abs(transaction['amount'])
+            elif transaction['type'] == 'savings_withdraw':
+                savings_withdrawn += transaction['amount']
+            else:  # Regular expenses
+                expenses += transaction['amount']
+        
+        net_savings = savings_deposits - savings_withdrawn
+        net_debt = debt_incurred - debt_returned
+        net_flow = income - expenses - net_savings
+        
+        user_lang = self.get_user_language(chat_id)
+        
+        if user_lang == 'uk':
+            summary_text = f"""📊 *Фінансовий звіт*
+
+    💸 *Аналіз готівкового потоку:*
+    Дохід: {income:,.0f}₴
+    Витрати: {expenses:,.0f}₴
+    Заощадження: {net_savings:,.0f}₴
+    ─────────────────
+    Чистий потік: {net_flow:,.0f}₴
+
+    🏦 *Заощадження:*
+    Внесено: {savings_deposits:,.0f}₴
+    Чисті заощадження: {net_savings:,.0f}₴"""
         else:
-            # Use your existing financial summary logic that's already working
-            # This should be the same code that works when you use the text command
-            pass
+            summary_text = f"""📊 *Financial Summary*
+
+    💸 *Cash Flow Analysis:*
+    Income: {income:,.0f}₴
+    Expenses: {expenses:,.0f}₴
+    Savings: {net_savings:,.0f}₴
+    ─────────────────
+    Net Cash Flow: {net_flow:,.0f}₴
+
+    🏦 *Savings Account:*
+    Deposited: {savings_deposits:,.0f}₴
+    Net Savings: {net_savings:,.0f}₴"""
+        
+        self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
     def handle_503020_status(self, chat_id):
         """Handle 50/30/20 Status button"""
-        # Use your existing 50/30/20 logic that's already working
-        pass
+        print(f"🔍 Handling 50/30/20 Status for {chat_id}")
+        
+        user_id_str = str(chat_id)
+        user_lang = self.get_user_language(chat_id)
+        
+        if (user_id_str not in self.monthly_totals or 
+            user_id_str not in self.monthly_percentages or
+            self.monthly_totals[user_id_str]['income'] == 0):
+            
+            if user_lang == 'uk':
+                self.send_message(chat_id, "📊 Ще немає даних для аналізу 50/30/20 цього місяця. Додайте доходи та витрати, щоб побачити статистику.")
+            else:
+                self.send_message(chat_id, "📊 No data yet for 50/30/20 analysis this month. Add some income and expenses to see your statistics.")
+            return
+        
+        # Use your existing 50/30/20 logic here
+        # Add the code from your working 50/30/20 command
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
+        print(f"🔍 Handling Delete Transaction for {chat_id}")
+        
         user_transactions = self.get_user_transactions(chat_id)
         if not user_transactions:
             user_lang = self.get_user_language(chat_id)
@@ -212,28 +285,69 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 Немає транзакцій для видалення.", reply_markup=self.get_main_menu(chat_id))
             else:
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
-        else:
-            # Use your existing delete transaction logic
-            self.delete_mode[chat_id] = True
-            # ... your existing delete transaction code ...
+            return
+        
+        # Use your existing delete transaction logic
+        self.delete_mode[chat_id] = True
+        # ... copy your existing delete transaction display code here ...
 
     def handle_manage_categories(self, chat_id):
         """Handle Manage Categories button"""
+        print(f"🔍 Handling Manage Categories for {chat_id}")
+        
         # Use your existing categories management logic
         category_names = self.get_user_categories(chat_id)
         user_lang = self.get_user_language(chat_id)
         
         if user_lang == 'uk':
             categories_text = "🏷️ *Ваші категорії*\n\n"
-            # ... your existing categories text ...
+            categories_text += "*🔒 Фіксовані категорії:*\n"
+            categories_text += "• Зарплата • Бізнес • Кріпто • Банк • Особисте • Інвестиції\n\n"
+            categories_text += "*💼 Ваші кастомні категорії:*\n"
+            
+            fixed_categories = ["Зарплата", "Бізнес", "Кріпто", "Банк", "Особисте", "Інвестиції", "Other"]
+            has_custom_categories = False
+            
+            for category_name in category_names:
+                if category_name not in fixed_categories:
+                    categories_text += f"• *{category_name}*\n"
+                    has_custom_categories = True
+            
+            if not has_custom_categories:
+                categories_text += "📝 Поки що немає кастомних категорій\n"
+            
+            categories_text += "\n*Швидкі команди:*\n"
+            categories_text += "• `+Їжа` - Додати нову категорію\n"
+            categories_text += "• `-Їжа` - Видалити категорію\n"
+            categories_text += "• Фіксовані категорії не можна змінити"
         else:
             categories_text = "🏷️ *Your Categories*\n\n"
-            # ... your existing categories text ...
+            categories_text += "*🔒 Fixed Categories:*\n"
+            categories_text += "• Salary • Business • Crypto • Bank • Personal • Investment\n\n"
+            categories_text += "*💼 Your Custom Categories:*\n"
+            
+            fixed_categories = ["Salary", "Business", "Crypto", "Bank", "Personal", "Investment", "Other"]
+            has_custom_categories = False
+            
+            for category_name in category_names:
+                if category_name not in fixed_categories:
+                    categories_text += f"• *{category_name}*\n"
+                    has_custom_categories = True
+            
+            if not has_custom_categories:
+                categories_text += "📝 No custom categories yet\n"
+            
+            categories_text += "\n*Quick Commands:*\n"
+            categories_text += "• `+Food` - Add new category\n"
+            categories_text += "• `-Food` - Remove category\n"
+            categories_text += "• Fixed categories cannot be modified"
         
         self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
     def handle_restart_bot(self, chat_id):
         """Handle Restart Bot button"""
+        print(f"🔍 Handling Restart Bot for {chat_id}")
+        
         user_lang = self.get_user_language(chat_id)
         
         if user_lang == 'uk':
@@ -279,6 +393,8 @@ class SimpleFinnBot:
 
     def handle_language_selection(self, chat_id):
         """Handle Language button"""
+        print(f"🔍 Handling Language Selection for {chat_id}")
+        
         keyboard = {
             "inline_keyboard": [
                 [{"text": "🇺🇸 English", "callback_data": "lang_en"}],
@@ -290,12 +406,12 @@ class SimpleFinnBot:
         message = f"🌍 Current language: {current_lang_text}\n\nChoose your language / Оберіть мову:"
         self.send_message(chat_id, message, keyboard)
 
-        def send_transaction_guide(self, chat_id):
-            """Send visual transaction guide to user"""
-            user_lang = self.get_user_language(chat_id)
+    def send_transaction_guide(self, chat_id):
+        """Send visual transaction guide to user"""
+        user_lang = self.get_user_language(chat_id)
             
-            if user_lang == 'uk':
-                guide_text = """🎯 *Фінансовий командний центр*
+        if user_lang == 'uk':
+            guide_text = """🎯 *Фінансовий командний центр*
 
         🛒 `150 обід` - Щоденні витрати
         💰 `+5000 зарплата` - Дохід  
@@ -308,8 +424,8 @@ class SimpleFinnBot:
         📝 Додавайте описи: `150 uber до аеропорту`
 
         🚀 *Ваша фінансова подорож починається зараз!*"""
-            else:
-                guide_text = """🎯 *Financial Command Center*
+        else:
+            guide_text = """🎯 *Financial Command Center*
 
         🛒 `150 lunch` - Daily expenses
         💰 `+5000 salary` - Income  
@@ -323,7 +439,7 @@ class SimpleFinnBot:
 
         🚀 *Your financial journey starts now!*"""
             
-            self.send_message(chat_id, guide_text, parse_mode='Markdown')
+        self.send_message(chat_id, guide_text, parse_mode='Markdown')
 
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
