@@ -184,40 +184,146 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
-    def send_transaction_guide(self, chat_id):
-        """Send visual transaction guide to user"""
+    def handle_financial_summary(self, chat_id):
+        """Handle Financial Summary button"""
+        user_transactions = self.get_user_transactions(chat_id)
+        if not user_transactions:
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                self.send_message(chat_id, "📭 Немає транзакцій для відображення.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                self.send_message(chat_id, "📭 No transactions to display.", reply_markup=self.get_main_menu(chat_id))
+        else:
+            # Use your existing financial summary logic that's already working
+            # This should be the same code that works when you use the text command
+            pass
+
+    def handle_503020_status(self, chat_id):
+        """Handle 50/30/20 Status button"""
+        # Use your existing 50/30/20 logic that's already working
+        pass
+
+    def handle_delete_transaction(self, chat_id):
+        """Handle Delete Transaction button"""
+        user_transactions = self.get_user_transactions(chat_id)
+        if not user_transactions:
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                self.send_message(chat_id, "📭 Немає транзакцій для видалення.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
+        else:
+            # Use your existing delete transaction logic
+            self.delete_mode[chat_id] = True
+            # ... your existing delete transaction code ...
+
+    def handle_manage_categories(self, chat_id):
+        """Handle Manage Categories button"""
+        # Use your existing categories management logic
+        category_names = self.get_user_categories(chat_id)
         user_lang = self.get_user_language(chat_id)
         
         if user_lang == 'uk':
-            guide_text = """🎯 *Фінансовий командний центр*
-
-    🛒 `150 обід` - Щоденні витрати
-    💰 `+5000 зарплата` - Дохід  
-    🏦 `++1000` - Зберегти гроші
-    💳 `-2000 кредит` - Новий борг
-    🔙 `+-1500` - Повернути борг
-    📥 `-+800` - Зняти заощадження
-
-    🧮 `100+50=150` - Розрахунки працюють!
-    📝 Додавайте описи: `150 uber до аеропорту`
-
-    🚀 *Ваша фінансова подорож починається зараз!*"""
+            categories_text = "🏷️ *Ваші категорії*\n\n"
+            # ... your existing categories text ...
         else:
-            guide_text = """🎯 *Financial Command Center*
-
-    🛒 `150 lunch` - Daily expenses
-    💰 `+5000 salary` - Income  
-    🏦 `++1000` - Save money
-    💳 `-2000 loan` - New debt
-    🔙 `+-1500` - Return debt
-    📥 `-+800` - Withdraw savings
-
-    🧮 `100+50=150` - Calculations work!
-    📝 Add descriptions: `150 uber to airport`
-
-    🚀 *Your financial journey starts now!*"""
+            categories_text = "🏷️ *Your Categories*\n\n"
+            # ... your existing categories text ...
         
-        self.send_message(chat_id, guide_text, parse_mode='Markdown')
+        self.send_message(chat_id, categories_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+
+    def handle_restart_bot(self, chat_id):
+        """Handle Restart Bot button"""
+        user_lang = self.get_user_language(chat_id)
+        
+        if user_lang == 'uk':
+            confirmation_text = """🔄 *Перезапуск бота*
+            
+    Ця дія видалить:
+    • Всі ваші транзакції
+    • Всі категорії витрат
+    • Ваші налаштування
+    • Історію доходів
+
+    *Цю дію не можна скасувати!*
+
+    Ви впевнені, що хочете продовжити?"""
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "✅ Так, перезапустити", "callback_data": "confirm_restart"}],
+                    [{"text": "❌ Скасувати", "callback_data": "cancel_restart"}]
+                ]
+            }
+        else:
+            confirmation_text = """🔄 *Restart Bot*
+            
+    This action will delete:
+    • All your transactions
+    • All spending categories  
+    • Your settings
+    • Income history
+
+    *This action cannot be undone!*
+
+    Are you sure you want to proceed?"""
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": "✅ Yes, restart", "callback_data": "confirm_restart"}],
+                    [{"text": "❌ Cancel", "callback_data": "cancel_restart"}]
+                ]
+            }
+        
+        self.send_message(chat_id, confirmation_text, parse_mode='Markdown', keyboard=keyboard)
+
+    def handle_language_selection(self, chat_id):
+        """Handle Language button"""
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "🇺🇸 English", "callback_data": "lang_en"}],
+                [{"text": "🇺🇦 Українська", "callback_data": "lang_uk"}]
+            ]
+        }
+        current_lang = self.get_user_language(chat_id)
+        current_lang_text = "English" if current_lang == 'en' else "Українська"
+        message = f"🌍 Current language: {current_lang_text}\n\nChoose your language / Оберіть мову:"
+        self.send_message(chat_id, message, keyboard)
+
+        def send_transaction_guide(self, chat_id):
+            """Send visual transaction guide to user"""
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                guide_text = """🎯 *Фінансовий командний центр*
+
+        🛒 `150 обід` - Щоденні витрати
+        💰 `+5000 зарплата` - Дохід  
+        🏦 `++1000` - Зберегти гроші
+        💳 `-2000 кредит` - Новий борг
+        🔙 `+-1500` - Повернути борг
+        📥 `-+800` - Зняти заощадження
+
+        🧮 `100+50=150` - Розрахунки працюють!
+        📝 Додавайте описи: `150 uber до аеропорту`
+
+        🚀 *Ваша фінансова подорож починається зараз!*"""
+            else:
+                guide_text = """🎯 *Financial Command Center*
+
+        🛒 `150 lunch` - Daily expenses
+        💰 `+5000 salary` - Income  
+        🏦 `++1000` - Save money
+        💳 `-2000 loan` - New debt
+        🔙 `+-1500` - Return debt
+        📥 `-+800` - Withdraw savings
+
+        🧮 `100+50=150` - Calculations work!
+        📝 Add descriptions: `150 uber to airport`
+
+        🚀 *Your financial journey starts now!*"""
+            
+            self.send_message(chat_id, guide_text, parse_mode='Markdown')
 
     def save_user_languages(self):
         """Save user languages - placeholder for now"""
@@ -1447,7 +1553,40 @@ class SimpleFinnBot:
                 # Process the message first, then show menu
                 # We'll handle this after the main processing
                 pass
-
+        
+        if text == "📊 Financial Summary":
+            return self.handle_financial_summary(chat_id)
+        
+        elif text == "📊 50/30/20 Status":
+            return self.handle_503020_status(chat_id)
+        
+        elif text == "🗑️ Delete Transaction":
+            return self.handle_delete_transaction(chat_id)
+        
+        elif text == "🏷️ Manage Categories":
+            return self.handle_manage_categories(chat_id)
+        
+        elif text == "🔄 Restart Bot":
+            return self.handle_restart_bot(chat_id)
+        
+        elif text == "🌍 Language":
+            return self.handle_language_selection(chat_id)
+        
+        # Ukrainian menu buttons
+        elif text == "📊 Фінансовий звіт":
+            return self.handle_financial_summary(chat_id)
+        
+        elif text == "🗑️ Видалити транзакцію":
+            return self.handle_delete_transaction(chat_id)
+        
+        elif text == "🏷️ Керування категоріями":
+            return self.handle_manage_categories(chat_id)
+        
+        elif text == "🔄 Перезапустити бота":
+            return self.handle_restart_bot(chat_id)
+        
+        elif text == "🌍 Мова":
+            return self.handle_language_selection(chat_id)
         
         # Handle delete mode first if active
         if self.delete_mode.get(chat_id):
