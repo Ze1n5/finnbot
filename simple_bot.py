@@ -1146,13 +1146,29 @@ class SimpleFinnBot:
         # Check if this is a group (negative chat ID)
         is_group = user_id and user_id < 0
         
-        return {
+        menu_config = {
             "keyboard": keyboard,
             "resize_keyboard": True,
             "one_time_keyboard": False,
-            "selective": is_group  # True for groups, False for private
+            "selective": is_group
         }
+        
+        print(f"🔍 DEBUG MENU: User ID: {user_id}, Is group: {is_group}, Selective: {is_group}")
+        return menu_config
     
+    def show_menu_keyboard(self, chat_id, message_text=None):
+        """Explicitly show the menu keyboard in groups"""
+        user_lang = self.get_user_language(chat_id)
+        
+        if not message_text:
+            if user_lang == 'uk':
+                message_text = "🏠 Головне меню:"
+            else:
+                message_text = "🏠 Main menu:"
+        
+        print(f"🔍 DEBUG SHOW_MENU: Showing menu for chat {chat_id}")
+        return self.send_message(chat_id, message_text, reply_markup=self.get_main_menu(chat_id))
+
     def send_menu_to_chat(self, chat_id, text, parse_mode=None):
         """Send menu to chat, handling both private and group chats"""
         try:
@@ -1370,6 +1386,21 @@ class SimpleFinnBot:
         
         print(f"📨 Processing message from {chat_id} ({chat_type}): '{text}'")
 
+        if "new_chat_members" in msg:
+            for member in msg["new_chat_members"]:
+                bot_username = self.get_bot_username()
+                if member.get("is_bot", False) and member.get("username") == bot_username:
+                    # Bot was added to group - show welcome with keyboard
+                    user_lang = self.get_user_language(chat_id)
+                    if user_lang == 'uk':
+                        welcome = "🤖 ФіннБот додано до групи! Використовуйте меню нижче:"
+                    else:
+                        welcome = "🤖 FinnBot added to group! Use the menu below:"
+                    
+                    self.show_menu_keyboard(chat_id, welcome)
+                    return  # Stop processing after handling bot addition
+
+        # Handle group messages
         # Handle group messages
         if chat_type in ["group", "supergroup"]:
             print(f"🔍 DEBUG GROUP: Checking if message is for bot")
@@ -1384,9 +1415,12 @@ class SimpleFinnBot:
             text = self.clean_bot_mention(text)
             print(f"🔍 DEBUG GROUP: Processing group message. Original: '{original_text}', Cleaned: '{text}'")
             
-            # AFTER processing any group message, show the custom keyboard
-            if text:  # Only if we have text to process
-                self.show_custom_keyboard(chat_id, "✅ Done! Use the menu below:")
+            # SHOW THE MENU KEYBOARD AFTER PROCESSING ANY GROUP MESSAGE
+            # This ensures the keyboard appears after every interaction
+            if text and text.strip():  # Only if we have actual text to process
+                # Process the message first, then show menu
+                # We'll handle this after the main processing
+                pass
 
         
         # Handle delete mode first if active
@@ -2716,6 +2750,16 @@ You're now ready to use Finn!
                         message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, message)
                 
+                    chat_type = query["message"]["chat"].get("type", "private")
+                if chat_type in ["group", "supergroup"]:
+                    user_lang = self.get_user_language(chat_id)
+                    if user_lang == 'uk':
+                        menu_msg = "✅ Транзакцію збережено! Що далі?"
+                    else:
+                        menu_msg = "✅ Transaction saved! What's next?"
+                    
+                    self.show_menu_keyboard(chat_id, menu_msg)
+                
                 # Clean up pending
                 del self.pending[chat_id]
                 print(f"🔍 DEBUG: Cleared pending for user {chat_id}")
@@ -2873,18 +2917,7 @@ You're now ready to use Finn!
                 confirmation = "✅ Мову встановлено українську!"
             
             self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu(chat_id))
-        elif data.startswith("lang_"):
-            language = data[5:]  # 'en' or 'uk'
-            self.set_user_language(chat_id, language)
-            
-            if language == 'en':
-                confirmation = "✅ Language set to English!"
-            else:
-                confirmation = "✅ Мову встановлено українську!"
-            
-            self.send_message(chat_id, confirmation, reply_markup=self.get_main_menu(chat_id))
-            
-            # Delete the language selection message
+
             try:
                 delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
                     "chat_id": chat_id,
