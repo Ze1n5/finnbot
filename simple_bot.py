@@ -3231,7 +3231,7 @@ You're now ready to use Finn! 🚀
             self.send_transaction_guide(chat_id)
 
         
-        if data.startswith("cat_"):
+        elif data.startswith("cat_"):
             category = data[4:]
             print(f"🔍 DEBUG: Processing category selection - category: '{category}', chat_id in pending: {chat_id in self.pending}")
             
@@ -3278,7 +3278,7 @@ You're now ready to use Finn! 🚀
                     import traceback
                     traceback.print_exc()
                 
-                user_lang = self.get_user_language(chat_id)  # ADD THIS LINE
+                user_lang = self.get_user_language(chat_id)
 
                 # Update 50/30/20 tracking
                 bucket = self.categorize_transaction(category, text)
@@ -3294,12 +3294,26 @@ You're now ready to use Finn! 🚀
                 for message in limit_messages:
                     self.send_message(chat_id, message, parse_mode='Markdown')
                 
+                # ===== DELETE THE CATEGORY SELECTION MESSAGE FIRST =====
+                try:
+                    delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
+                        "chat_id": chat_id,
+                        "message_id": message_id
+                    })
+                    if delete_response.status_code == 200:
+                        print(f"✅ Deleted category selection message {message_id}")
+                    else:
+                        print(f"⚠️ Failed to delete category message: {delete_response.status_code}")
+                except Exception as e:
+                    print(f"⚠️ Error deleting category message: {e}")
+                
+                # Send appropriate confirmation message based on transaction type
                 if transaction_type == 'income':
                     # Send savings recommendation
                     savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
                     self.send_message(chat_id, savings_msg, parse_mode='Markdown')
                     
-                    # Send confirmation WITHOUT menu
+                    # Send confirmation
                     if user_lang == 'uk':
                         confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
                     else:
@@ -3312,32 +3326,37 @@ You're now ready to use Finn! 🚀
                     else:
                         message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
                     self.send_message(chat_id, message)
+                    
                 elif transaction_type == 'debt':        
                     if user_lang == 'uk':
                         message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
                     else:
                         message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
                     self.send_message(chat_id, message)
+                    
                 elif transaction_type == 'debt_return':
                     if user_lang == 'uk':
                         message = f"✅ Борг повернено!\n💰 +-{amount:,.0f}₴"
                     else:
                         message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
                     self.send_message(chat_id, message)
+                    
                 elif transaction_type == 'savings_withdraw':
                     if user_lang == 'uk':
                         message = f"✅ Заощадження знято!\n💰 -+{amount:,.0f}₴"
                     else:
                         message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
                     self.send_message(chat_id, message)
-                else:
+                    
+                else:  # expense
                     if user_lang == 'uk':
                         message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     else:
                         message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     self.send_message(chat_id, message)
                 
-                    chat_type = query["message"]["chat"].get("type", "private")
+                # ===== STEP 6: Show menu after transaction in groups =====
+                chat_type = query["message"]["chat"].get("type", "private")
                 if chat_type in ["group", "supergroup"]:
                     user_lang = self.get_user_language(chat_id)
                     if user_lang == 'uk':
@@ -3346,24 +3365,12 @@ You're now ready to use Finn! 🚀
                         menu_msg = "✅ Transaction saved! What's next?"
                     
                     self.show_menu_keyboard(chat_id, menu_msg)
+                # ===== END STEP 6 =====
                 
                 # Clean up pending
                 del self.pending[chat_id]
                 print(f"🔍 DEBUG: Cleared pending for user {chat_id}")
                 
-                # Delete the original message with buttons
-                try:
-                    delete_response = requests.post(f"{BASE_URL}/deleteMessage", json={
-                        "chat_id": chat_id,
-                        "message_id": message_id
-                    })
-                    if delete_response.status_code == 200:
-                        print(f"🔍 DEBUG: Successfully deleted message {message_id}")
-                    else:
-                        print(f"⚠️ Failed to delete message: {delete_response.status_code}")
-                except Exception as e:
-                    print(f"⚠️ Error deleting message: {e}")
-            
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu(chat_id))
