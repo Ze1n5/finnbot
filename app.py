@@ -212,7 +212,7 @@ def debug_savings_categories():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@flask_app.route('/api/financial-data', methods=['GET'])
+@app.route('/api/financial-data', methods=['GET'])
 def api_financial_data():
     try:
         # Get user_id from query parameter
