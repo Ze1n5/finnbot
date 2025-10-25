@@ -3308,52 +3308,53 @@ You're now ready to use Finn! 🚀
                     print(f"⚠️ Error deleting category message: {e}")
                 
                 # Send appropriate confirmation message based on transaction type
+                # Send appropriate confirmation message based on transaction type
                 if transaction_type == 'income':
                     # Send savings recommendation
                     savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
                     self.send_message(chat_id, savings_msg, parse_mode='Markdown')
                     
-                    # Send confirmation
+                    # Send confirmation WITH MENU
                     if user_lang == 'uk':
                         confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
                     else:
                         confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
-                    self.send_message(chat_id, confirmation_msg)
+                    self.send_message(chat_id, confirmation_msg, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings':
                     if user_lang == 'uk':
                         message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}₴"
                     else:
                         message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
-                    self.send_message(chat_id, message)
+                    self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt':        
                     if user_lang == 'uk':
                         message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
                     else:
                         message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
-                    self.send_message(chat_id, message)
+                    self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt_return':
                     if user_lang == 'uk':
                         message = f"✅ Борг повернено!\n💰 +-{amount:,.0f}₴"
                     else:
                         message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
-                    self.send_message(chat_id, message)
+                    self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings_withdraw':
                     if user_lang == 'uk':
                         message = f"✅ Заощадження знято!\n💰 -+{amount:,.0f}₴"
                     else:
                         message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
-                    self.send_message(chat_id, message)
+                    self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 else:  # expense
                     if user_lang == 'uk':
                         message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
                     else:
                         message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
-                    self.send_message(chat_id, message)
+                    self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                 
                 # ===== STEP 6: Show menu after transaction in groups =====
                 chat_type = query["message"]["chat"].get("type", "private")
