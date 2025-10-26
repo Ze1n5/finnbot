@@ -238,11 +238,6 @@ def api_financial_data():
         transaction_count = 0
         recent_transactions = []
 
-        # NEW: Track dates for averages
-        income_dates = set()
-        expense_dates = set()
-        all_dates = set()
-
         # Calculate totals from THIS USER'S transactions only
         for transaction in user_transactions:
             if isinstance(transaction, dict):
@@ -250,31 +245,13 @@ def api_financial_data():
                 trans_type = transaction.get('type', 'expense')
                 description = transaction.get('description', 'Unknown')
                 
-                # Extract date for averages
-                transaction_date = None
-                if 'date' in transaction:
-                    try:
-                        if 'T' in transaction['date']:
-                            transaction_date = transaction['date'].split('T')[0]  # Get YYYY-MM-DD
-                        else:
-                            transaction_date = transaction['date'].split(' ')[0]  # Get YYYY-MM-DD
-                    except:
-                        transaction_date = None
-                
-                if transaction_date:
-                    all_dates.add(transaction_date)
-                
                 # CORRECTED BALANCE CALCULATION
                 if trans_type == 'income':
                     balance += amount
                     total_income += amount
-                    if transaction_date:
-                        income_dates.add(transaction_date)
                 elif trans_type == 'expense':
                     balance -= amount
                     total_expenses += amount
-                    if transaction_date:
-                        expense_dates.add(transaction_date)
                 elif trans_type == 'savings':
                     balance -= amount  # Money moved to savings
                     total_savings += amount
@@ -288,15 +265,6 @@ def api_financial_data():
                 
                 transaction_count += 1
         
-        # NEW: Calculate daily averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = total_income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = total_expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (total_income - total_expenses) / total_days if total_days > 0 else 0
-
         # Get recent transactions for display (last 5)
         for transaction in user_transactions[-5:]:
             if isinstance(transaction, dict):
@@ -346,7 +314,6 @@ def api_financial_data():
                     "amount": amount
                 })
 
-        # Use total_savings for savings display
         actual_savings = total_savings
         
         print("=" * 50)
@@ -355,8 +322,6 @@ def api_financial_data():
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
         print(f"   Total Savings: {actual_savings}")
-        print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
-        print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
         print(f"   Transaction Count: {transaction_count}")
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
@@ -366,10 +331,6 @@ def api_financial_data():
             'income': total_income,
             'spending': total_expenses,
             'savings': actual_savings,
-            'daily_income_avg': daily_income_avg,
-            'daily_expense_avg': daily_expense_avg,
-            'daily_net_avg': daily_net_avg,
-            'tracking_days': total_days,
             'transactions': recent_transactions,
             'transaction_count': transaction_count
         }
@@ -1384,40 +1345,6 @@ def serve_mini_app():
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             text-align: center;
         }
-
-        .averages-section {
-            margin: 15px 0;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            border: 1px solid #e9ecef;
-        }
-
-        .averages-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .average-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1;
-        }
-
-        .average-label {
-            font-size: 12px;
-            color: #6c757d;
-            text-align: center;
-            margin-bottom: 4px;
-        }
-
-        .average-amount {
-            font-size: 14px;
-            font-weight: 600;
-            color: #495057;
-        }
         
         .balance-label {
             font-size: 16px;
@@ -1567,21 +1494,6 @@ def serve_mini_app():
         <div class="balance-card">
             <div class="balance-label">Current Balance</div>
             <div class="balance-amount" id="balanceAmount">0₴</div>
-            
-            <!-- Add Daily Averages Section -->
-            <div class="averages-section" id="averagesSection" style="display: none;">
-                <div class="averages-row">
-                    <div class="average-item">
-                        <div class="average-label">📈 Daily Income</div>
-                        <div class="average-amount" id="dailyIncomeAvg">0₴</div>
-                    </div>
-                    <div class="average-item">
-                        <div class="average-label">📉 Daily Spending</div>
-                        <div class="average-amount" id="dailyExpenseAvg">0₴</div>
-                    </div>
-                </div>
-            </div>
-            
             <div class="income-expense">
                 <div class="expense">
                     <div class="expense-amount" id="expenseAmount">0₴</div>
@@ -1672,24 +1584,6 @@ def serve_mini_app():
             }
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
-            }
-            
-            // Update daily averages
-            const averagesSection = document.getElementById('averagesSection');
-            if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
-                // Show averages section only if we have data
-                averagesSection.style.display = 'block';
-                
-                // Update average amounts
-                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
-                
-                // Color coding for averages
-                document.getElementById('dailyIncomeAvg').style.color = '#34c759';
-                document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
-            } else {
-                // Hide averages if no data
-                averagesSection.style.display = 'none';
             }
         }
         
