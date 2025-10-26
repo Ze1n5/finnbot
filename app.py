@@ -230,6 +230,9 @@ def api_financial_data():
         user_transactions = bot_instance.transactions.get(user_id, [])
         print(f"📊 User {user_id} has {len(user_transactions)} transactions")
         
+        # Calculate financial health FIRST
+        health_score = bot_instance.calculate_financial_health(user_id)
+        health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
         # Initialize totals for THIS USER ONLY
         balance = 0
         total_income = 0
