@@ -184,9 +184,102 @@ def try_save_to_db(self):
         return False
 
 class SimpleFinnBot:
+    def calculate_financial_health(self, user_id):
+        """Calculate financial health score (0-100) with emoji indicator"""
+        user_transactions = self.get_user_transactions(user_id)
+        
+        if not user_transactions or len(user_transactions) < 3:  # Need some data
+            return None  # Not enough data to calculate
+        
+        # Calculate basic metrics
+        total_income = sum(t['amount'] for t in user_transactions if t['type'] == 'income')
+        total_expenses = sum(t['amount'] for t in user_transactions if t['type'] == 'expense')
+        total_savings = sum(t['amount'] for t in user_transactions if t['type'] == 'savings')
+        total_debt = sum(abs(t['amount']) for t in user_transactions if t['type'] in ['debt', 'debt_return'])
+        
+        # Get monthly averages (assuming 30 days for calculation)
+        income_dates = set()
+        expense_dates = set()
+        
+        for transaction in user_transactions:
+            if 'date' in transaction:
+                try:
+                    if 'T' in transaction['date']:
+                        date_str = transaction['date'].split('T')[0]
+                    else:
+                        date_str = transaction['date'].split(' ')[0]
+                    
+                    if transaction['type'] == 'income':
+                        income_dates.add(date_str)
+                    elif transaction['type'] == 'expense':
+                        expense_dates.add(date_str)
+                except:
+                    continue
+        
+        # Calculate component scores (0-100 each)
+        
+        # 1. Emergency Fund Score (40% weight)
+        monthly_expenses = total_expenses / len(expense_dates) * 30 if expense_dates else total_expenses
+        emergency_months = total_savings / monthly_expenses if monthly_expenses > 0 else 0
+        emergency_score = min(emergency_months / 6 * 100, 100)  # 6 months ideal
+        
+        # 2. Savings Rate Score (30% weight)
+        savings_rate = (total_savings / total_income * 100) if total_income > 0 else 0
+        savings_score = min(savings_rate / 20 * 100, 100)  # 20% ideal
+        
+        # 3. Debt-to-Income Score (20% weight)
+        debt_ratio = (total_debt / total_income * 100) if total_income > 0 else 0
+        debt_score = max(100 - (debt_ratio / 0.3), 0) if debt_ratio > 0 else 100  # 30% is warning level
+        
+        # 4. 50/30/20 Score (10% weight)
+        # Get current month's 50/30/20 status
+        user_id_str = str(user_id)
+        if user_id_str in self.monthly_percentages:
+            percentages = self.monthly_percentages[user_id_str]
+            needs_score = max(0, 100 - max(0, percentages.get('needs', 0) - 50) * 2)  # Penalty for over 50%
+            future_score = min(percentages.get('future', 0) / 20 * 100, 100)  # Reward for reaching 20%
+            rule_score = (needs_score + future_score) / 2
+        else:
+            rule_score = 50  # Neutral if no data
+        
+        # Calculate weighted final score
+        final_score = (
+            emergency_score * 0.40 +
+            savings_score * 0.30 + 
+            debt_score * 0.20 +
+            rule_score * 0.10
+        )
+        
+        # Ensure score is between 0-100
+        final_score = max(0, min(100, final_score))
+        
+        return int(final_score)
+
+    def get_financial_health_display(self, score):
+        """Get emoji and display text for financial health score"""
+        if score is None:
+            return "📊 Collecting data...", ""
+        
+        if score <= 20:
+            emoji = "⛺️"
+        elif score <= 40:
+            emoji = "🛖" 
+        elif score <= 60:
+            emoji = "🏚"
+        elif score <= 80:
+            emoji = "🏠"
+        else:
+            emoji = "🏰"
+        
+        return emoji, f"{score}%"
+
     def handle_financial_summary(self, chat_id):
         """Handle Financial Summary button"""
         print(f"🔍 Handling Financial Summary for {chat_id}")
+        
+        # Calculate financial health ONCE at the beginning
+        health_score = self.calculate_financial_health(chat_id)
+        health_emoji, health_display = self.get_financial_health_display(health_score)
         
         user_transactions = self.get_user_transactions(chat_id)
         if not user_transactions:
@@ -205,7 +298,7 @@ class SimpleFinnBot:
         debt_incurred = 0
         debt_returned = 0
         
-        # NEW: Track dates for averages
+        # Track dates for averages
         income_dates = set()
         expense_dates = set()
         all_dates = set()
@@ -247,7 +340,7 @@ class SimpleFinnBot:
         net_debt = debt_incurred - debt_returned
         net_flow = income - expenses - net_savings
         
-        # NEW: Calculate averages
+        # Calculate averages
         total_days = len(all_dates) if all_dates else 1
         total_income_days = len(income_dates) if income_dates else 1
         total_expense_days = len(expense_dates) if expense_dates else 1
@@ -258,8 +351,11 @@ class SimpleFinnBot:
         
         user_lang = self.get_user_language(chat_id)
         
+        # CREATE SUMMARY TEXT ONLY ONCE with all sections
         if user_lang == 'uk':
             summary_text = f"""📊 *Фінансовий звіт*
+
+    💎 *Фінансове здоров'я:* {health_emoji} {health_display}
 
     💸 *Аналіз готівкового потоку:*
     Дохід: {income:,.0f}₴
@@ -282,13 +378,15 @@ class SimpleFinnBot:
                 if debt_returned > 0:
                     summary_text += f"\n   Повернено: {debt_returned:,.0f}₴"
                 summary_text += f"\n   Чистий борг: {net_debt:,.0f}₴"
-                
+            
             # Add context about tracking period
             if all_dates:
                 summary_text += f"\n\n📅 *Період відстеження:* {len(all_dates)} днів"
             
         else:
             summary_text = f"""📊 *Financial Summary*
+
+    💎 *Financial Health:* {health_emoji} {health_display}
 
     💸 *Cash Flow Analysis:*
     Income: {income:,.0f}₴
@@ -311,13 +409,12 @@ class SimpleFinnBot:
                 if debt_returned > 0:
                     summary_text += f"\n   Returned: {debt_returned:,.0f}₴"
                 summary_text += f"\n   Net Debt: {net_debt:,.0f}₴"
-                
+            
             # Add context about tracking period
             if all_dates:
                 summary_text += f"\n\n📅 *Tracking Period:* {len(all_dates)} days"
         
         self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
-
     def handle_503020_status(self, chat_id):
         """Handle 50/30/20 Status button"""
         print(f"🔍 Handling 50/30/20 Status for {chat_id}")
