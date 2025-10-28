@@ -1374,6 +1374,7 @@ def serve_mini_app():
             background-color: #f5f5f7;
             color: #1d1d1f;
             overflow: hidden;
+            touch-action: pan-y;
         }
         
         .app-container {
@@ -1381,6 +1382,7 @@ def serve_mini_app():
             width: 200%;
             height: 100vh;
             transition: transform 0.3s ease;
+            transform: translateX(0%);
         }
         
         .screen {
@@ -1747,6 +1749,22 @@ def serve_mini_app():
             font-size: 12px;
             opacity: 0.9;
         }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+
+        .nav-button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -1798,6 +1816,11 @@ def serve_mini_app():
                 
                 <div class="transactions" id="transactionsContainer">
                     <div class="loading">Loading transactions...</div>
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-button" onclick="showScreen(0)">← Dashboard</button>
+                    <button class="nav-button" onclick="showScreen(1)">Budget Report →</button>
                 </div>
             </div>
         </div>
@@ -1885,6 +1908,11 @@ def serve_mini_app():
                     <div class="tip-title">💡 Budget Tip</div>
                     <div class="tip-content" id="budgetTip">Track your expenses regularly to stay within your budget goals. Small adjustments can make a big difference!</div>
                 </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-button" onclick="showScreen(0)">← Dashboard</button>
+                    <button class="nav-button" onclick="showScreen(1)">Budget Report →</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1896,34 +1924,32 @@ def serve_mini_app():
 
         let currentScreen = 0;
         let startX = 0;
-        let currentX = 0;
 
-        // Swipe handling
+        // Swipe handling - FIXED VERSION
         function setupSwipe() {
             const container = document.getElementById('appContainer');
             
             container.addEventListener('touchstart', (e) => {
                 startX = e.touches[0].clientX;
-            });
+            }, { passive: true });
             
-            container.addEventListener('touchmove', (e) => {
-                currentX = e.touches[0].clientX;
-            });
-            
-            container.addEventListener('touchend', () => {
-                const diff = startX - currentX;
+            container.addEventListener('touchend', (e) => {
+                const endX = e.changedTouches[0].clientX;
+                const diff = startX - endX;
                 const threshold = 50;
                 
+                console.log('Swipe detected:', { startX, endX, diff, currentScreen });
+                
                 if (Math.abs(diff) > threshold) {
-                    if (diff > 0 && currentScreen === 1) {
-                        // Swipe left - go to screen 1
-                        showScreen(0);
-                    } else if (diff < 0 && currentScreen === 0) {
-                        // Swipe right - go to screen 2
+                    if (diff > 0 && currentScreen === 0) {
+                        // Swipe left - go to screen 2
                         showScreen(1);
+                    } else if (diff < 0 && currentScreen === 1) {
+                        // Swipe right - go to screen 1
+                        showScreen(0);
                     }
                 }
-            });
+            }, { passive: true });
         }
 
         function showScreen(screenIndex) {
@@ -1937,6 +1963,8 @@ def serve_mini_app():
             dots.forEach((dot, index) => {
                 dot.classList.toggle('active', index === screenIndex);
             });
+            
+            console.log('Switched to screen:', screenIndex);
         }
 
         // Get user information from Telegram
@@ -1954,7 +1982,7 @@ def serve_mini_app():
             }
         }
 
-        // Load financial data and transactions
+        // Load financial data and transactions - FIXED VERSION
         async function loadFinancialData() {
             try {
                 // Get user ID from Telegram
@@ -1967,34 +1995,53 @@ def serve_mini_app():
 
                 console.log('Loading data for user:', user_id);
 
-                // Load balance and totals WITH user_id parameter
+                // Load balance and totals
                 const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
+                console.log('Finance response status:', financeResponse.status);
+                
+                if (!financeResponse.ok) {
+                    throw new Error(`HTTP error! status: ${financeResponse.status}`);
+                }
+                
                 const financeData = await financeResponse.json();
+                console.log('Finance data received:', financeData);
                 
-                if (financeResponse.ok) {
-                    updateFinancialDisplay(financeData);
-                    updateBudgetReport(financeData);
-                } else {
-                    showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
-                }
+                updateFinancialDisplay(financeData);
+                updateBudgetReport(financeData);
                 
-                // Load transactions WITH user_id parameter
+                // Load transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
-                const transactionsData = await transactionsResponse.json();
+                console.log('Transactions response status:', transactionsResponse.status);
                 
-                if (transactionsResponse.ok) {
-                    renderTransactions(transactionsData.transactions || transactionsData);
-                } else {
-                    showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
+                if (!transactionsResponse.ok) {
+                    throw new Error(`HTTP error! status: ${transactionsResponse.status}`);
                 }
+                
+                const transactionsData = await transactionsResponse.json();
+                console.log('Transactions data received:', transactionsData);
+                
+                // Handle different response structures
+                let transactions = [];
+                if (Array.isArray(transactionsData)) {
+                    transactions = transactionsData;
+                } else if (transactionsData.transactions && Array.isArray(transactionsData.transactions)) {
+                    transactions = transactionsData.transactions;
+                } else if (transactionsData.data && Array.isArray(transactionsData.data)) {
+                    transactions = transactionsData.data;
+                }
+                
+                console.log('Processed transactions:', transactions);
+                renderTransactions(transactions);
                 
             } catch (error) {
                 console.error('Error loading data:', error);
-                showError('Network error - please check your connection');
+                showError('Failed to load data: ' + error.message);
             }
         }
         
         function updateFinancialDisplay(data) {
+            console.log('Updating financial display with:', data);
+            
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
             if (data.balance !== undefined) {
@@ -2042,10 +2089,9 @@ def serve_mini_app():
             const recommendedSavings = totalIncome * 0.2;
             
             // For demo purposes, let's assume some distribution
-            // In a real app, you'd categorize expenses from your data
-            const actualNeeds = totalSpending * 0.6; // Example: 60% on needs
-            const actualWants = totalSpending * 0.3; // Example: 30% on wants
-            const actualSavings = totalSpending * 0.1; // Example: 10% on savings
+            const actualNeeds = totalSpending * 0.6;
+            const actualWants = totalSpending * 0.3;
+            const actualSavings = totalSpending * 0.1;
             
             // Calculate percentages
             const needsPercentage = totalIncome > 0 ? Math.min((actualNeeds / recommendedNeeds) * 100, 100) : 0;
@@ -2070,7 +2116,6 @@ def serve_mini_app():
             document.getElementById('recommendedWants').textContent = `${Math.round(recommendedWants).toLocaleString()}₴`;
             document.getElementById('recommendedSavings').textContent = `${Math.round(recommendedSavings).toLocaleString()}₴`;
             
-            // Update budget tip based on performance
             updateBudgetTip(needsPercentage, wantsPercentage, savingsPercentage);
         }
         
@@ -2114,12 +2159,14 @@ def serve_mini_app():
             let transactionsHTML = '';
             
             transactions.forEach(transaction => {
-                const amount = transaction.amount;
+                console.log('Processing transaction:', transaction);
+                
+                const amount = transaction.amount || 0;
                 const isPositive = amount >= 0;
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
-                const displayName = transaction.name || transaction.category || 'Transaction';
-                const displayDescription = transaction.description || '';
+                const displayName = transaction.name || transaction.category || transaction.description || 'Transaction';
+                const displayDescription = transaction.description || transaction.category || '';
                 
                 transactionsHTML += `
                     <div class="transaction">
