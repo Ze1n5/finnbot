@@ -453,7 +453,7 @@ class SimpleFinnBot:
 
 💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
 
-    """
+"""
             # Add status indicators
             if needs_pct <= 50:
                 summary += "✅ Потреби в межах цілі\n\n"

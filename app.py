@@ -1372,13 +1372,46 @@ def serve_mini_app():
         
         body {
             background-color: #f5f5f7;
-            padding: 20px;
             color: #1d1d1f;
+            overflow: hidden;
+        }
+        
+        .app-container {
+            display: flex;
+            width: 200%;
+            height: 100vh;
+            transition: transform 0.3s ease;
+        }
+        
+        .screen {
+            width: 50%;
+            height: 100vh;
+            padding: 20px;
+            overflow-y: auto;
         }
         
         .container {
             max-width: 400px;
             margin: 0 auto;
+        }
+        
+        .screen-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #c7c7cc;
+            transition: background 0.3s ease;
+        }
+        
+        .dot.active {
+            background: #007aff;
         }
         
         .balance-card {
@@ -1581,50 +1614,278 @@ def serve_mini_app():
             font-size: 14px;
             color: #8e8e93;
         }
+
+        /* 50/30/20 Report Styles */
+        .report-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .report-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .report-subtitle {
+            font-size: 14px;
+            color: #8e8e93;
+        }
+
+        .budget-category {
+            margin-bottom: 20px;
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .category-title {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .category-percentage {
+            font-size: 14px;
+            font-weight: 500;
+            color: #8e8e93;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #f2f2f7;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-needs {
+            background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+        }
+
+        .progress-wants {
+            background: linear-gradient(90deg, #4ecdc4, #88d3ce);
+        }
+
+        .progress-savings {
+            background: linear-gradient(90deg, #45b7d1, #7bcae4);
+        }
+
+        .category-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #8e8e93;
+        }
+
+        .category-amount {
+            font-weight: 500;
+        }
+
+        .budget-summary {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .summary-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-label {
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .summary-value {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .tip-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .tip-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .tip-content {
+            font-size: 12px;
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="user-info" id="userInfo">
-            Loading user info...
-        </div>
-        
-        <div class="balance-card">
-            <div class="health-indicator" id="healthIndicator" style="display: none;">
-                <div class="health-label">Financial Health</div>
-                <div class="health-display" id="healthDisplay">⛺️ 0%</div>
-            </div>
-            <div class="balance-label">Current Balance</div>
-            <div class="balance-amount" id="balanceAmount">0₴</div>
-            
-            <!-- Add Daily Averages Section -->
-            <div class="averages-section" id="averagesSection" style="display: none;">
-                <div class="averages-row">
-                    <div class="average-item">
-                        <div class="average-label">📈 Daily Income</div>
-                        <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+    <div class="app-container" id="appContainer">
+        <!-- Screen 1: Main Dashboard -->
+        <div class="screen" id="screen1">
+            <div class="container">
+                <div class="screen-indicator">
+                    <div class="dot active"></div>
+                    <div class="dot"></div>
+                </div>
+                
+                <div class="user-info" id="userInfo">
+                    Loading user info...
+                </div>
+                
+                <div class="balance-card">
+                    <div class="health-indicator" id="healthIndicator" style="display: none;">
+                        <div class="health-label">Financial Health</div>
+                        <div class="health-display" id="healthDisplay">⛺️ 0%</div>
                     </div>
-                    <div class="average-item">
-                        <div class="average-label">📉 Daily Spending</div>
-                        <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                    <div class="balance-label">Current Balance</div>
+                    <div class="balance-amount" id="balanceAmount">0₴</div>
+                    
+                    <div class="averages-section" id="averagesSection" style="display: none;">
+                        <div class="averages-row">
+                            <div class="average-item">
+                                <div class="average-label">📈 Daily Income</div>
+                                <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+                            </div>
+                            <div class="average-item">
+                                <div class="average-label">📉 Daily Spending</div>
+                                <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="income-expense">
+                        <div class="expense">
+                            <div class="expense-amount" id="expenseAmount">0₴</div>
+                            <div class="expense-label">Spending</div>
+                        </div>
+                        <div class="income">
+                            <div class="income-amount" id="incomeAmount">0₴</div>
+                            <div class="income-label">Income</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="income-expense">
-                <div class="expense">
-                    <div class="expense-amount" id="expenseAmount">0₴</div>
-                    <div class="expense-label">Spending</div>
-                </div>
-                <div class="income">
-                    <div class="income-amount" id="incomeAmount">0₴</div>
-                    <div class="income-label">Income</div>
+                
+                <div class="transactions" id="transactionsContainer">
+                    <div class="loading">Loading transactions...</div>
                 </div>
             </div>
         </div>
-        
-        <div class="transactions" id="transactionsContainer">
-            <div class="loading">Loading transactions...</div>
+
+        <!-- Screen 2: 50/30/20 Report -->
+        <div class="screen" id="screen2">
+            <div class="container">
+                <div class="screen-indicator">
+                    <div class="dot"></div>
+                    <div class="dot active"></div>
+                </div>
+                
+                <div class="report-card">
+                    <div class="report-header">
+                        <div class="report-title">50/30/20 Budget</div>
+                        <div class="report-subtitle">Smart Spending Guide</div>
+                    </div>
+
+                    <!-- Needs - 50% -->
+                    <div class="budget-category">
+                        <div class="category-header">
+                            <div class="category-title">🏠 Needs (50%)</div>
+                            <div class="category-percentage" id="needsPercentage">0%</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-needs" id="needsProgress" style="width: 0%"></div>
+                        </div>
+                        <div class="category-stats">
+                            <span>Essential expenses</span>
+                            <span class="category-amount" id="needsAmount">0₴ / 0₴</span>
+                        </div>
+                    </div>
+
+                    <!-- Wants - 30% -->
+                    <div class="budget-category">
+                        <div class="category-header">
+                            <div class="category-title">🎯 Wants (30%)</div>
+                            <div class="category-percentage" id="wantsPercentage">0%</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-wants" id="wantsProgress" style="width: 0%"></div>
+                        </div>
+                        <div class="category-stats">
+                            <span>Lifestyle & fun</span>
+                            <span class="category-amount" id="wantsAmount">0₴ / 0₴</span>
+                        </div>
+                    </div>
+
+                    <!-- Savings - 20% -->
+                    <div class="budget-category">
+                        <div class="category-header">
+                            <div class="category-title">💰 Savings (20%)</div>
+                            <div class="category-percentage" id="savingsPercentage">0%</div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-savings" id="savingsProgress" style="width: 0%"></div>
+                        </div>
+                        <div class="category-stats">
+                            <span>Future & debt</span>
+                            <span class="category-amount" id="savingsAmount">0₴ / 0₴</span>
+                        </div>
+                    </div>
+
+                    <div class="budget-summary">
+                        <div class="summary-item">
+                            <span class="summary-label">Total Income:</span>
+                            <span class="summary-value" id="totalIncome">0₴</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Recommended Needs:</span>
+                            <span class="summary-value" id="recommendedNeeds">0₴</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Recommended Wants:</span>
+                            <span class="summary-value" id="recommendedWants">0₴</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-label">Recommended Savings:</span>
+                            <span class="summary-value" id="recommendedSavings">0₴</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-card">
+                    <div class="tip-title">💡 Budget Tip</div>
+                    <div class="tip-content" id="budgetTip">Track your expenses regularly to stay within your budget goals. Small adjustments can make a big difference!</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1632,6 +1893,51 @@ def serve_mini_app():
         // Initialize Telegram WebApp
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
+
+        let currentScreen = 0;
+        let startX = 0;
+        let currentX = 0;
+
+        // Swipe handling
+        function setupSwipe() {
+            const container = document.getElementById('appContainer');
+            
+            container.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+            });
+            
+            container.addEventListener('touchmove', (e) => {
+                currentX = e.touches[0].clientX;
+            });
+            
+            container.addEventListener('touchend', () => {
+                const diff = startX - currentX;
+                const threshold = 50;
+                
+                if (Math.abs(diff) > threshold) {
+                    if (diff > 0 && currentScreen === 1) {
+                        // Swipe left - go to screen 1
+                        showScreen(0);
+                    } else if (diff < 0 && currentScreen === 0) {
+                        // Swipe right - go to screen 2
+                        showScreen(1);
+                    }
+                }
+            });
+        }
+
+        function showScreen(screenIndex) {
+            currentScreen = screenIndex;
+            const container = document.getElementById('appContainer');
+            const dots = document.querySelectorAll('.dot');
+            
+            container.style.transform = `translateX(-${screenIndex * 50}%)`;
+            
+            // Update dots
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === screenIndex);
+            });
+        }
 
         // Get user information from Telegram
         function getUserInfo() {
@@ -1667,6 +1973,7 @@ def serve_mini_app():
                 
                 if (financeResponse.ok) {
                     updateFinancialDisplay(financeData);
+                    updateBudgetReport(financeData);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
@@ -1706,20 +2013,15 @@ def serve_mini_app():
             // Update daily averages
             const averagesSection = document.getElementById('averagesSection');
             if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
-                // Show averages section only if we have data
                 averagesSection.style.display = 'block';
-                
-                // Update average amounts
                 document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
                 document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
-                
-                // Color coding for averages
                 document.getElementById('dailyIncomeAvg').style.color = '#34c759';
                 document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
             } else {
-                // Hide averages if no data
                 averagesSection.style.display = 'none';
             }
+            
             const healthIndicator = document.getElementById('healthIndicator');
             if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
                 healthIndicator.style.display = 'block';
@@ -1728,6 +2030,67 @@ def serve_mini_app():
             } else {
                 healthIndicator.style.display = 'none';
             }
+        }
+        
+        function updateBudgetReport(data) {
+            const totalIncome = data.income || 0;
+            const totalSpending = data.spending || 0;
+            
+            // Calculate recommended amounts
+            const recommendedNeeds = totalIncome * 0.5;
+            const recommendedWants = totalIncome * 0.3;
+            const recommendedSavings = totalIncome * 0.2;
+            
+            // For demo purposes, let's assume some distribution
+            // In a real app, you'd categorize expenses from your data
+            const actualNeeds = totalSpending * 0.6; // Example: 60% on needs
+            const actualWants = totalSpending * 0.3; // Example: 30% on wants
+            const actualSavings = totalSpending * 0.1; // Example: 10% on savings
+            
+            // Calculate percentages
+            const needsPercentage = totalIncome > 0 ? Math.min((actualNeeds / recommendedNeeds) * 100, 100) : 0;
+            const wantsPercentage = totalIncome > 0 ? Math.min((actualWants / recommendedWants) * 100, 100) : 0;
+            const savingsPercentage = totalIncome > 0 ? Math.min((actualSavings / recommendedSavings) * 100, 100) : 0;
+            
+            // Update UI
+            document.getElementById('needsPercentage').textContent = `${Math.round(needsPercentage)}%`;
+            document.getElementById('wantsPercentage').textContent = `${Math.round(wantsPercentage)}%`;
+            document.getElementById('savingsPercentage').textContent = `${Math.round(savingsPercentage)}%`;
+            
+            document.getElementById('needsProgress').style.width = `${needsPercentage}%`;
+            document.getElementById('wantsProgress').style.width = `${wantsPercentage}%`;
+            document.getElementById('savingsProgress').style.width = `${savingsPercentage}%`;
+            
+            document.getElementById('needsAmount').textContent = `${Math.round(actualNeeds).toLocaleString()}₴ / ${Math.round(recommendedNeeds).toLocaleString()}₴`;
+            document.getElementById('wantsAmount').textContent = `${Math.round(actualWants).toLocaleString()}₴ / ${Math.round(recommendedWants).toLocaleString()}₴`;
+            document.getElementById('savingsAmount').textContent = `${Math.round(actualSavings).toLocaleString()}₴ / ${Math.round(recommendedSavings).toLocaleString()}₴`;
+            
+            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()}₴`;
+            document.getElementById('recommendedNeeds').textContent = `${Math.round(recommendedNeeds).toLocaleString()}₴`;
+            document.getElementById('recommendedWants').textContent = `${Math.round(recommendedWants).toLocaleString()}₴`;
+            document.getElementById('recommendedSavings').textContent = `${Math.round(recommendedSavings).toLocaleString()}₴`;
+            
+            // Update budget tip based on performance
+            updateBudgetTip(needsPercentage, wantsPercentage, savingsPercentage);
+        }
+        
+        function updateBudgetTip(needs, wants, savings) {
+            const tipElement = document.getElementById('budgetTip');
+            let tip = '';
+            
+            if (needs > 100) {
+                tip = 'Your essential expenses are above the recommended 50%. Consider reviewing recurring bills and necessary costs.';
+            } else if (wants > 100) {
+                tip = 'Lifestyle spending is high. Try to identify areas where you can reduce discretionary expenses.';
+            } else if (savings < 50) {
+                tip = 'Your savings rate is low. Even small regular contributions to savings can build financial security.';
+            } else if (savings >= 80) {
+                tip = 'Great job on savings! You\'re building a strong financial foundation for your future.';
+            } else {
+                tip = 'Track your expenses regularly to stay within your budget goals. Small adjustments can make a big difference!';
+            }
+            
+            tipElement.textContent = tip;
         }
         
         function renderTransactions(transactions) {
@@ -1755,7 +2118,6 @@ def serve_mini_app():
                 const isPositive = amount >= 0;
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
-                // Handle different possible data structures
                 const displayName = transaction.name || transaction.category || 'Transaction';
                 const displayDescription = transaction.description || '';
                 
@@ -1786,6 +2148,7 @@ def serve_mini_app():
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
+            setupSwipe();
             loadFinancialData();
         });
         
