@@ -230,6 +230,9 @@ def api_financial_data():
         user_transactions = bot_instance.transactions.get(user_id, [])
         print(f"📊 User {user_id} has {len(user_transactions)} transactions")
         
+        # Calculate financial health FIRST
+        health_score = bot_instance.calculate_financial_health(user_id)
+        health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
         # Initialize totals for THIS USER ONLY
         balance = 0
         total_income = 0
@@ -370,6 +373,8 @@ def api_financial_data():
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
             'tracking_days': total_days,
+            'financial_health': health_score,
+            'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count
         }
@@ -1385,6 +1390,26 @@ def serve_mini_app():
             text-align: center;
         }
 
+        .health-indicator {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            color: white;
+        }
+
+        .health-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 2px;
+        }
+
+        .health-display {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
         .averages-section {
             margin: 15px 0;
             padding: 12px;
@@ -1565,6 +1590,10 @@ def serve_mini_app():
         </div>
         
         <div class="balance-card">
+            <div class="health-indicator" id="healthIndicator" style="display: none;">
+                <div class="health-label">Financial Health</div>
+                <div class="health-display" id="healthDisplay">⛺️ 0%</div>
+            </div>
             <div class="balance-label">Current Balance</div>
             <div class="balance-amount" id="balanceAmount">0₴</div>
             
@@ -1690,6 +1719,14 @@ def serve_mini_app():
             } else {
                 // Hide averages if no data
                 averagesSection.style.display = 'none';
+            }
+            const healthIndicator = document.getElementById('healthIndicator');
+            if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
+                healthIndicator.style.display = 'block';
+                document.getElementById('healthDisplay').textContent = 
+                    `${data.financial_health_emoji} ${data.financial_health}%`;
+            } else {
+                healthIndicator.style.display = 'none';
             }
         }
         
