@@ -527,9 +527,19 @@ class SimpleFinnBot:
         }
         
         for i, transaction in enumerate(user_transactions):
-            transactions_by_type[transaction['type']].append((i, transaction))
+            # Validate transaction has required fields
+            if not isinstance(transaction, dict):
+                print(f"⚠️ Warning: Transaction {i} is not a dictionary: {transaction}")
+                continue
+                
+            trans_type = transaction.get('type', 'unknown')
+            if trans_type in transactions_by_type:
+                transactions_by_type[trans_type].append((i, transaction))
+            else:
+                print(f"⚠️ Warning: Unknown transaction type '{trans_type}' for transaction {i}")
         
         user_lang = self.get_user_language(chat_id)
+        print(f"🌐 User language detected: {user_lang}")
         
         if user_lang == 'uk':
             delete_text = "🗑️ *Оберіть транзакцію для видалення*\n\n"
@@ -568,43 +578,47 @@ class SimpleFinnBot:
                     delete_text += f"*{category_names.get(trans_type, trans_type)}:*\n"
                 
                 for idx, transaction in transactions:
-                    # Format transaction details based on language
-                    if user_lang == 'uk':
-                        amount_text = f"{transaction['amount']} {transaction['currency']}"
-                        if trans_type == 'income':
-                            desc = f"Дохід: {transaction.get('description', 'Без опису')}"
-                        elif trans_type == 'expense':
-                            desc = f"Витрата: {transaction.get('description', 'Без опису')}"
-                        elif trans_type == 'savings':
-                            desc = f"Збереження: {transaction.get('description', 'Без опису')}"
-                        elif trans_type == 'debt':
-                            desc = f"Борг: {transaction.get('description', 'Без опису')}"
-                        elif trans_type == 'debt_return':
-                            desc = f"Повернення боргу: {transaction.get('description', 'Без опису')}"
-                        elif trans_type == 'savings_withdraw':
-                            desc = f"Зняття: {transaction.get('description', 'Без опису')}"
+                    try:
+                        # Safely get amount and currency with defaults
+                        amount = transaction.get('amount', 0)
+                        currency = transaction.get('currency', 'USD')  # Default to USD if missing
+                        
+                        if user_lang == 'uk':
+                            amount_text = f"{amount} {currency}"
+                            # Ukrainian descriptions
+                            desc_mapping = {
+                                'income': "Дохід",
+                                'expense': "Витрата",
+                                'savings': "Збереження",
+                                'debt': "Борг", 
+                                'debt_return': "Повернення боргу",
+                                'savings_withdraw': "Зняття"
+                            }
+                            desc_prefix = desc_mapping.get(trans_type, "Транзакція")
+                            desc = f"{desc_prefix}: {transaction.get('description', 'Без опису')}"
                         else:
-                            desc = transaction.get('description', 'Без опису')
-                    else:
-                        amount_text = f"{transaction['amount']} {transaction['currency']}"
-                        if trans_type == 'income':
-                            desc = f"Income: {transaction.get('description', 'No description')}"
-                        elif trans_type == 'expense':
-                            desc = f"Expense: {transaction.get('description', 'No description')}"
-                        elif trans_type == 'savings':
-                            desc = f"Savings: {transaction.get('description', 'No description')}"
-                        elif trans_type == 'debt':
-                            desc = f"Debt: {transaction.get('description', 'No description')}"
-                        elif trans_type == 'debt_return':
-                            desc = f"Debt Return: {transaction.get('description', 'No description')}"
-                        elif trans_type == 'savings_withdraw':
-                            desc = f"Withdrawal: {transaction.get('description', 'No description')}"
-                        else:
-                            desc = transaction.get('description', 'No description')
-                    
-                    delete_text += f"`{current_number}` - {amount_text} | {desc}\n"
-                    transaction_map[current_number] = idx
-                    current_number += 1
+                            amount_text = f"{amount} {currency}"
+                            # English descriptions
+                            desc_mapping = {
+                                'income': "Income",
+                                'expense': "Expense",
+                                'savings': "Savings",
+                                'debt': "Debt",
+                                'debt_return': "Debt Return", 
+                                'savings_withdraw': "Withdrawal"
+                            }
+                            desc_prefix = desc_mapping.get(trans_type, "Transaction")
+                            desc = f"{desc_prefix}: {transaction.get('description', 'No description')}"
+                        
+                        delete_text += f"`{current_number}` - {amount_text} | {desc}\n"
+                        transaction_map[current_number] = idx
+                        current_number += 1
+                        
+                    except Exception as e:
+                        print(f"❌ Error processing transaction {idx}: {e}")
+                        print(f"📄 Transaction data: {transaction}")
+                        continue
+                
                 delete_text += "\n"
         
         # Add final instruction based on language
@@ -613,17 +627,36 @@ class SimpleFinnBot:
         else:
             delete_text += "\n_Enter the transaction number to delete:_"
         
+        # Initialize user_states if not exists
+        if not hasattr(self, 'user_states'):
+            self.user_states = {}
+        if chat_id not in self.user_states:
+            self.user_states[chat_id] = {}
+        
         # Store transaction map for this user
         self.user_states[chat_id]['delete_transaction_map'] = transaction_map
         
         # Update user state
         self.user_states[chat_id]['state'] = 'awaiting_delete_transaction'
         
-        # Send the message with appropriate reply markup
-        if user_lang == 'uk':
-            self.send_message(chat_id, delete_text, reply_markup=self.get_cancel_keyboard('uk'))
-        else:
-            self.send_message(chat_id, delete_text, reply_markup=self.get_cancel_keyboard('en'))
+        print(f"📝 Setting state to 'awaiting_delete_transaction' for {chat_id}")
+        print(f"🗺️ Transaction map has {len(transaction_map)} entries")
+        
+        try:
+            # Send the message with appropriate reply markup
+            if user_lang == 'uk':
+                self.send_message(chat_id, delete_text, reply_markup=self.get_cancel_keyboard('uk'))
+                print("✅ Sent Ukrainian delete transaction message")
+            else:
+                self.send_message(chat_id, delete_text, reply_markup=self.get_cancel_keyboard('en'))
+                print("✅ Sent English delete transaction message")
+        except Exception as e:
+            print(f"❌ Error sending delete transaction message: {e}")
+            # Fallback message
+            if user_lang == 'uk':
+                self.send_message(chat_id, "❌ Сталася помилка при завантаженні транзакцій.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                self.send_message(chat_id, "❌ An error occurred while loading transactions.", reply_markup=self.get_main_menu(chat_id))
 
     def handle_manage_categories(self, chat_id):
         """Handle Manage Categories button"""
