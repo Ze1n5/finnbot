@@ -1375,6 +1375,8 @@ def serve_mini_app():
             color: #1d1d1f;
             overflow: hidden;
             touch-action: pan-y;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
         .app-container {
@@ -1395,6 +1397,7 @@ def serve_mini_app():
         .container {
             max-width: 400px;
             margin: 0 auto;
+            position: relative;
         }
         
         .screen-indicator {
@@ -1489,6 +1492,7 @@ def serve_mini_app():
             font-size: 36px;
             font-weight: 600;
             margin-bottom: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .income-expense {
@@ -1506,12 +1510,14 @@ def serve_mini_app():
             color: #34c759;
             font-size: 18px;
             font-weight: 600;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .expense-amount {
             color: #ff3b30;
             font-size: 18px;
             font-weight: 600;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .income-label, .expense-label {
@@ -1525,6 +1531,7 @@ def serve_mini_app():
             border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
         }
         
         .transaction {
@@ -1584,6 +1591,7 @@ def serve_mini_app():
             text-align: right;
             flex-shrink: 0;
             margin-left: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .amount-negative {
@@ -1702,6 +1710,7 @@ def serve_mini_app():
 
         .category-amount {
             font-weight: 500;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .budget-summary {
@@ -1729,6 +1738,7 @@ def serve_mini_app():
         .summary-value {
             font-size: 14px;
             font-weight: 500;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .tip-card {
@@ -1754,20 +1764,44 @@ def serve_mini_app():
             display: flex;
             justify-content: space-between;
             margin-top: 15px;
+            position: relative;
+            z-index: 1000;
         }
 
         .nav-button {
             background: #007aff;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 10px;
+            padding: 12px 20px;
+            border-radius: 12px;
             font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
+            transition: background 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+            z-index: 1001;
+        }
+
+        .nav-button:active {
+            background: #0056cc;
+            transform: scale(0.98);
+        }
+
+        .debug-info {
+            background: #ffeb3b;
+            color: #333;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            display: none;
         }
     </style>
 </head>
 <body>
+    <div class="debug-info" id="debugInfo"></div>
+    
     <div class="app-container" id="appContainer">
         <!-- Screen 1: Main Dashboard -->
         <div class="screen" id="screen1">
@@ -1787,28 +1821,28 @@ def serve_mini_app():
                         <div class="health-display" id="healthDisplay">⛺️ 0%</div>
                     </div>
                     <div class="balance-label">Current Balance</div>
-                    <div class="balance-amount" id="balanceAmount">0₴</div>
+                    <div class="balance-amount" id="balanceAmount">0 ₴</div>
                     
                     <div class="averages-section" id="averagesSection" style="display: none;">
                         <div class="averages-row">
                             <div class="average-item">
                                 <div class="average-label">📈 Daily Income</div>
-                                <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+                                <div class="average-amount" id="dailyIncomeAvg">0 ₴</div>
                             </div>
                             <div class="average-item">
                                 <div class="average-label">📉 Daily Spending</div>
-                                <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                                <div class="average-amount" id="dailyExpenseAvg">0 ₴</div>
                             </div>
                         </div>
                     </div>
                     
                     <div class="income-expense">
                         <div class="expense">
-                            <div class="expense-amount" id="expenseAmount">0₴</div>
+                            <div class="expense-amount" id="expenseAmount">0 ₴</div>
                             <div class="expense-label">Spending</div>
                         </div>
                         <div class="income">
-                            <div class="income-amount" id="incomeAmount">0₴</div>
+                            <div class="income-amount" id="incomeAmount">0 ₴</div>
                             <div class="income-label">Income</div>
                         </div>
                     </div>
@@ -1850,7 +1884,7 @@ def serve_mini_app():
                         </div>
                         <div class="category-stats">
                             <span>Essential expenses</span>
-                            <span class="category-amount" id="needsAmount">0₴ / 0₴</span>
+                            <span class="category-amount" id="needsAmount">0 ₴ / 0 ₴</span>
                         </div>
                     </div>
 
@@ -1865,7 +1899,7 @@ def serve_mini_app():
                         </div>
                         <div class="category-stats">
                             <span>Lifestyle & fun</span>
-                            <span class="category-amount" id="wantsAmount">0₴ / 0₴</span>
+                            <span class="category-amount" id="wantsAmount">0 ₴ / 0 ₴</span>
                         </div>
                     </div>
 
@@ -1880,26 +1914,26 @@ def serve_mini_app():
                         </div>
                         <div class="category-stats">
                             <span>Future & debt</span>
-                            <span class="category-amount" id="savingsAmount">0₴ / 0₴</span>
+                            <span class="category-amount" id="savingsAmount">0 ₴ / 0 ₴</span>
                         </div>
                     </div>
 
                     <div class="budget-summary">
                         <div class="summary-item">
                             <span class="summary-label">Total Income:</span>
-                            <span class="summary-value" id="totalIncome">0₴</span>
+                            <span class="summary-value" id="totalIncome">0 ₴</span>
                         </div>
                         <div class="summary-item">
                             <span class="summary-label">Recommended Needs:</span>
-                            <span class="summary-value" id="recommendedNeeds">0₴</span>
+                            <span class="summary-value" id="recommendedNeeds">0 ₴</span>
                         </div>
                         <div class="summary-item">
                             <span class="summary-label">Recommended Wants:</span>
-                            <span class="summary-value" id="recommendedWants">0₴</span>
+                            <span class="summary-value" id="recommendedWants">0 ₴</span>
                         </div>
                         <div class="summary-item">
                             <span class="summary-label">Recommended Savings:</span>
-                            <span class="summary-value" id="recommendedSavings">0₴</span>
+                            <span class="summary-value" id="recommendedSavings">0 ₴</span>
                         </div>
                     </div>
                 </div>
@@ -1918,6 +1952,20 @@ def serve_mini_app():
     </div>
 
     <script>
+        // Debug mode
+        const DEBUG = true;
+        
+        function debugLog(message) {
+            if (DEBUG) {
+                console.log('🔍 DEBUG:', message);
+                const debugInfo = document.getElementById('debugInfo');
+                if (debugInfo) {
+                    debugInfo.style.display = 'block';
+                    debugInfo.textContent = message;
+                }
+            }
+        }
+
         // Initialize Telegram WebApp
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
@@ -1925,7 +1973,7 @@ def serve_mini_app():
         let currentScreen = 0;
         let startX = 0;
 
-        // Swipe handling - FIXED VERSION
+        // Simple swipe handling
         function setupSwipe() {
             const container = document.getElementById('appContainer');
             
@@ -1938,14 +1986,10 @@ def serve_mini_app():
                 const diff = startX - endX;
                 const threshold = 50;
                 
-                console.log('Swipe detected:', { startX, endX, diff, currentScreen });
-                
                 if (Math.abs(diff) > threshold) {
                     if (diff > 0 && currentScreen === 0) {
-                        // Swipe left - go to screen 2
                         showScreen(1);
                     } else if (diff < 0 && currentScreen === 1) {
-                        // Swipe right - go to screen 1
                         showScreen(0);
                     }
                 }
@@ -1953,18 +1997,16 @@ def serve_mini_app():
         }
 
         function showScreen(screenIndex) {
+            debugLog(`Switching to screen ${screenIndex}`);
             currentScreen = screenIndex;
             const container = document.getElementById('appContainer');
             const dots = document.querySelectorAll('.dot');
             
             container.style.transform = `translateX(-${screenIndex * 50}%)`;
             
-            // Update dots
             dots.forEach((dot, index) => {
                 dot.classList.toggle('active', index === screenIndex);
             });
-            
-            console.log('Switched to screen:', screenIndex);
         }
 
         // Get user information from Telegram
@@ -1972,19 +2014,44 @@ def serve_mini_app():
             const user = Telegram.WebApp.initDataUnsafe?.user;
             const user_id = user?.id;
             
+            debugLog(`Telegram user data: ${JSON.stringify(user)}`);
+            
             if (user_id) {
                 const userName = user.first_name || user.username || 'User';
-                document.getElementById('userInfo').textContent = `👋 Hello, ${userName} (ID: ${user_id})`;
+                document.getElementById('userInfo').textContent = `👋 Hello, ${userName}`;
                 return user_id;
             } else {
-                document.getElementById('userInfo').textContent = '❌ Cannot identify user';
-                return null;
+                document.getElementById('userInfo').textContent = '❌ Cannot identify user - opening in browser?';
+                // For testing in browser, use a test user ID
+                return 'test_user_123';
             }
         }
 
-        // Load financial data and transactions - FIXED VERSION
+        // Mock data for testing
+        function getMockData() {
+            return {
+                balance: 12500,
+                income: 30000,
+                spending: 17500,
+                daily_income_avg: 1000,
+                daily_expense_avg: 583,
+                financial_health: 75,
+                financial_health_emoji: '🏠',
+                transactions: [
+                    { amount: 15000, description: "Salary", category: "Income", emoji: "💰" },
+                    { amount: -2500, description: "Rent", category: "Housing", emoji: "🏠" },
+                    { amount: -1200, description: "Groceries", category: "Food", emoji: "🛒" },
+                    { amount: -800, description: "Restaurant", category: "Dining", emoji: "🍽️" },
+                    { amount: -500, description: "Transport", category: "Travel", emoji: "🚗" }
+                ]
+            };
+        }
+
+        // Load financial data and transactions
         async function loadFinancialData() {
             try {
+                debugLog('Starting to load financial data...');
+                
                 // Get user ID from Telegram
                 const user_id = getUserInfo();
                 
@@ -1993,87 +2060,98 @@ def serve_mini_app():
                     return;
                 }
 
-                console.log('Loading data for user:', user_id);
+                debugLog(`Loading data for user: ${user_id}`);
 
-                // Load balance and totals
-                const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
-                console.log('Finance response status:', financeResponse.status);
-                
-                if (!financeResponse.ok) {
-                    throw new Error(`HTTP error! status: ${financeResponse.status}`);
+                let financeData;
+                let transactions = [];
+
+                // Try to load from API first
+                try {
+                    const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
+                    debugLog(`Finance API status: ${financeResponse.status}`);
+                    
+                    if (financeResponse.ok) {
+                        financeData = await financeResponse.json();
+                        debugLog('Finance data loaded from API');
+                    } else {
+                        throw new Error(`API returned ${financeResponse.status}`);
+                    }
+                    
+                    const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
+                    debugLog(`Transactions API status: ${transactionsResponse.status}`);
+                    
+                    if (transactionsResponse.ok) {
+                        const transactionsData = await transactionsResponse.json();
+                        debugLog('Transactions data loaded from API');
+                        
+                        // Handle different response structures
+                        if (Array.isArray(transactionsData)) {
+                            transactions = transactionsData;
+                        } else if (transactionsData.transactions) {
+                            transactions = transactionsData.transactions;
+                        } else if (transactionsData.data) {
+                            transactions = transactionsData.data;
+                        }
+                    }
+                } catch (apiError) {
+                    debugLog(`API Error: ${apiError.message}. Using mock data.`);
+                    // Use mock data if API fails
+                    financeData = getMockData();
+                    transactions = financeData.transactions || [];
                 }
-                
-                const financeData = await financeResponse.json();
-                console.log('Finance data received:', financeData);
-                
+
+                // Update displays
                 updateFinancialDisplay(financeData);
                 updateBudgetReport(financeData);
-                
-                // Load transactions
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
-                console.log('Transactions response status:', transactionsResponse.status);
-                
-                if (!transactionsResponse.ok) {
-                    throw new Error(`HTTP error! status: ${transactionsResponse.status}`);
-                }
-                
-                const transactionsData = await transactionsResponse.json();
-                console.log('Transactions data received:', transactionsData);
-                
-                // Handle different response structures
-                let transactions = [];
-                if (Array.isArray(transactionsData)) {
-                    transactions = transactionsData;
-                } else if (transactionsData.transactions && Array.isArray(transactionsData.transactions)) {
-                    transactions = transactionsData.transactions;
-                } else if (transactionsData.data && Array.isArray(transactionsData.data)) {
-                    transactions = transactionsData.data;
-                }
-                
-                console.log('Processed transactions:', transactions);
                 renderTransactions(transactions);
                 
+                debugLog('Data loading completed successfully');
+                
             } catch (error) {
-                console.error('Error loading data:', error);
-                showError('Failed to load data: ' + error.message);
+                debugLog(`Critical error: ${error.message}`);
+                showError('Failed to load data. Using demo data.');
+                
+                // Fallback to mock data
+                const mockData = getMockData();
+                updateFinancialDisplay(mockData);
+                updateBudgetReport(mockData);
+                renderTransactions(mockData.transactions);
             }
         }
         
         function updateFinancialDisplay(data) {
-            console.log('Updating financial display with:', data);
+            debugLog(`Updating display with: ${JSON.stringify(data).substring(0, 100)}...`);
             
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
             if (data.balance !== undefined) {
-                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
+                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()} ₴`;
                 balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
             }
             
             // Update income and expenses
             if (data.income !== undefined) {
-                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
+                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()} ₴`;
             }
             if (data.spending !== undefined) {
-                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
+                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()} ₴`;
             }
             
             // Update daily averages
             const averagesSection = document.getElementById('averagesSection');
             if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
                 averagesSection.style.display = 'block';
-                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
-                document.getElementById('dailyIncomeAvg').style.color = '#34c759';
-                document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
+                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()} ₴`;
+                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()} ₴`;
             } else {
                 averagesSection.style.display = 'none';
             }
             
             const healthIndicator = document.getElementById('healthIndicator');
-            if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
+            if (data.financial_health !== undefined) {
                 healthIndicator.style.display = 'block';
-                document.getElementById('healthDisplay').textContent = 
-                    `${data.financial_health_emoji} ${data.financial_health}%`;
+                const emoji = data.financial_health_emoji || '⛺️';
+                document.getElementById('healthDisplay').textContent = `${emoji} ${data.financial_health}%`;
             } else {
                 healthIndicator.style.display = 'none';
             }
@@ -2088,7 +2166,7 @@ def serve_mini_app():
             const recommendedWants = totalIncome * 0.3;
             const recommendedSavings = totalIncome * 0.2;
             
-            // For demo purposes, let's assume some distribution
+            // For demo, use reasonable estimates
             const actualNeeds = totalSpending * 0.6;
             const actualWants = totalSpending * 0.3;
             const actualSavings = totalSpending * 0.1;
@@ -2107,14 +2185,14 @@ def serve_mini_app():
             document.getElementById('wantsProgress').style.width = `${wantsPercentage}%`;
             document.getElementById('savingsProgress').style.width = `${savingsPercentage}%`;
             
-            document.getElementById('needsAmount').textContent = `${Math.round(actualNeeds).toLocaleString()}₴ / ${Math.round(recommendedNeeds).toLocaleString()}₴`;
-            document.getElementById('wantsAmount').textContent = `${Math.round(actualWants).toLocaleString()}₴ / ${Math.round(recommendedWants).toLocaleString()}₴`;
-            document.getElementById('savingsAmount').textContent = `${Math.round(actualSavings).toLocaleString()}₴ / ${Math.round(recommendedSavings).toLocaleString()}₴`;
+            document.getElementById('needsAmount').textContent = `${Math.round(actualNeeds).toLocaleString()} ₴ / ${Math.round(recommendedNeeds).toLocaleString()} ₴`;
+            document.getElementById('wantsAmount').textContent = `${Math.round(actualWants).toLocaleString()} ₴ / ${Math.round(recommendedWants).toLocaleString()} ₴`;
+            document.getElementById('savingsAmount').textContent = `${Math.round(actualSavings).toLocaleString()} ₴ / ${Math.round(recommendedSavings).toLocaleString()} ₴`;
             
-            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()}₴`;
-            document.getElementById('recommendedNeeds').textContent = `${Math.round(recommendedNeeds).toLocaleString()}₴`;
-            document.getElementById('recommendedWants').textContent = `${Math.round(recommendedWants).toLocaleString()}₴`;
-            document.getElementById('recommendedSavings').textContent = `${Math.round(recommendedSavings).toLocaleString()}₴`;
+            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()} ₴`;
+            document.getElementById('recommendedNeeds').textContent = `${Math.round(recommendedNeeds).toLocaleString()} ₴`;
+            document.getElementById('recommendedWants').textContent = `${Math.round(recommendedWants).toLocaleString()} ₴`;
+            document.getElementById('recommendedSavings').textContent = `${Math.round(recommendedSavings).toLocaleString()} ₴`;
             
             updateBudgetTip(needsPercentage, wantsPercentage, savingsPercentage);
         }
@@ -2124,15 +2202,15 @@ def serve_mini_app():
             let tip = '';
             
             if (needs > 100) {
-                tip = 'Your essential expenses are above the recommended 50%. Consider reviewing recurring bills and necessary costs.';
+                tip = 'Your essential expenses are above the recommended 50%. Consider reviewing recurring bills.';
             } else if (wants > 100) {
                 tip = 'Lifestyle spending is high. Try to identify areas where you can reduce discretionary expenses.';
             } else if (savings < 50) {
-                tip = 'Your savings rate is low. Even small regular contributions to savings can build financial security.';
+                tip = 'Your savings rate is low. Even small regular contributions can build financial security.';
             } else if (savings >= 80) {
-                tip = 'Great job on savings! You\'re building a strong financial foundation for your future.';
+                tip = 'Great job on savings! You\'re building a strong financial foundation.';
             } else {
-                tip = 'Track your expenses regularly to stay within your budget goals. Small adjustments can make a big difference!';
+                tip = 'Track your expenses regularly to stay within your budget goals.';
             }
             
             tipElement.textContent = tip;
@@ -2148,7 +2226,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">📭</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">No transactions yet</div>
-                                <div class="transaction-category">Start adding transactions in the bot</div>
+                                <div class="transaction-category">Add transactions in the bot to see them here</div>
                             </div>
                         </div>
                     </div>
@@ -2159,14 +2237,12 @@ def serve_mini_app():
             let transactionsHTML = '';
             
             transactions.forEach(transaction => {
-                console.log('Processing transaction:', transaction);
-                
                 const amount = transaction.amount || 0;
                 const isPositive = amount >= 0;
-                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
+                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()} ₴`;
                 
-                const displayName = transaction.name || transaction.category || transaction.description || 'Transaction';
-                const displayDescription = transaction.description || transaction.category || '';
+                const displayName = transaction.description || transaction.name || transaction.category || 'Transaction';
+                const displayCategory = transaction.category || '';
                 
                 transactionsHTML += `
                     <div class="transaction">
@@ -2174,7 +2250,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">${displayName}</div>
-                                ${displayDescription ? `<div class="transaction-category">${displayDescription}</div>` : ''}
+                                ${displayCategory ? `<div class="transaction-category">${displayCategory}</div>` : ''}
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
@@ -2194,20 +2270,25 @@ def serve_mini_app():
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Mini-app initialized');
+            debugLog('App initialized');
             setupSwipe();
             loadFinancialData();
+            
+            // Make buttons work immediately
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.style.pointerEvents = 'auto';
+            });
         });
-        
-        // Refresh data every 30 seconds
-        setInterval(loadFinancialData, 30000);
-        
-        // Also refresh when the app becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                loadFinancialData();
-            }
-        });
+
+        // Force button functionality
+        setTimeout(() => {
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.onclick = function() {
+                    const targetScreen = this.textContent.includes('Dashboard') ? 0 : 1;
+                    showScreen(targetScreen);
+                };
+            });
+        }, 1000);
     </script>
 </body>
 </html>"""
