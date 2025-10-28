@@ -445,52 +445,56 @@ class SimpleFinnBot:
         if user_lang == 'uk':
             summary = f"""📊 *Статус 50/30/20*
 
-    🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
-    🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
-    🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
 
-    💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
+🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+
+🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
 
     """
             # Add status indicators
             if needs_pct <= 50:
-                summary += "✅ Потреби в межах цілі\n"
+                summary += "✅ Потреби в межах цілі\n\n"
             else:
-                summary += "⚠️ Потреби перевищують ціль\n"
+                summary += "⚠️ Потреби перевищують ціль\n\n"
                 
             if wants_pct <= 30:
-                summary += "✅ Бажання в межах цілі\n"
+                summary += "✅ Бажання в межах цілі\n\n"
             else:
-                summary += "⚠️ Бажання перевищують ціль\n"
+                summary += "⚠️ Бажання перевищують ціль\n\n"
                 
             if future_pct >= 20:
-                summary += "🎯 Майбутнє на цільовому рівні!"
+                summary += "🎯 Майбутнє на цільовому рівні!\n"
             else:
                 summary += "💡 Можна покращити майбутнє"
                 
         else:
             summary = f"""📊 *50/30/20 Status*
 
-    🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
-    🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
-    🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
 
-    💰 Total Income: {totals.get('income', 0):,.0f}₴
+🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+
+🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
+
+💰 Total Income: {totals.get('income', 0):,.0f}₴
 
     """
             # Add status indicators
             if needs_pct <= 50:
-                summary += "✅ Needs within target\n"
+                summary += "✅ Needs within target\n\n"
             else:
-                summary += "⚠️ Needs over target\n"
+                summary += "⚠️ Needs over target\n\n"
                 
             if wants_pct <= 30:
-                summary += "✅ Wants within target\n"
+                summary += "✅ Wants within target\n\n"
             else:
-                summary += "⚠️ Wants over target\n"
+                summary += "⚠️ Wants over target\n\n"
                 
             if future_pct >= 20:
-                summary += "🎯 Future on target!"
+                summary += "🎯 Future on target!\n"
             else:
                 summary += "💡 Future can be improved"
         
