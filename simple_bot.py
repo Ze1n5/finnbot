@@ -496,6 +496,15 @@ class SimpleFinnBot:
         
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
+    def get_cancel_keyboard(self, lang='en'):
+        """Get cancel keyboard based on language"""
+        from telegram import ReplyKeyboardMarkup, KeyboardButton
+        
+        if lang == 'uk':
+            return ReplyKeyboardMarkup([[KeyboardButton("❌ Скасувати")]], resize_keyboard=True)
+        else:
+            return ReplyKeyboardMarkup([[KeyboardButton("❌ Cancel")]], resize_keyboard=True)
+
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
         print(f"🔍 Handling Delete Transaction for {chat_id}")
