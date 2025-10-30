@@ -445,69 +445,56 @@ class SimpleFinnBot:
         if user_lang == 'uk':
             summary = f"""📊 *Статус 50/30/20*
 
-🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🏠 Потреби: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+    🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
 
-🎉 Бажання: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+    💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
 
-🏦 Майбутнє: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
-
-💰 Загальний дохід: {totals.get('income', 0):,.0f}₴
-
-"""
+    """
             # Add status indicators
             if needs_pct <= 50:
-                summary += "✅ Потреби в межах цілі\n\n"
+                summary += "✅ Потреби в межах цілі\n"
             else:
-                summary += "⚠️ Потреби перевищують ціль\n\n"
+                summary += "⚠️ Потреби перевищують ціль\n"
                 
             if wants_pct <= 30:
-                summary += "✅ Бажання в межах цілі\n\n"
+                summary += "✅ Бажання в межах цілі\n"
             else:
-                summary += "⚠️ Бажання перевищують ціль\n\n"
+                summary += "⚠️ Бажання перевищують ціль\n"
                 
             if future_pct >= 20:
-                summary += "🎯 Майбутнє на цільовому рівні!\n"
+                summary += "🎯 Майбутнє на цільовому рівні!"
             else:
                 summary += "💡 Можна покращити майбутнє"
                 
         else:
             summary = f"""📊 *50/30/20 Status*
 
-🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🏠 Needs: {needs_pct:.1f}% ({totals.get('needs', 0):,.0f}₴)
+    🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
+    🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
 
-🎉 Wants: {wants_pct:.1f}% ({totals.get('wants', 0):,.0f}₴)
-
-🏦 Future: {future_pct:.1f}% ({totals.get('future', 0):,.0f}₴)
-
-💰 Total Income: {totals.get('income', 0):,.0f}₴
+    💰 Total Income: {totals.get('income', 0):,.0f}₴
 
     """
             # Add status indicators
             if needs_pct <= 50:
-                summary += "✅ Needs within target\n\n"
+                summary += "✅ Needs within target\n"
             else:
-                summary += "⚠️ Needs over target\n\n"
+                summary += "⚠️ Needs over target\n"
                 
             if wants_pct <= 30:
-                summary += "✅ Wants within target\n\n"
+                summary += "✅ Wants within target\n"
             else:
-                summary += "⚠️ Wants over target\n\n"
+                summary += "⚠️ Wants over target\n"
                 
             if future_pct >= 20:
-                summary += "🎯 Future on target!\n"
+                summary += "🎯 Future on target!"
             else:
                 summary += "💡 Future can be improved"
         
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
-
-    def get_cancel_keyboard(self, lang='en'):
-        """Get cancel keyboard based on language"""
-        from telegram import ReplyKeyboardMarkup, KeyboardButton
-        
-        if lang == 'uk':
-            return ReplyKeyboardMarkup([[KeyboardButton("❌ Скасувати")]], resize_keyboard=True)
-        else:
-            return ReplyKeyboardMarkup([[KeyboardButton("❌ Cancel")]], resize_keyboard=True)
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
@@ -522,6 +509,7 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
+        # COPY YOUR EXISTING DELETE TRANSACTION LOGIC HERE
         # Group transactions by type for better organization
         transactions_by_type = {
             'income': [],
@@ -535,17 +523,8 @@ class SimpleFinnBot:
         for i, transaction in enumerate(user_transactions):
             transactions_by_type[transaction['type']].append((i, transaction))
         
-        user_lang = self.get_user_language(chat_id)
-        
-        # Set text based on language
-        if user_lang == 'uk':
-            delete_text = "🗑️ *Оберіть транзакцію для видалення*\n\n"
-            delete_text += "⏹️  `0` - Скасувати та вийти\n\n"
-            final_instruction = "💡 *Введіть номер для видалення, або 0 для скасування*"
-        else:
-            delete_text = "🗑️ *Select Transaction to Delete*\n\n"
-            delete_text += "⏹️  `0` - Cancel & Exit\n\n"
-            final_instruction = "💡 *Type a number to delete, or 0 to cancel*"
+        delete_text = "🗑️ *Select Transaction to Delete*\n\n"
+        delete_text += "⏹️  `0` - Cancel & Exit\n\n"
         
         current_number = 1
         transaction_map = {}  # Map display numbers to actual indices
@@ -581,17 +560,14 @@ class SimpleFinnBot:
                 
                 delete_text += "\n"
         
-        delete_text += final_instruction
+        delete_text += "💡 *Type a number to delete, or 0 to cancel*"
         
         # Store the mapping for this user
         self.delete_mode[chat_id] = transaction_map
         
         # Split long messages if needed (Telegram has 4096 char limit)
         if len(delete_text) > 4000:
-            if user_lang == 'uk':
-                delete_text = delete_text[:4000] + "\n\n... (показано перші 4000 символів)"
-            else:
-                delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
+            delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
         
         self.send_message(chat_id, delete_text, parse_mode='Markdown')
 
@@ -717,43 +693,31 @@ class SimpleFinnBot:
         if user_lang == 'uk':
             guide_text = """🎯 *Фінансовий командний центр*
 
-    🛒 `150 обід` - Щоденні витрати
-    💰 `+5000 зарплата` - Дохід  
-    🏦 `++1000` - Зберегти гроші
-    💳 `-2000 кредит` - Новий борг
-    🔙 `+-1500` - Повернути борг
-    📥 `-+800` - Зняти заощадження
+        🛒 `150 обід` - Щоденні витрати
+        💰 `+5000 зарплата` - Дохід  
+        🏦 `++1000` - Зберегти гроші
+        💳 `-2000 кредит` - Новий борг
+        🔙 `+-1500` - Повернути борг
+        📥 `-+800` - Зняти заощадження
 
-    💵 *Мультивалютні транзакції:*
-    `+100$` - Дохід $100
-    `-50€` - Витрата €50  
-    `++200$` - Заощадити $200
-    `--30€` - Зняти €30 з заощаджень
+        🧮 `100+50=150` - Розрахунки працюють!
+        📝 Додавайте описи: `150 uber до аеропорту`
 
-    🧮 `100+50=150` - Розрахунки працюють!
-    📝 Додавайте описи: `150 uber до аеропорту`
-
-    🚀 *Ваша фінансова подорож починається зараз!*"""
+        🚀 *Ваша фінансова подорож починається зараз!*"""
         else:
             guide_text = """🎯 *Financial Command Center*
 
-    🛒 `150 lunch` - Daily expenses
-    💰 `+5000 salary` - Income  
-    🏦 `++1000` - Save money
-    💳 `-2000 loan` - New debt
-    🔙 `+-1500` - Return debt
-    📥 `-+800` - Withdraw savings
+        🛒 `150 lunch` - Daily expenses
+        💰 `+5000 salary` - Income  
+        🏦 `++1000` - Save money
+        💳 `-2000 loan` - New debt
+        🔙 `+-1500` - Return debt
+        📥 `-+800` - Withdraw savings
 
-    💵 *Multi-currency Transactions:*
-    `+100$` - Income $100
-    `-50€` - Expense €50
-    `++200$` - Save $200  
-    `--30€` - Withdraw €30 from savings
+        🧮 `100+50=150` - Calculations work!
+        📝 Add descriptions: `150 uber to airport`
 
-    🧮 `100+50=150` - Calculations work!
-    📝 Add descriptions: `150 uber to airport`
-
-    🚀 *Your financial journey starts now!*"""
+        🚀 *Your financial journey starts now!*"""
             
         self.send_message(chat_id, guide_text, parse_mode='Markdown')
 
@@ -1963,7 +1927,8 @@ class SimpleFinnBot:
                     
                     self.show_menu_keyboard(chat_id, welcome)
                     return  # Stop processing after handling bot addition
-        
+
+        # Handle group messages
         # Handle group messages
         if chat_type in ["group", "supergroup"]:
             print(f"🔍 DEBUG GROUP: Checking if message is for bot")
@@ -1984,14 +1949,7 @@ class SimpleFinnBot:
                 # Process the message first, then show menu
                 # We'll handle this after the main processing
                 pass
-
-        # ===== ADDED: Handle multi-currency transactions FIRST =====
-        transaction_data = self.parse_transaction_with_currency(text, chat_id)
-        if transaction_data:
-            self.process_transaction_with_currency(chat_id, transaction_data)
-            return  # Stop processing after handling currency transaction
-        # ===== END OF ADDED PART =====
-
+        
         if text == "📊 Financial Summary":
             return self.handle_financial_summary(chat_id)
         
@@ -2123,13 +2081,7 @@ class SimpleFinnBot:
         • `150 обід` - Витрата
         • `+5000 зарплата` - Дохід
         • `++1000` - Заощадження
-        • `-200 кредит` - Борг
-        
-        *Мультивалютні транзакції:*
-        • `+100$` - Дохід $100
-        • `-50€` - Витрата €50
-        • `++200$` - Заощадити $200
-        • `--30€` - Зняти €30"""
+        • `-200 кредит` - Борг"""
             else:
                 help_text = """🤖 *FinnBot - Group Help*
 
@@ -2142,13 +2094,7 @@ class SimpleFinnBot:
         • `150 lunch` - Expense
         • `+5000 salary` - Income
         • `++1000` - Savings
-        • `-200 loan` - Debt
-        
-        *Multi-currency Transactions:*
-        • `+100$` - Income $100
-        • `-50€` - Expense €50
-        • `++200$` - Save $200
-        • `--30€` - Withdraw €30"""
+        • `-200 loan` - Debt"""
             
             self.send_message(chat_id, help_text, parse_mode='Markdown')
             return
@@ -2294,12 +2240,6 @@ class SimpleFinnBot:
         • `++1000` - Заощадження
         • `-200 кредит` - Борг
 
-        *Мультивалютні транзакції:*
-        • `+100$` - Дохід $100
-        • `-50€` - Витрата €50
-        • `++200$` - Заощадити $200
-        • `--30€` - Зняти €30
-
         *Або звертайтеся до бота:*
         `@finnbot 150 обід`
         `@finnbot ++500`"""
@@ -2316,12 +2256,6 @@ class SimpleFinnBot:
         • `+5000 salary` - Income
         • `++1000` - Savings
         • `-200 loan` - Debt
-
-        *Multi-currency Transactions:*
-        • `+100$` - Income $100
-        • `-50€` - Expense €50
-        • `++200$` - Save $200
-        • `--30€` - Withdraw €30
 
         *Or mention the bot:*
         `@finnbot 150 lunch`
@@ -2525,13 +2459,13 @@ class SimpleFinnBot:
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
 
-    Enter your new monthly income in UAH:
+Enter your new monthly income in UAH:
 
-    *Example:*
-    `20000` - for 20,000₴ per month
-    `35000` - for 35,000₴ per month
+*Example:*
+`20000` - for 20,000₴ per month
+`35000` - for 35,000₴ per month
 
-    This will help me provide better financial recommendations!"""
+This will help me provide better financial recommendations!"""
             self.pending_income.add(chat_id)
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
@@ -2544,8 +2478,6 @@ class SimpleFinnBot:
         • `+5000 зарплата` - Додати дохід  
         • `-100 борг` - Додати борг
         • `++200 заощадження` - Додати заощадження
-        • `+100$` - Дохід $100
-        • `-50€` - Витрата €50
         • Використовуйте меню нижче для більше опцій!"""
             else:
                 help_text = """💡 *Available Commands:*
@@ -2553,8 +2485,6 @@ class SimpleFinnBot:
         • `+5000 salary` - Add income  
         • `-100 debt` - Add debt
         • `++200 savings` - Add savings
-        • `+100$` - Income $100
-        • `-50€` - Expense €50
         • Use menu below for more options!"""
             
             self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
@@ -3692,232 +3622,6 @@ You're now ready to use Finn! 🚀
                 })
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
-
-    def parse_transaction_with_currency(self, message_text, chat_id=None):
-        """
-        Parse transaction message with currency and type support
-        Examples:
-        +100$ -> income 100 USD
-        -50€ -> expense 50 EUR  
-        +200 -> income 200 UAH (default)
-        -75.50$ -> expense 75.50 USD
-        ++100$ -> savings 100 USD
-        --50€ -> savings withdrawal 50 EUR
-        >>>100$ -> debt 100 USD
-        <<50€ -> debt return 50 EUR
-        """
-        import re
-        
-        # Pattern to match: [type] amount [currency?]
-        pattern = r'^([+-]{1,2}|>{2,3}|<{1,2})\s*(\d+(?:\.\d+)?)\s*([$€₴]?)$'
-        match = re.match(pattern, message_text.strip())
-        
-        if not match:
-            return None
-        
-        type_symbol, amount_str, currency_symbol = match.groups()
-        
-        # Determine transaction type and amount
-        amount = float(amount_str)
-        
-        # Map currency symbols to codes
-        currency_map = {
-            '$': 'USD',
-            '€': 'EUR',
-            '₴': 'UAH',
-            '': 'UAH'  # Default to UAH if no symbol
-        }
-        currency = currency_map.get(currency_symbol, 'UAH')
-        
-        # Map type symbols to transaction types
-        if type_symbol == '+':
-            transaction_type = 'income'
-        elif type_symbol == '-':
-            transaction_type = 'expense'
-            amount = -abs(amount)  # Ensure negative for expenses
-        elif type_symbol == '++':
-            transaction_type = 'savings'
-        elif type_symbol == '--':
-            transaction_type = 'savings_withdraw'
-            amount = -abs(amount)
-        elif type_symbol in ['>>>', '>>']:
-            transaction_type = 'debt'
-            amount = -abs(amount)  # Debt is negative (money you owe)
-        elif type_symbol in ['<<', '<']:
-            transaction_type = 'debt_return'
-        else:
-            return None
-        
-        return {
-            'type': transaction_type,
-            'amount': amount,
-            'currency': currency,
-            'description': self.get_default_description(transaction_type, currency, chat_id),
-            'original_message': message_text
-        }
-
-    def get_default_description(self, transaction_type, currency, chat_id=None):
-        """Get default description based on transaction type and currency"""
-        descriptions = {
-            'income': {
-                'en': f"Income in {currency}",
-                'uk': f"Дохід у {currency}"
-            },
-            'expense': {
-                'en': f"Expense in {currency}", 
-                'uk': f"Витрата у {currency}"
-            },
-            'savings': {
-                'en': f"Savings in {currency}",
-                'uk': f"Збереження у {currency}"
-            },
-            'savings_withdraw': {
-                'en': f"Savings withdrawal in {currency}",
-                'uk': f"Зняття збережень у {currency}"
-            },
-            'debt': {
-                'en': f"Debt in {currency}",
-                'uk': f"Борг у {currency}"
-            },
-            'debt_return': {
-                'en': f"Debt return in {currency}",
-                'uk': f"Повернення боргу у {currency}"
-            }
-        }
-        
-        # Get user's actual language if chat_id is provided
-        if chat_id and hasattr(self, 'get_user_language'):
-            user_lang = self.get_user_language(chat_id)
-        else:
-            user_lang = 'en'
-        
-        return descriptions[transaction_type].get(user_lang, descriptions[transaction_type]['en'])
-
-    def process_transaction_with_currency(self, chat_id, transaction_data):
-        """Process a parsed transaction with currency"""
-        try:
-            user_lang = self.get_user_language(chat_id)
-            
-            # Get user transactions
-            user_transactions = self.get_user_transactions(chat_id)
-            
-            # Add the new transaction
-            new_transaction = {
-                'type': transaction_data['type'],
-                'amount': transaction_data['amount'],
-                'currency': transaction_data['currency'],
-                'description': transaction_data['description'],
-                'timestamp': datetime.now().isoformat(),
-                'category': self.get_transaction_category(transaction_data['type'])
-            }
-            
-            user_transactions.append(new_transaction)
-            
-            # Save updated transactions - FIXED: Use sync_transactions_to_postgres instead of save_user_transactions
-            self.sync_transactions_to_postgres()
-            
-            # Send confirmation message
-            self.send_transaction_confirmation(chat_id, new_transaction, user_lang)
-            
-            # Update financial health
-            self.update_financial_health(chat_id)
-            
-            print(f"✅ Added {transaction_data['type']} transaction: {transaction_data['amount']} {transaction_data['currency']}")
-            
-        except Exception as e:
-            print(f"❌ Error processing transaction: {e}")
-            user_lang = self.get_user_language(chat_id)
-            if user_lang == 'uk':
-                self.send_message(chat_id, "❌ Помилка при додаванні транзакції. Спробуйте ще раз.")
-            else:
-                self.send_message(chat_id, "❌ Error adding transaction. Please try again.")
-
-    def get_transaction_category(self, transaction_type):
-        """Get category for transaction type"""
-        categories = {
-            'income': 'Income',
-            'expense': 'Expense', 
-            'savings': 'Savings',
-            'savings_withdraw': 'Savings',
-            'debt': 'Debt',
-            'debt_return': 'Debt'
-        }
-        return categories.get(transaction_type, 'Other')
-
-    def send_transaction_confirmation(self, chat_id, transaction, user_lang):
-        """Send confirmation message for added transaction"""
-        amount = transaction['amount']
-        currency = transaction['currency']
-        trans_type = transaction['type']
-        
-        # Get emoji and message based on transaction type
-        type_info = self.get_transaction_type_info(trans_type, user_lang)
-        
-        # Format amount with proper sign and currency symbol
-        currency_symbols = {
-            'UAH': '₴',
-            'USD': '$', 
-            'EUR': '€'
-        }
-        currency_symbol = currency_symbols.get(currency, currency)
-        
-        if trans_type in ['income', 'savings', 'debt_return']:
-            amount_display = f"+{abs(amount):,.0f}{currency_symbol}"
-            emoji = "✅"
-        else:
-            amount_display = f"-{abs(amount):,.0f}{currency_symbol}"
-            emoji = "💸"
-        
-        if user_lang == 'uk':
-            message = f"{emoji} {type_info['uk']}: {amount_display}"
-            message += f"\n\n💡 Порада: {type_info['tip_uk']}"
-        else:
-            message = f"{emoji} {type_info['en']}: {amount_display}"
-            message += f"\n\n💡 Tip: {type_info['tip_en']}"
-        
-        self.send_message(chat_id, message)
-
-    def get_transaction_type_info(self, transaction_type, user_lang):
-        """Get information about transaction type for confirmation message"""
-        type_info = {
-            'income': {
-                'en': 'Income added',
-                'uk': 'Дохід додано',
-                'tip_en': 'Great! Adding income helps grow your balance.',
-                'tip_uk': 'Чудово! Додавання доходу допомагає збільшити ваш баланс.'
-            },
-            'expense': {
-                'en': 'Expense recorded', 
-                'uk': 'Витрату записано',
-                'tip_en': 'Track expenses to better manage your budget.',
-                'tip_uk': 'Відстежуйте витрати для кращого управління бюджетом.'
-            },
-            'savings': {
-                'en': 'Savings added',
-                'uk': 'Збереження додано',
-                'tip_en': 'Building savings is key to financial security!',
-                'tip_uk': 'Накопичення - ключ до фінансової безпеки!'
-            },
-            'savings_withdraw': {
-                'en': 'Savings withdrawn',
-                'uk': 'Збереження знято', 
-                'tip_en': 'Use savings wisely for important needs.',
-                'tip_uk': 'Використовуйте збереження розумно для важливих потреб.'
-            },
-            'debt': {
-                'en': 'Debt recorded',
-                'uk': 'Борг записано',
-                'tip_en': 'Keep track of debts to manage them effectively.',
-                'tip_uk': 'Відстежуйте борги для ефективного управління ними.'
-            },
-            'debt_return': {
-                'en': 'Debt returned',
-                'uk': 'Борг повернено',
-                'tip_en': 'Great job on reducing your debt!',
-                'tip_uk': 'Чудова робота зі зменшення боргу!'
-            }
-        }
-        return type_info.get(transaction_type, type_info['income'])
 
 def check_reminders_periodically():
     """Check every hour if it's time for reminders"""
