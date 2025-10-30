@@ -341,9 +341,6 @@ class SimpleFinnBot:
         net_debt = debt_incurred - debt_returned
         net_flow = income - expenses - net_savings
         
-        # Calculate averages
-        # Calculate averages based on last 30 days
-        # Calculate averages based on last 30 days or available period
         # Calculate averages based on last 30 days
         current_date = datetime.now().date()
         thirty_days_ago = current_date - timedelta(days=30)
@@ -396,20 +393,6 @@ class SimpleFinnBot:
         print(f"🔍 DEBUG DAILY AVERAGES:")
         print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
-
-        # If we have less than 30 days of data, scale the averages appropriately
-        if len(all_recent_days) > 0:
-            daily_income_avg = recent_income / 30  # Always divide by 30 for consistent "daily average"
-            daily_expense_avg = recent_expenses / 30
-            daily_net_avg = (recent_income - recent_expenses) / 30
-        else:
-            daily_income_avg = 0
-            daily_expense_avg = 0
-            daily_net_avg = 0
-
-        # DEBUG: Print the actual numbers to see what's happening
-        print(f"🔍 DEBUG DAILY AVG: recent_income={recent_income}, recent_expenses={recent_expenses}")
-        print(f"🔍 DEBUG DAILY AVG: daily_income_avg={daily_income_avg}, daily_expense_avg={daily_expense_avg}")
         
         user_lang = self.get_user_language(chat_id)
         
@@ -426,7 +409,7 @@ class SimpleFinnBot:
     ─────────────────
     Чистий потік: {net_flow:,.0f}₴
 
-    summary_text += f"📈 *Щоденні середні показники (за останні 30 днів):*
+    📈 *Щоденні середні показники (за останні 30 днів):*
     Середній дохід/день: {daily_income_avg:,.0f}₴
     Середні витрати/день: {daily_expense_avg:,.0f}₴
     Середній чистий потік/день: {daily_net_avg:,.0f}₴
@@ -458,7 +441,7 @@ class SimpleFinnBot:
     ─────────────────
     Net Cash Flow: {net_flow:,.0f}₴
 
-    summary_text += f"📈 *Daily Averages (Last 30 Days):*
+    📈 *Daily Averages (Last 30 Days):*
     Avg Income/Day: {daily_income_avg:,.0f}₴
     Avg Expenses/Day: {daily_expense_avg:,.0f}₴
     Avg Net Flow/Day: {daily_net_avg:,.0f}₴
@@ -474,10 +457,12 @@ class SimpleFinnBot:
                 summary_text += f"\n   Net Debt: {net_debt:,.0f}₴"
             
             # Add context about tracking period
-            if all_dates:
-                summary_text += f"\n\n📅 *Tracking Period:* {len(all_dates)} days"
+            recent_days_count = len(all_recent_days)
+            if recent_days_count > 0:
+                summary_text += f"\n\n📅 *Activity in last 30 days:* {recent_days_count} days"
         
         self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+
     def handle_503020_status(self, chat_id):
         """Handle 50/30/20 Status button"""
         print(f"🔍 Handling 50/30/20 Status for {chat_id}")
