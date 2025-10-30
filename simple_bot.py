@@ -3756,8 +3756,9 @@ You're now ready to use Finn! 🚀
             }
         }
         
-        user_lang = 'en'  # Default, you can modify based on user language
-        return descriptions[transaction_type][user_lang]
+        # Get user's actual language instead of hardcoding 'en'
+        user_lang = self.get_user_language(chat_id) if hasattr(self, 'get_user_language') else 'en'
+        return descriptions[transaction_type].get(user_lang, descriptions[transaction_type]['en'])
 
     def process_transaction_with_currency(self, chat_id, transaction_data):
         """Process a parsed transaction with currency"""
@@ -3779,8 +3780,8 @@ You're now ready to use Finn! 🚀
             
             user_transactions.append(new_transaction)
             
-            # Save updated transactions
-            self.save_user_transactions(chat_id, user_transactions)
+            # Save updated transactions - FIXED: Use sync_transactions_to_postgres instead of save_user_transactions
+            self.sync_transactions_to_postgres()
             
             # Send confirmation message
             self.send_transaction_confirmation(chat_id, new_transaction, user_lang)
