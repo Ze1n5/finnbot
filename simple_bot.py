@@ -1965,7 +1965,6 @@ class SimpleFinnBot:
                     return  # Stop processing after handling bot addition
         
         # Handle group messages
-        # Handle group messages
         if chat_type in ["group", "supergroup"]:
             print(f"🔍 DEBUG GROUP: Checking if message is for bot")
             
@@ -1986,11 +1985,13 @@ class SimpleFinnBot:
                 # We'll handle this after the main processing
                 pass
 
-        transaction_data = self.parse_transaction_with_currency(text)
+        # ===== ADDED: Handle multi-currency transactions FIRST =====
+        transaction_data = self.parse_transaction_with_currency(text, chat_id)
         if transaction_data:
             self.process_transaction_with_currency(chat_id, transaction_data)
-            return
-        
+            return  # Stop processing after handling currency transaction
+        # ===== END OF ADDED PART =====
+
         if text == "📊 Financial Summary":
             return self.handle_financial_summary(chat_id)
         
@@ -2122,7 +2123,13 @@ class SimpleFinnBot:
         • `150 обід` - Витрата
         • `+5000 зарплата` - Дохід
         • `++1000` - Заощадження
-        • `-200 кредит` - Борг"""
+        • `-200 кредит` - Борг
+        
+        *Мультивалютні транзакції:*
+        • `+100$` - Дохід $100
+        • `-50€` - Витрата €50
+        • `++200$` - Заощадити $200
+        • `--30€` - Зняти €30"""
             else:
                 help_text = """🤖 *FinnBot - Group Help*
 
@@ -2135,7 +2142,13 @@ class SimpleFinnBot:
         • `150 lunch` - Expense
         • `+5000 salary` - Income
         • `++1000` - Savings
-        • `-200 loan` - Debt"""
+        • `-200 loan` - Debt
+        
+        *Multi-currency Transactions:*
+        • `+100$` - Income $100
+        • `-50€` - Expense €50
+        • `++200$` - Save $200
+        • `--30€` - Withdraw €30"""
             
             self.send_message(chat_id, help_text, parse_mode='Markdown')
             return
@@ -2281,6 +2294,12 @@ class SimpleFinnBot:
         • `++1000` - Заощадження
         • `-200 кредит` - Борг
 
+        *Мультивалютні транзакції:*
+        • `+100$` - Дохід $100
+        • `-50€` - Витрата €50
+        • `++200$` - Заощадити $200
+        • `--30€` - Зняти €30
+
         *Або звертайтеся до бота:*
         `@finnbot 150 обід`
         `@finnbot ++500`"""
@@ -2297,6 +2316,12 @@ class SimpleFinnBot:
         • `+5000 salary` - Income
         • `++1000` - Savings
         • `-200 loan` - Debt
+
+        *Multi-currency Transactions:*
+        • `+100$` - Income $100
+        • `-50€` - Expense €50
+        • `++200$` - Save $200
+        • `--30€` - Withdraw €30
 
         *Or mention the bot:*
         `@finnbot 150 lunch`
@@ -2500,13 +2525,13 @@ class SimpleFinnBot:
         elif text == "/income":
             update_text = """💼 *Update Your Monthly Income*
 
-Enter your new monthly income in UAH:
+    Enter your new monthly income in UAH:
 
-*Example:*
-`20000` - for 20,000₴ per month
-`35000` - for 35,000₴ per month
+    *Example:*
+    `20000` - for 20,000₴ per month
+    `35000` - for 35,000₴ per month
 
-This will help me provide better financial recommendations!"""
+    This will help me provide better financial recommendations!"""
             self.pending_income.add(chat_id)
             self.send_message(chat_id, update_text, parse_mode='Markdown')
         
@@ -2519,6 +2544,8 @@ This will help me provide better financial recommendations!"""
         • `+5000 зарплата` - Додати дохід  
         • `-100 борг` - Додати борг
         • `++200 заощадження` - Додати заощадження
+        • `+100$` - Дохід $100
+        • `-50€` - Витрата €50
         • Використовуйте меню нижче для більше опцій!"""
             else:
                 help_text = """💡 *Available Commands:*
@@ -2526,6 +2553,8 @@ This will help me provide better financial recommendations!"""
         • `+5000 salary` - Add income  
         • `-100 debt` - Add debt
         • `++200 savings` - Add savings
+        • `+100$` - Income $100
+        • `-50€` - Expense €50
         • Use menu below for more options!"""
             
             self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
@@ -3664,7 +3693,7 @@ You're now ready to use Finn! 🚀
             except Exception as e:
                 print(f"⚠️ Error deleting language message: {e}")
 
-    def parse_transaction_with_currency(self, message_text):
+    def parse_transaction_with_currency(self, message_text, chat_id=None):
         """
         Parse transaction message with currency and type support
         Examples:
@@ -3723,11 +3752,11 @@ You're now ready to use Finn! 🚀
             'type': transaction_type,
             'amount': amount,
             'currency': currency,
-            'description': self.get_default_description(transaction_type, currency),
+            'description': self.get_default_description(transaction_type, currency, chat_id),
             'original_message': message_text
         }
 
-    def get_default_description(self, transaction_type, currency):
+    def get_default_description(self, transaction_type, currency, chat_id=None):
         """Get default description based on transaction type and currency"""
         descriptions = {
             'income': {
@@ -3756,8 +3785,12 @@ You're now ready to use Finn! 🚀
             }
         }
         
-        # Get user's actual language instead of hardcoding 'en'
-        user_lang = self.get_user_language(chat_id) if hasattr(self, 'get_user_language') else 'en'
+        # Get user's actual language if chat_id is provided
+        if chat_id and hasattr(self, 'get_user_language'):
+            user_lang = self.get_user_language(chat_id)
+        else:
+            user_lang = 'en'
+        
         return descriptions[transaction_type].get(user_lang, descriptions[transaction_type]['en'])
 
     def process_transaction_with_currency(self, chat_id, transaction_data):
