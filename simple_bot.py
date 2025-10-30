@@ -11,6 +11,7 @@ import atexit
 import signal
 import psycopg2
 from urllib.parse import urlparse
+from datetime import datetime, timedelta
 
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
@@ -341,13 +342,44 @@ class SimpleFinnBot:
         net_flow = income - expenses - net_savings
         
         # Calculate averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (income - expenses) / total_days if total_days > 0 else 0
+        # Calculate averages based on last 30 days
+        # Calculate averages based on last 30 days or available period
+        current_date = datetime.now().date()
+        thirty_days_ago = current_date - timedelta(days=30)
+
+        # Filter transactions from last 30 days
+        recent_income = 0
+        recent_expenses = 0
+        all_recent_days = set()
+
+        for transaction in user_transactions:
+            if 'date' in transaction:
+                try:
+                    # Parse transaction date
+                    if 'T' in transaction['date']:
+                        transaction_date_str = transaction['date'].split('T')[0]
+                    else:
+                        transaction_date_str = transaction['date'].split(' ')[0]
+                    
+                    transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                    
+                    # Only include transactions from last 30 days
+                    if transaction_date >= thirty_days_ago:
+                        all_recent_days.add(transaction_date)
+                        
+                        if transaction['type'] == 'income':
+                            recent_income += transaction['amount']
+                        elif transaction['type'] == 'expense':
+                            recent_expenses += transaction['amount']
+                            
+                except Exception as e:
+                    print(f"⚠️ Error parsing transaction date: {e}")
+                    continue
+
+        # Calculate daily averages for last 30 days
+        daily_income_avg = recent_income / 30
+        daily_expense_avg = recent_expenses / 30
+        daily_net_avg = (recent_income - recent_expenses) / 30
         
         user_lang = self.get_user_language(chat_id)
         
@@ -364,7 +396,7 @@ class SimpleFinnBot:
     ─────────────────
     Чистий потік: {net_flow:,.0f}₴
 
-    📈 *Щоденні середні показники:*
+    summary_text += f"📈 *Щоденні середні показники (за останні 30 днів):*
     Середній дохід/день: {daily_income_avg:,.0f}₴
     Середні витрати/день: {daily_expense_avg:,.0f}₴
     Середній чистий потік/день: {daily_net_avg:,.0f}₴
@@ -380,8 +412,9 @@ class SimpleFinnBot:
                 summary_text += f"\n   Чистий борг: {net_debt:,.0f}₴"
             
             # Add context about tracking period
-            if all_dates:
-                summary_text += f"\n\n📅 *Період відстеження:* {len(all_dates)} днів"
+            recent_days_count = len(all_recent_days)
+            if recent_days_count > 0:
+                summary_text += f"\n\n📅 *Активність за останні 30 днів:* {recent_days_count} днів"
             
         else:
             summary_text = f"""📊 *Financial Summary*
@@ -395,7 +428,7 @@ class SimpleFinnBot:
     ─────────────────
     Net Cash Flow: {net_flow:,.0f}₴
 
-    📈 *Daily Averages:*
+    summary_text += f"📈 *Daily Averages (Last 30 Days):*
     Avg Income/Day: {daily_income_avg:,.0f}₴
     Avg Expenses/Day: {daily_expense_avg:,.0f}₴
     Avg Net Flow/Day: {daily_net_avg:,.0f}₴
