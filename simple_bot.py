@@ -344,6 +344,7 @@ class SimpleFinnBot:
         # Calculate averages
         # Calculate averages based on last 30 days
         # Calculate averages based on last 30 days or available period
+        # Calculate averages based on last 30 days
         current_date = datetime.now().date()
         thirty_days_ago = current_date - timedelta(days=30)
 
@@ -352,16 +353,20 @@ class SimpleFinnBot:
         recent_expenses = 0
         all_recent_days = set()
 
+        print(f"🔍 DEBUG: Filtering transactions from {thirty_days_ago} to {current_date}")
+
         for transaction in user_transactions:
             if 'date' in transaction:
                 try:
                     # Parse transaction date
+                    transaction_date = None
                     if 'T' in transaction['date']:
                         transaction_date_str = transaction['date'].split('T')[0]
+                        transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
                     else:
+                        # Try different date formats
                         transaction_date_str = transaction['date'].split(' ')[0]
-                    
-                    transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
                     
                     # Only include transactions from last 30 days
                     if transaction_date >= thirty_days_ago:
@@ -369,17 +374,42 @@ class SimpleFinnBot:
                         
                         if transaction['type'] == 'income':
                             recent_income += transaction['amount']
+                            print(f"🔍 DEBUG: Added income {transaction['amount']} from {transaction_date}")
                         elif transaction['type'] == 'expense':
                             recent_expenses += transaction['amount']
+                            print(f"🔍 DEBUG: Added expense {transaction['amount']} from {transaction_date}")
                             
                 except Exception as e:
-                    print(f"⚠️ Error parsing transaction date: {e}")
+                    print(f"⚠️ Error parsing transaction date '{transaction.get('date')}': {e}")
                     continue
+
+        print(f"🔍 DEBUG FINAL TOTALS:")
+        print(f"   Recent income total: {recent_income:,.0f}₴")
+        print(f"   Recent expenses total: {recent_expenses:,.0f}₴")
+        print(f"   Unique days with activity: {len(all_recent_days)}")
 
         # Calculate daily averages for last 30 days
         daily_income_avg = recent_income / 30
         daily_expense_avg = recent_expenses / 30
         daily_net_avg = (recent_income - recent_expenses) / 30
+
+        print(f"🔍 DEBUG DAILY AVERAGES:")
+        print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
+
+        # If we have less than 30 days of data, scale the averages appropriately
+        if len(all_recent_days) > 0:
+            daily_income_avg = recent_income / 30  # Always divide by 30 for consistent "daily average"
+            daily_expense_avg = recent_expenses / 30
+            daily_net_avg = (recent_income - recent_expenses) / 30
+        else:
+            daily_income_avg = 0
+            daily_expense_avg = 0
+            daily_net_avg = 0
+
+        # DEBUG: Print the actual numbers to see what's happening
+        print(f"🔍 DEBUG DAILY AVG: recent_income={recent_income}, recent_expenses={recent_expenses}")
+        print(f"🔍 DEBUG DAILY AVG: daily_income_avg={daily_income_avg}, daily_expense_avg={daily_expense_avg}")
         
         user_lang = self.get_user_language(chat_id)
         
