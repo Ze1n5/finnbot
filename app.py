@@ -1372,51 +1372,13 @@ def serve_mini_app():
         
         body {
             background-color: #f5f5f7;
-            color: #1d1d1f;
-            overflow: hidden;
-            touch-action: pan-y;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        
-        .app-container {
-            display: flex;
-            width: 200%;
-            height: 100vh;
-            transition: transform 0.3s ease;
-            transform: translateX(0%);
-        }
-        
-        .screen {
-            width: 50%;
-            height: 100vh;
             padding: 20px;
-            overflow-y: auto;
+            color: #1d1d1f;
         }
         
         .container {
             max-width: 400px;
             margin: 0 auto;
-            position: relative;
-        }
-        
-        .screen-indicator {
-            display: flex;
-            justify-content: center;
-            gap: 6px;
-            margin-bottom: 15px;
-        }
-        
-        .dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #c7c7cc;
-            transition: background 0.3s ease;
-        }
-        
-        .dot.active {
-            background: #007aff;
         }
         
         .balance-card {
@@ -1492,7 +1454,6 @@ def serve_mini_app():
             font-size: 36px;
             font-weight: 600;
             margin-bottom: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .income-expense {
@@ -1510,14 +1471,12 @@ def serve_mini_app():
             color: #34c759;
             font-size: 18px;
             font-weight: 600;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .expense-amount {
             color: #ff3b30;
             font-size: 18px;
             font-weight: 600;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .income-label, .expense-label {
@@ -1531,7 +1490,6 @@ def serve_mini_app():
             border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            margin-bottom: 20px;
         }
         
         .transaction {
@@ -1591,7 +1549,6 @@ def serve_mini_app():
             text-align: right;
             flex-shrink: 0;
             margin-left: 10px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         
         .amount-negative {
@@ -1624,434 +1581,76 @@ def serve_mini_app():
             font-size: 14px;
             color: #8e8e93;
         }
-
-        /* 50/30/20 Report Styles */
-        .report-card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        .report-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .report-title {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .report-subtitle {
-            font-size: 14px;
-            color: #8e8e93;
-        }
-
-        .budget-category {
-            margin-bottom: 20px;
-        }
-
-        .category-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .category-title {
-            font-size: 16px;
-            font-weight: 500;
-        }
-
-        .category-percentage {
-            font-size: 14px;
-            font-weight: 500;
-            color: #8e8e93;
-        }
-
-        .progress-bar {
-            height: 8px;
-            background: #f2f2f7;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 8px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-
-        .progress-needs {
-            background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
-        }
-
-        .progress-wants {
-            background: linear-gradient(90deg, #4ecdc4, #88d3ce);
-        }
-
-        .progress-savings {
-            background: linear-gradient(90deg, #45b7d1, #7bcae4);
-        }
-
-        .category-stats {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: #8e8e93;
-        }
-
-        .category-amount {
-            font-weight: 500;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .budget-summary {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 15px;
-            margin-top: 20px;
-        }
-
-        .summary-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-
-        .summary-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .summary-label {
-            font-size: 14px;
-            color: #6c757d;
-        }
-
-        .summary-value {
-            font-size: 14px;
-            font-weight: 500;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .tip-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 16px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-
-        .tip-title {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .tip-content {
-            font-size: 12px;
-            opacity: 0.9;
-        }
-
-        .nav-buttons {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 15px;
-            position: relative;
-            z-index: 1000;
-        }
-
-        .nav-button {
-            background: #007aff;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s ease;
-            -webkit-tap-highlight-color: transparent;
-            position: relative;
-            z-index: 1001;
-        }
-
-        .nav-button:active {
-            background: #0056cc;
-            transform: scale(0.98);
-        }
-
-        .debug-info {
-            background: #ffeb3b;
-            color: #333;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 12px;
-            display: none;
-        }
     </style>
 </head>
 <body>
-    <div class="debug-info" id="debugInfo"></div>
-    
-    <div class="app-container" id="appContainer">
-        <!-- Screen 1: Main Dashboard -->
-        <div class="screen" id="screen1">
-            <div class="container">
-                <div class="screen-indicator">
-                    <div class="dot active"></div>
-                    <div class="dot"></div>
-                </div>
-                
-                <div class="user-info" id="userInfo">
-                    Loading user info...
-                </div>
-                
-                <div class="balance-card">
-                    <div class="health-indicator" id="healthIndicator" style="display: none;">
-                        <div class="health-label">Financial Health</div>
-                        <div class="health-display" id="healthDisplay">⛺️ 0%</div>
+    <div class="container">
+        <div class="user-info" id="userInfo">
+            Loading user info...
+        </div>
+        
+        <div class="balance-card">
+            <div class="health-indicator" id="healthIndicator" style="display: none;">
+                <div class="health-label">Financial Health</div>
+                <div class="health-display" id="healthDisplay">⛺️ 0%</div>
+            </div>
+            <div class="balance-label">Current Balance</div>
+            <div class="balance-amount" id="balanceAmount">0₴</div>
+            
+            <!-- Add Daily Averages Section -->
+            <div class="averages-section" id="averagesSection" style="display: none;">
+                <div class="averages-row">
+                    <div class="average-item">
+                        <div class="average-label">📈 Daily Income</div>
+                        <div class="average-amount" id="dailyIncomeAvg">0₴</div>
                     </div>
-                    <div class="balance-label">Current Balance</div>
-                    <div class="balance-amount" id="balanceAmount">0 ₴</div>
-                    
-                    <div class="averages-section" id="averagesSection" style="display: none;">
-                        <div class="averages-row">
-                            <div class="average-item">
-                                <div class="average-label">📈 Daily Income</div>
-                                <div class="average-amount" id="dailyIncomeAvg">0 ₴</div>
-                            </div>
-                            <div class="average-item">
-                                <div class="average-label">📉 Daily Spending</div>
-                                <div class="average-amount" id="dailyExpenseAvg">0 ₴</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="income-expense">
-                        <div class="expense">
-                            <div class="expense-amount" id="expenseAmount">0 ₴</div>
-                            <div class="expense-label">Spending</div>
-                        </div>
-                        <div class="income">
-                            <div class="income-amount" id="incomeAmount">0 ₴</div>
-                            <div class="income-label">Income</div>
-                        </div>
+                    <div class="average-item">
+                        <div class="average-label">📉 Daily Spending</div>
+                        <div class="average-amount" id="dailyExpenseAvg">0₴</div>
                     </div>
                 </div>
-                
-                <div class="transactions" id="transactionsContainer">
-                    <div class="loading">Loading transactions...</div>
+            </div>
+            
+            <div class="income-expense">
+                <div class="expense">
+                    <div class="expense-amount" id="expenseAmount">0₴</div>
+                    <div class="expense-label">Spending</div>
                 </div>
-
-                <div class="nav-buttons">
-                    <button class="nav-button" onclick="showScreen(0)">← Dashboard</button>
-                    <button class="nav-button" onclick="showScreen(1)">Budget Report →</button>
+                <div class="income">
+                    <div class="income-amount" id="incomeAmount">0₴</div>
+                    <div class="income-label">Income</div>
                 </div>
             </div>
         </div>
-
-        <!-- Screen 2: 50/30/20 Report -->
-        <div class="screen" id="screen2">
-            <div class="container">
-                <div class="screen-indicator">
-                    <div class="dot"></div>
-                    <div class="dot active"></div>
-                </div>
-                
-                <div class="report-card">
-                    <div class="report-header">
-                        <div class="report-title">50/30/20 Budget</div>
-                        <div class="report-subtitle">Smart Spending Guide</div>
-                    </div>
-
-                    <!-- Needs - 50% -->
-                    <div class="budget-category">
-                        <div class="category-header">
-                            <div class="category-title">🏠 Needs (50%)</div>
-                            <div class="category-percentage" id="needsPercentage">0%</div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill progress-needs" id="needsProgress" style="width: 0%"></div>
-                        </div>
-                        <div class="category-stats">
-                            <span>Essential expenses</span>
-                            <span class="category-amount" id="needsAmount">0 ₴ / 0 ₴</span>
-                        </div>
-                    </div>
-
-                    <!-- Wants - 30% -->
-                    <div class="budget-category">
-                        <div class="category-header">
-                            <div class="category-title">🎯 Wants (30%)</div>
-                            <div class="category-percentage" id="wantsPercentage">0%</div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill progress-wants" id="wantsProgress" style="width: 0%"></div>
-                        </div>
-                        <div class="category-stats">
-                            <span>Lifestyle & fun</span>
-                            <span class="category-amount" id="wantsAmount">0 ₴ / 0 ₴</span>
-                        </div>
-                    </div>
-
-                    <!-- Savings - 20% -->
-                    <div class="budget-category">
-                        <div class="category-header">
-                            <div class="category-title">💰 Savings (20%)</div>
-                            <div class="category-percentage" id="savingsPercentage">0%</div>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill progress-savings" id="savingsProgress" style="width: 0%"></div>
-                        </div>
-                        <div class="category-stats">
-                            <span>Future & debt</span>
-                            <span class="category-amount" id="savingsAmount">0 ₴ / 0 ₴</span>
-                        </div>
-                    </div>
-
-                    <div class="budget-summary">
-                        <div class="summary-item">
-                            <span class="summary-label">Total Income:</span>
-                            <span class="summary-value" id="totalIncome">0 ₴</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Recommended Needs:</span>
-                            <span class="summary-value" id="recommendedNeeds">0 ₴</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Recommended Wants:</span>
-                            <span class="summary-value" id="recommendedWants">0 ₴</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Recommended Savings:</span>
-                            <span class="summary-value" id="recommendedSavings">0 ₴</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="tip-card">
-                    <div class="tip-title">💡 Budget Tip</div>
-                    <div class="tip-content" id="budgetTip">Track your expenses regularly to stay within your budget goals. Small adjustments can make a big difference!</div>
-                </div>
-
-                <div class="nav-buttons">
-                    <button class="nav-button" onclick="showScreen(0)">← Dashboard</button>
-                    <button class="nav-button" onclick="showScreen(1)">Budget Report →</button>
-                </div>
-            </div>
+        
+        <div class="transactions" id="transactionsContainer">
+            <div class="loading">Loading transactions...</div>
         </div>
     </div>
 
     <script>
-        // Debug mode
-        const DEBUG = true;
-        
-        function debugLog(message) {
-            if (DEBUG) {
-                console.log('🔍 DEBUG:', message);
-                const debugInfo = document.getElementById('debugInfo');
-                if (debugInfo) {
-                    debugInfo.style.display = 'block';
-                    debugInfo.textContent = message;
-                }
-            }
-        }
-
         // Initialize Telegram WebApp
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
-
-        let currentScreen = 0;
-        let startX = 0;
-
-        // Simple swipe handling
-        function setupSwipe() {
-            const container = document.getElementById('appContainer');
-            
-            container.addEventListener('touchstart', (e) => {
-                startX = e.touches[0].clientX;
-            }, { passive: true });
-            
-            container.addEventListener('touchend', (e) => {
-                const endX = e.changedTouches[0].clientX;
-                const diff = startX - endX;
-                const threshold = 50;
-                
-                if (Math.abs(diff) > threshold) {
-                    if (diff > 0 && currentScreen === 0) {
-                        showScreen(1);
-                    } else if (diff < 0 && currentScreen === 1) {
-                        showScreen(0);
-                    }
-                }
-            }, { passive: true });
-        }
-
-        function showScreen(screenIndex) {
-            debugLog(`Switching to screen ${screenIndex}`);
-            currentScreen = screenIndex;
-            const container = document.getElementById('appContainer');
-            const dots = document.querySelectorAll('.dot');
-            
-            container.style.transform = `translateX(-${screenIndex * 50}%)`;
-            
-            dots.forEach((dot, index) => {
-                dot.classList.toggle('active', index === screenIndex);
-            });
-        }
 
         // Get user information from Telegram
         function getUserInfo() {
             const user = Telegram.WebApp.initDataUnsafe?.user;
             const user_id = user?.id;
             
-            debugLog(`Telegram user data: ${JSON.stringify(user)}`);
-            
             if (user_id) {
                 const userName = user.first_name || user.username || 'User';
-                document.getElementById('userInfo').textContent = `👋 Hello, ${userName}`;
+                document.getElementById('userInfo').textContent = `👋 Hello, ${userName} (ID: ${user_id})`;
                 return user_id;
             } else {
-                document.getElementById('userInfo').textContent = '❌ Cannot identify user - opening in browser?';
-                // For testing in browser, use a test user ID
-                return 'test_user_123';
+                document.getElementById('userInfo').textContent = '❌ Cannot identify user';
+                return null;
             }
-        }
-
-        // Mock data for testing
-        function getMockData() {
-            return {
-                balance: 12500,
-                income: 30000,
-                spending: 17500,
-                daily_income_avg: 1000,
-                daily_expense_avg: 583,
-                financial_health: 75,
-                financial_health_emoji: '🏠',
-                transactions: [
-                    { amount: 15000, description: "Salary", category: "Income", emoji: "💰" },
-                    { amount: -2500, description: "Rent", category: "Housing", emoji: "🏠" },
-                    { amount: -1200, description: "Groceries", category: "Food", emoji: "🛒" },
-                    { amount: -800, description: "Restaurant", category: "Dining", emoji: "🍽️" },
-                    { amount: -500, description: "Transport", category: "Travel", emoji: "🚗" }
-                ]
-            };
         }
 
         // Load financial data and transactions
         async function loadFinancialData() {
             try {
-                debugLog('Starting to load financial data...');
-                
                 // Get user ID from Telegram
                 const user_id = getUserInfo();
                 
@@ -2060,160 +1659,75 @@ def serve_mini_app():
                     return;
                 }
 
-                debugLog(`Loading data for user: ${user_id}`);
+                console.log('Loading data for user:', user_id);
 
-                let financeData;
-                let transactions = [];
-
-                // Try to load from API first
-                try {
-                    const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
-                    debugLog(`Finance API status: ${financeResponse.status}`);
-                    
-                    if (financeResponse.ok) {
-                        financeData = await financeResponse.json();
-                        debugLog('Finance data loaded from API');
-                    } else {
-                        throw new Error(`API returned ${financeResponse.status}`);
-                    }
-                    
-                    const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
-                    debugLog(`Transactions API status: ${transactionsResponse.status}`);
-                    
-                    if (transactionsResponse.ok) {
-                        const transactionsData = await transactionsResponse.json();
-                        debugLog('Transactions data loaded from API');
-                        
-                        // Handle different response structures
-                        if (Array.isArray(transactionsData)) {
-                            transactions = transactionsData;
-                        } else if (transactionsData.transactions) {
-                            transactions = transactionsData.transactions;
-                        } else if (transactionsData.data) {
-                            transactions = transactionsData.data;
-                        }
-                    }
-                } catch (apiError) {
-                    debugLog(`API Error: ${apiError.message}. Using mock data.`);
-                    // Use mock data if API fails
-                    financeData = getMockData();
-                    transactions = financeData.transactions || [];
-                }
-
-                // Update displays
-                updateFinancialDisplay(financeData);
-                updateBudgetReport(financeData);
-                renderTransactions(transactions);
+                // Load balance and totals WITH user_id parameter
+                const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
+                const financeData = await financeResponse.json();
                 
-                debugLog('Data loading completed successfully');
+                if (financeResponse.ok) {
+                    updateFinancialDisplay(financeData);
+                } else {
+                    showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
+                }
+                
+                // Load transactions WITH user_id parameter
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
+                const transactionsData = await transactionsResponse.json();
+                
+                if (transactionsResponse.ok) {
+                    renderTransactions(transactionsData.transactions || transactionsData);
+                } else {
+                    showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
+                }
                 
             } catch (error) {
-                debugLog(`Critical error: ${error.message}`);
-                showError('Failed to load data. Using demo data.');
-                
-                // Fallback to mock data
-                const mockData = getMockData();
-                updateFinancialDisplay(mockData);
-                updateBudgetReport(mockData);
-                renderTransactions(mockData.transactions);
+                console.error('Error loading data:', error);
+                showError('Network error - please check your connection');
             }
         }
         
         function updateFinancialDisplay(data) {
-            debugLog(`Updating display with: ${JSON.stringify(data).substring(0, 100)}...`);
-            
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
             if (data.balance !== undefined) {
-                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()} ₴`;
+                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
                 balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
             }
             
             // Update income and expenses
             if (data.income !== undefined) {
-                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()} ₴`;
+                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
             }
             if (data.spending !== undefined) {
-                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()} ₴`;
+                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
             }
             
             // Update daily averages
             const averagesSection = document.getElementById('averagesSection');
             if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
+                // Show averages section only if we have data
                 averagesSection.style.display = 'block';
-                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()} ₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()} ₴`;
+                
+                // Update average amounts
+                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
+                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
+                
+                // Color coding for averages
+                document.getElementById('dailyIncomeAvg').style.color = '#34c759';
+                document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
             } else {
+                // Hide averages if no data
                 averagesSection.style.display = 'none';
             }
-            
             const healthIndicator = document.getElementById('healthIndicator');
-            if (data.financial_health !== undefined) {
+            if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
                 healthIndicator.style.display = 'block';
-                const emoji = data.financial_health_emoji || '⛺️';
-                document.getElementById('healthDisplay').textContent = `${emoji} ${data.financial_health}%`;
+                document.getElementById('healthDisplay').textContent = 
+                    `${data.financial_health_emoji} ${data.financial_health}%`;
             } else {
                 healthIndicator.style.display = 'none';
             }
-        }
-        
-        function updateBudgetReport(data) {
-            const totalIncome = data.income || 0;
-            const totalSpending = data.spending || 0;
-            
-            // Calculate recommended amounts
-            const recommendedNeeds = totalIncome * 0.5;
-            const recommendedWants = totalIncome * 0.3;
-            const recommendedSavings = totalIncome * 0.2;
-            
-            // For demo, use reasonable estimates
-            const actualNeeds = totalSpending * 0.6;
-            const actualWants = totalSpending * 0.3;
-            const actualSavings = totalSpending * 0.1;
-            
-            // Calculate percentages
-            const needsPercentage = totalIncome > 0 ? Math.min((actualNeeds / recommendedNeeds) * 100, 100) : 0;
-            const wantsPercentage = totalIncome > 0 ? Math.min((actualWants / recommendedWants) * 100, 100) : 0;
-            const savingsPercentage = totalIncome > 0 ? Math.min((actualSavings / recommendedSavings) * 100, 100) : 0;
-            
-            // Update UI
-            document.getElementById('needsPercentage').textContent = `${Math.round(needsPercentage)}%`;
-            document.getElementById('wantsPercentage').textContent = `${Math.round(wantsPercentage)}%`;
-            document.getElementById('savingsPercentage').textContent = `${Math.round(savingsPercentage)}%`;
-            
-            document.getElementById('needsProgress').style.width = `${needsPercentage}%`;
-            document.getElementById('wantsProgress').style.width = `${wantsPercentage}%`;
-            document.getElementById('savingsProgress').style.width = `${savingsPercentage}%`;
-            
-            document.getElementById('needsAmount').textContent = `${Math.round(actualNeeds).toLocaleString()} ₴ / ${Math.round(recommendedNeeds).toLocaleString()} ₴`;
-            document.getElementById('wantsAmount').textContent = `${Math.round(actualWants).toLocaleString()} ₴ / ${Math.round(recommendedWants).toLocaleString()} ₴`;
-            document.getElementById('savingsAmount').textContent = `${Math.round(actualSavings).toLocaleString()} ₴ / ${Math.round(recommendedSavings).toLocaleString()} ₴`;
-            
-            document.getElementById('totalIncome').textContent = `${totalIncome.toLocaleString()} ₴`;
-            document.getElementById('recommendedNeeds').textContent = `${Math.round(recommendedNeeds).toLocaleString()} ₴`;
-            document.getElementById('recommendedWants').textContent = `${Math.round(recommendedWants).toLocaleString()} ₴`;
-            document.getElementById('recommendedSavings').textContent = `${Math.round(recommendedSavings).toLocaleString()} ₴`;
-            
-            updateBudgetTip(needsPercentage, wantsPercentage, savingsPercentage);
-        }
-        
-        function updateBudgetTip(needs, wants, savings) {
-            const tipElement = document.getElementById('budgetTip');
-            let tip = '';
-            
-            if (needs > 100) {
-                tip = 'Your essential expenses are above the recommended 50%. Consider reviewing recurring bills.';
-            } else if (wants > 100) {
-                tip = 'Lifestyle spending is high. Try to identify areas where you can reduce discretionary expenses.';
-            } else if (savings < 50) {
-                tip = 'Your savings rate is low. Even small regular contributions can build financial security.';
-            } else if (savings >= 80) {
-                tip = 'Great job on savings! You\'re building a strong financial foundation.';
-            } else {
-                tip = 'Track your expenses regularly to stay within your budget goals.';
-            }
-            
-            tipElement.textContent = tip;
         }
         
         function renderTransactions(transactions) {
@@ -2226,7 +1740,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">📭</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">No transactions yet</div>
-                                <div class="transaction-category">Add transactions in the bot to see them here</div>
+                                <div class="transaction-category">Start adding transactions in the bot</div>
                             </div>
                         </div>
                     </div>
@@ -2237,12 +1751,13 @@ def serve_mini_app():
             let transactionsHTML = '';
             
             transactions.forEach(transaction => {
-                const amount = transaction.amount || 0;
+                const amount = transaction.amount;
                 const isPositive = amount >= 0;
-                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()} ₴`;
+                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
-                const displayName = transaction.description || transaction.name || transaction.category || 'Transaction';
-                const displayCategory = transaction.category || '';
+                // Handle different possible data structures
+                const displayName = transaction.name || transaction.category || 'Transaction';
+                const displayDescription = transaction.description || '';
                 
                 transactionsHTML += `
                     <div class="transaction">
@@ -2250,7 +1765,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">${displayName}</div>
-                                ${displayCategory ? `<div class="transaction-category">${displayCategory}</div>` : ''}
+                                ${displayDescription ? `<div class="transaction-category">${displayDescription}</div>` : ''}
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
@@ -2270,25 +1785,19 @@ def serve_mini_app():
         
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            debugLog('App initialized');
-            setupSwipe();
+            console.log('Mini-app initialized');
             loadFinancialData();
-            
-            // Make buttons work immediately
-            document.querySelectorAll('.nav-button').forEach(button => {
-                button.style.pointerEvents = 'auto';
-            });
         });
-
-        // Force button functionality
-        setTimeout(() => {
-            document.querySelectorAll('.nav-button').forEach(button => {
-                button.onclick = function() {
-                    const targetScreen = this.textContent.includes('Dashboard') ? 0 : 1;
-                    showScreen(targetScreen);
-                };
-            });
-        }, 1000);
+        
+        // Refresh data every 30 seconds
+        setInterval(loadFinancialData, 30000);
+        
+        // Also refresh when the app becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadFinancialData();
+            }
+        });
     </script>
 </body>
 </html>"""
