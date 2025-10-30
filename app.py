@@ -233,6 +233,7 @@ def api_financial_data():
         # Calculate financial health FIRST
         health_score = bot_instance.calculate_financial_health(user_id)
         health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
+        
         # Initialize totals for THIS USER ONLY
         balance = 0
         total_income = 0
@@ -241,10 +242,15 @@ def api_financial_data():
         transaction_count = 0
         recent_transactions = []
 
-        # NEW: Track dates for averages
-        income_dates = set()
-        expense_dates = set()
-        all_dates = set()
+        # NEW: Calculate 30-day daily averages (same as handle_financial_summary)
+        current_date = datetime.now().date()
+        thirty_days_ago = current_date - timedelta(days=30)
+
+        recent_income = 0
+        recent_expenses = 0
+        all_recent_days = set()
+
+        print(f"🔍 MINI APP: Filtering transactions from {thirty_days_ago} to {current_date}")
 
         # Calculate totals from THIS USER'S transactions only
         for transaction in user_transactions:
@@ -253,31 +259,13 @@ def api_financial_data():
                 trans_type = transaction.get('type', 'expense')
                 description = transaction.get('description', 'Unknown')
                 
-                # Extract date for averages
-                transaction_date = None
-                if 'date' in transaction:
-                    try:
-                        if 'T' in transaction['date']:
-                            transaction_date = transaction['date'].split('T')[0]  # Get YYYY-MM-DD
-                        else:
-                            transaction_date = transaction['date'].split(' ')[0]  # Get YYYY-MM-DD
-                    except:
-                        transaction_date = None
-                
-                if transaction_date:
-                    all_dates.add(transaction_date)
-                
                 # CORRECTED BALANCE CALCULATION
                 if trans_type == 'income':
                     balance += amount
                     total_income += amount
-                    if transaction_date:
-                        income_dates.add(transaction_date)
                 elif trans_type == 'expense':
                     balance -= amount
                     total_expenses += amount
-                    if transaction_date:
-                        expense_dates.add(transaction_date)
                 elif trans_type == 'savings':
                     balance -= amount  # Money moved to savings
                     total_savings += amount
@@ -290,15 +278,47 @@ def api_financial_data():
                     total_savings -= amount
                 
                 transaction_count += 1
-        
-        # NEW: Calculate daily averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = total_income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = total_expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (total_income - total_expenses) / total_days if total_days > 0 else 0
+                
+                # Calculate recent transactions (last 30 days)
+                if 'date' in transaction:
+                    try:
+                        # Parse transaction date
+                        transaction_date = None
+                        if 'T' in transaction['date']:
+                            transaction_date_str = transaction['date'].split('T')[0]
+                            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        else:
+                            transaction_date_str = transaction['date'].split(' ')[0]
+                            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        
+                        # Only include transactions from last 30 days
+                        if transaction_date >= thirty_days_ago:
+                            all_recent_days.add(transaction_date)
+                            
+                            if trans_type == 'income':
+                                recent_income += amount
+                                print(f"🔍 MINI APP: Added income {amount} from {transaction_date}")
+                            elif trans_type == 'expense':
+                                recent_expenses += amount
+                                print(f"🔍 MINI APP: Added expense {amount} from {transaction_date}")
+                                
+                    except Exception as e:
+                        print(f"⚠️ MINI APP: Error parsing transaction date: {e}")
+                        continue
+
+        print(f"🔍 MINI APP FINAL TOTALS:")
+        print(f"   Recent income total: {recent_income:,.0f}₴")
+        print(f"   Recent expenses total: {recent_expenses:,.0f}₴")
+        print(f"   Unique days with activity: {len(all_recent_days)}")
+
+        # Calculate daily averages for last 30 days (ALWAYS divide by 30)
+        daily_income_avg = recent_income / 30
+        daily_expense_avg = recent_expenses / 30
+        daily_net_avg = (recent_income - recent_expenses) / 30
+
+        print(f"🔍 MINI APP DAILY AVERAGES:")
+        print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
 
         # Get recent transactions for display (last 5)
         for transaction in user_transactions[-5:]:
@@ -372,7 +392,7 @@ def api_financial_data():
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
-            'tracking_days': total_days,
+            'tracking_days': len(all_recent_days),
             'financial_health': health_score,
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
