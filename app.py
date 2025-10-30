@@ -1410,53 +1410,6 @@ def serve_mini_app():
             font-weight: bold;
         }
 
-        .savings-debt-section {
-            margin: 15px 0;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            border: 1px solid #e9ecef;
-        }
-
-        .savings-debt-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-
-        .savings-debt-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .savings-debt-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1;
-        }
-
-        .savings-debt-label {
-            font-size: 12px;
-            color: #6c757d;
-            text-align: center;
-            margin-bottom: 4px;
-        }
-
-        .savings-debt-amount {
-            font-size: 14px;
-            font-weight: 600;
-            color: #495057;
-        }
-
-        .savings-positive {
-            color: #34c759;
-        }
-
-        .debt-negative {
-            color: #ff3b30;
-        }
-
         .averages-section {
             margin: 15px 0;
             padding: 12px;
@@ -1628,14 +1581,6 @@ def serve_mini_app():
             font-size: 14px;
             color: #8e8e93;
         }
-
-        .currency-badge {
-            font-size: 10px;
-            background: #e9ecef;
-            padding: 2px 6px;
-            border-radius: 8px;
-            margin-left: 4px;
-        }
     </style>
 </head>
 <body>
@@ -1651,38 +1596,6 @@ def serve_mini_app():
             </div>
             <div class="balance-label">Current Balance</div>
             <div class="balance-amount" id="balanceAmount">0₴</div>
-            
-            <!-- Savings & Debt Section -->
-            <div class="savings-debt-section" id="savingsDebtSection" style="display: none;">
-                <div class="savings-debt-row">
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">💰 Savings (UAH)</div>
-                        <div class="savings-debt-amount savings-positive" id="savingsUah">0₴</div>
-                    </div>
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">💰 Savings ($)</div>
-                        <div class="savings-debt-amount savings-positive" id="savingsUsd">$0</div>
-                    </div>
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">💰 Savings (€)</div>
-                        <div class="savings-debt-amount savings-positive" id="savingsEur">€0</div>
-                    </div>
-                </div>
-                <div class="savings-debt-row">
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">📝 Debt (UAH)</div>
-                        <div class="savings-debt-amount debt-negative" id="debtUah">0₴</div>
-                    </div>
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">📝 Debt ($)</div>
-                        <div class="savings-debt-amount debt-negative" id="debtUsd">$0</div>
-                    </div>
-                    <div class="savings-debt-item">
-                        <div class="savings-debt-label">📝 Debt (€)</div>
-                        <div class="savings-debt-amount debt-negative" id="debtEur">€0</div>
-                    </div>
-                </div>
-            </div>
             
             <!-- Add Daily Averages Section -->
             <div class="averages-section" id="averagesSection" style="display: none;">
@@ -1719,12 +1632,6 @@ def serve_mini_app():
         // Initialize Telegram WebApp
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
-
-        // Exchange rates (example rates - you might want to fetch these from an API)
-        const exchangeRates = {
-            'USD': 0.025, // 1 UAH = 0.025 USD
-            'EUR': 0.023  // 1 UAH = 0.023 EUR
-        };
 
         // Get user information from Telegram
         function getUserInfo() {
@@ -1779,20 +1686,6 @@ def serve_mini_app():
                 showError('Network error - please check your connection');
             }
         }
-
-        function convertToCurrency(amountUah, currency) {
-            if (currency === 'UAH') return amountUah;
-            return Math.round(amountUah * exchangeRates[currency]);
-        }
-
-        function formatCurrency(amount, currency) {
-            const symbols = {
-                'UAH': '₴',
-                'USD': '$',
-                'EUR': '€'
-            };
-            return `${amount >= 0 ? '+' : ''}${Math.abs(amount).toLocaleString()}${symbols[currency]}`;
-        }
         
         function updateFinancialDisplay(data) {
             // Update balance
@@ -1808,33 +1701,6 @@ def serve_mini_app():
             }
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
-            }
-
-            // Update savings and debt in multiple currencies
-            const savingsDebtSection = document.getElementById('savingsDebtSection');
-            if (data.savings !== undefined || data.debt !== undefined) {
-                savingsDebtSection.style.display = 'block';
-                
-                const savings = data.savings || 0;
-                const debt = data.debt || 0;
-                
-                // UAH
-                document.getElementById('savingsUah').textContent = `+${savings.toLocaleString()}₴`;
-                document.getElementById('debtUah').textContent = `-${debt.toLocaleString()}₴`;
-                
-                // USD
-                const savingsUsd = convertToCurrency(savings, 'USD');
-                const debtUsd = convertToCurrency(debt, 'USD');
-                document.getElementById('savingsUsd').textContent = `+${savingsUsd.toLocaleString()}$`;
-                document.getElementById('debtUsd').textContent = `-${debtUsd.toLocaleString()}$`;
-                
-                // EUR
-                const savingsEur = convertToCurrency(savings, 'EUR');
-                const debtEur = convertToCurrency(debt, 'EUR');
-                document.getElementById('savingsEur').textContent = `+${savingsEur.toLocaleString()}€`;
-                document.getElementById('debtEur').textContent = `-${debtEur.toLocaleString()}€`;
-            } else {
-                savingsDebtSection.style.display = 'none';
             }
             
             // Update daily averages
@@ -1887,16 +1753,7 @@ def serve_mini_app():
             transactions.forEach(transaction => {
                 const amount = transaction.amount;
                 const isPositive = amount >= 0;
-                const currency = transaction.currency || 'UAH';
-                
-                let amountDisplay = '';
-                if (currency === 'UAH') {
-                    amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
-                } else if (currency === 'USD') {
-                    amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}$`;
-                } else if (currency === 'EUR') {
-                    amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}€`;
-                }
+                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
                 // Handle different possible data structures
                 const displayName = transaction.name || transaction.category || 'Transaction';
@@ -1908,10 +1765,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">${displayName}</div>
-                                <div>
-                                    <span class="transaction-category">${displayDescription}</span>
-                                    ${currency !== 'UAH' ? `<span class="currency-badge">${currency}</span>` : ''}
-                                </div>
+                                ${displayDescription ? `<div class="transaction-category">${displayDescription}</div>` : ''}
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
