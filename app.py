@@ -1634,6 +1634,72 @@ def serve_mini_app():
             font-size: 14px;
             font-weight: 600;
         }
+
+        /* Category Summary Styles */
+        .summary-section {
+            margin-bottom: 20px;
+        }
+
+        .summary-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .category-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .category-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .category-summary-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .debt-detail {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .category-summary-amount {
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+
+        .category-summary-amount.positive {
+            color: #34c759;
+        }
+
+        .category-summary-amount.negative {
+            color: #ff3b30;
+        }
+
+        .category-summary-amount.neutral {
+            color: #007AFF;
+        }
         
         .averages-section {
             margin: 15px 0;
@@ -1780,6 +1846,13 @@ def serve_mini_app():
                     <div class="health-display" id="statsHealthDisplay">⛺️ 0%</div>
                 </div>
             </div>
+
+            <div class="stats-card" id="categorySummary">
+                <div class="stats-header">Category Summary</div>
+                <div id="categorySummaryContent">
+                    <div class="loading">Loading category data...</div>
+                </div>
+            </div>
             
             <div class="stats-card" id="categoryBreakdown" style="display: none;">
                 <div class="stats-header">Spending by Category</div>
@@ -1814,11 +1887,186 @@ def serve_mini_app():
                     document.getElementById(pageId).classList.add('active');
                     
                     // If switching to statistics page and we have data, update it
-                    if (this.getAttribute('data-page') === 'statistics' && currentUserData) {
-                        updateStatisticsPage(currentUserData);
+                    if (this.getAttribute('data-page') === 'statistics') {
+                        const user = Telegram.WebApp.initDataUnsafe?.user;
+                        const user_id = user?.id;
+                        
+                        if (user_id) {
+                            loadCategorySummary(user_id);
+                        }
+                        
+                        if (currentUserData) {
+                            updateStatisticsPage(currentUserData);
+                        }
                     }
                 });
             });
+        }
+
+        // Load category summary data
+        async function loadCategorySummary(user_id) {
+            try {
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                const transactionsData = await transactionsResponse.json();
+                
+                if (transactionsResponse.ok) {
+                    renderCategorySummary(transactionsData.transactions || transactionsData);
+                } else {
+                    document.getElementById('categorySummaryContent').innerHTML = 
+                        '<div class="error">Failed to load category data</div>';
+                }
+            } catch (error) {
+                console.error('Error loading category summary:', error);
+                document.getElementById('categorySummaryContent').innerHTML = 
+                    '<div class="error">Error loading category data</div>';
+            }
+        }
+
+        // Render category summary
+        function renderCategorySummary(transactions) {
+            const container = document.getElementById('categorySummaryContent');
+            
+            if (!transactions || transactions.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #8e8e93;">
+                        No transactions to summarize
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group transactions by category and type
+            const categoryData = {};
+            
+            transactions.forEach(transaction => {
+                const category = transaction.category || 'Other';
+                const type = transaction.type || 'expense';
+                const amount = parseFloat(transaction.amount) || 0;
+                
+                if (!categoryData[category]) {
+                    categoryData[category] = {
+                        income: 0,
+                        expense: 0,
+                        savings: 0,
+                        debt: 0,
+                        debt_return: 0,
+                        savings_withdraw: 0
+                    };
+                }
+                
+                // Categorize by transaction type
+                if (type === 'income') {
+                    categoryData[category].income += amount;
+                } else if (type === 'expense') {
+                    categoryData[category].expense += amount;
+                } else if (type === 'savings') {
+                    categoryData[category].savings += amount;
+                } else if (type === 'debt') {
+                    categoryData[category].debt += amount;
+                } else if (type === 'debt_return') {
+                    categoryData[category].debt_return += amount;
+                } else if (type === 'savings_withdraw') {
+                    categoryData[category].savings_withdraw += amount;
+                }
+            });
+            
+            // Create summary HTML
+            let summaryHTML = '';
+            
+            // Spending Categories
+            const spendingCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.expense > 0)
+                .sort((a, b) => b[1].expense - a[1].expense);
+            
+            if (spendingCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🛒 Spending</div>
+                        ${spendingCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Income Categories
+            const incomeCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.income > 0)
+                .sort((a, b) => b[1].income - a[1].income);
+            
+            if (incomeCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">💰 Income</div>
+                        ${incomeCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Savings Categories
+            const savingsCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.savings > 0)
+                .sort((a, b) => b[1].savings - a[1].savings);
+            
+            if (savingsCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🏦 Savings</div>
+                        ${savingsCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount neutral">${data.savings.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Debt Categories
+            const debtCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.debt > 0 || data.debt_return > 0)
+                .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
+            
+            if (debtCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">💳 Debt</div>
+                        ${debtCategories.map(([category, data]) => {
+                            const netDebt = data.debt - data.debt_return;
+                            return `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                    ${data.debt_return > 0 ? `<span class="debt-detail">(Returned: ${data.debt_return.toLocaleString()}₴)</span>` : ''}
+                                </div>
+                                <div class="category-summary-amount ${netDebt >= 0 ? 'negative' : 'positive'}">
+                                    ${netDebt >= 0 ? '-' : '+'}${Math.abs(netDebt).toLocaleString()}₴
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = summaryHTML || `
+                <div style="text-align: center; padding: 20px; color: #8e8e93;">
+                    No category data available
+                </div>
+            `;
         }
 
         // Load financial data and transactions
@@ -1843,6 +2091,9 @@ def serve_mini_app():
                     currentUserData = financeData;
                     updateBalancePage(financeData);
                     updateStatisticsPage(financeData);
+                    
+                    // Load category summary when we have user data
+                    loadCategorySummary(user_id);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
@@ -1921,6 +2172,7 @@ def serve_mini_app():
                 const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
                 updateHealthIndicatorColor(data.financial_health, statsHealthIndicator);
             }
+            
         }
         
         function updateHealthIndicatorColor(score, element) {
