@@ -557,65 +557,59 @@ Net Savings: {net_savings:,.0f}₴"""
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
-        # COPY YOUR EXISTING DELETE TRANSACTION LOGIC HERE
-        # Group transactions by type for better organization
-        transactions_by_type = {
-            'income': [],
-            'expense': [],
-            'savings': [],
-            'debt': [],
-            'debt_return': [],
-            'savings_withdraw': []
-        }
-        
-        for i, transaction in enumerate(user_transactions):
-            transactions_by_type[transaction['type']].append((i, transaction))
-        
         delete_text = "🗑️ *Select Transaction to Delete*\n\n"
         delete_text += "⏹️  `0` - Cancel & Exit\n\n"
         
         current_number = 1
         transaction_map = {}  # Map display numbers to actual indices
         
-        # Display transactions by type with clear sections
-        for trans_type, trans_list in transactions_by_type.items():
-            if trans_list:
-                # Add transactions for this type
-                for orig_index, transaction in trans_list:
-                    # Get proper symbol and amount display
-                    if trans_type == 'income':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'savings':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'debt':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'debt_return':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'savings_withdraw':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    else:  # expense
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    
-                    # Truncate long descriptions
-                    description = transaction['description']
-                    if len(description) > 25:
-                        description = description[:22] + "..."
-                    
-                    delete_text += f"*`{current_number:2d} `* {amount_display} • {transaction['category']}\n"
-                    
-                    transaction_map[current_number] = orig_index
-                    current_number += 1
-                
-                delete_text += "\n"
+        # Show all transactions in simple list format
+        for i, transaction in enumerate(user_transactions):
+            # Get transaction symbol and amount
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                symbol = "+"
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                symbol = "++"
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                symbol = "-"
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                symbol = "+-"
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                symbol = "-+"
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:  # expense
+                symbol = "-"
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Get date and time
+            date_display = self.format_transaction_date(transaction, chat_id)
+            
+            # Truncate description if too long
+            description = transaction['description']
+            if len(description) > 30:
+                description = description[:27] + "..."
+            
+            # Simple format: Number. Category: Description
+            #              Amount Date Time
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            transaction_map[current_number] = i
+            current_number += 1
         
         delete_text += "💡 *Type a number to delete, or 0 to cancel*"
         
         # Store the mapping for this user
         self.delete_mode[chat_id] = transaction_map
         
-        # Split long messages if needed (Telegram has 4096 char limit)
+        # Split long messages if needed
         if len(delete_text) > 4000:
-            delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
+            delete_text = self.create_simplified_delete_list(chat_id, transaction_map)
         
         self.send_message(chat_id, delete_text, parse_mode='Markdown')
 
