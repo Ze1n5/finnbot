@@ -300,6 +300,7 @@ def api_financial_data():
         recent_income = 0
         recent_expenses = 0
         recent_days_count = 0
+        recent_dates = set()  # Track unique dates in last 30 days
 
         for transaction in user_transactions:
             if isinstance(transaction, dict):
@@ -323,26 +324,25 @@ def api_financial_data():
                             elif trans_type == 'expense':
                                 recent_expenses += amount
                             
-                            # Count unique days with activity
-                            if transaction_date not in all_dates:
-                                all_dates.add(transaction_date)
-                                recent_days_count += 1
+                            # Track unique dates in the recent period
+                            recent_dates.add(transaction_date)
                                 
                     except Exception as e:
                         print(f"⚠️ Error parsing transaction date: {e}")
                         continue
 
         # Calculate averages based on last 30 days
-        # Use actual days with activity, but minimum 1 to avoid division by zero
-        active_days = max(recent_days_count, 1)
-        daily_income_avg = recent_income / 30  # Always divide by 30 for monthly average
+        daily_income_avg = recent_income / 30
         daily_expense_avg = recent_expenses / 30
         daily_net_avg = (recent_income - recent_expenses) / 30
+
+        # Use the count of recent unique dates for tracking_days
+        tracking_days = len(recent_dates)
 
         print(f"🔍 Last 30 days analysis:")
         print(f"   Recent income (30 days): {recent_income:,.0f}₴")
         print(f"   Recent expenses (30 days): {recent_expenses:,.0f}₴")
-        print(f"   Active days in period: {recent_days_count}")
+        print(f"   Active days in period: {tracking_days}")
         print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
 
@@ -418,7 +418,7 @@ def api_financial_data():
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
-            'tracking_days': total_days,
+            'tracking_days': tracking_days,  # This was missing!
             'financial_health': health_score,
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
