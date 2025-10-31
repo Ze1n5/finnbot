@@ -1380,20 +1380,6 @@ def serve_mini_app():
             text-align: center;
         }
 
-        .health-indicator {
-            text-align: center;
-            margin: 10px 0;
-            padding: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
-            color: white;
-        }
-
-        .health-display {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
         .balance-label {
             font-size: 16px;
             color: #8e8e93;
@@ -1636,6 +1622,20 @@ def serve_mini_app():
             font-weight: 600;
             color: #495057;
         }
+
+        .health-indicator {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            color: white;
+        }
+
+        .health-display {
+            font-size: 18px;
+            font-weight: bold;
+        }
         
         .loading {
             text-align: center;
@@ -1832,6 +1832,9 @@ def serve_mini_app():
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
             }
+            
+            // Financial health removed from balance page - only show in statistics
+        }
         
         function updateStatisticsPage(data) {
             // Update main statistics
