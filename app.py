@@ -1301,57 +1301,6 @@ def check_data_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-app.route('/api/transactions')
-def api_transactions():
-    try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 10))
-        user_id = request.args.get('user_id', type=int)
-        
-        if not user_id:
-            return jsonify({'error': 'user_id parameter required'}), 400
-        
-        if not bot_instance:
-            return jsonify({'error': 'Bot not initialized'}), 500
-        
-        # Get transactions ONLY for this specific user
-        user_transactions = bot_instance.transactions.get(user_id, [])
-        
-        # Sort by date (newest first)
-        user_transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
-        
-        # Calculate pagination
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        paginated_transactions = user_transactions[start_idx:end_idx]
-        
-        # Format transactions for display
-        formatted_transactions = []
-        for transaction in paginated_transactions:
-            amount = float(transaction.get('amount', 0))
-            trans_type = transaction.get('type', 'expense')
-            description = transaction.get('description', '')
-            category = transaction.get('category', 'Other')
-            timestamp = transaction.get('date', '')
-            
-            # ... rest of your existing formatting code ...
-            
-        has_more = len(user_transactions) > end_idx
-        
-        return jsonify({
-            'transactions': formatted_transactions,
-            'has_more': has_more,
-            'current_page': page,
-            'total_transactions': len(user_transactions)
-        })
-        
-    except Exception as e:
-        print(f"❌ Error in transactions API: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Failed to load transactions'}), 500
-
-# Serve mini app main page
 @app.route('/mini-app')
 def serve_mini_app():
     return """
@@ -1381,6 +1330,47 @@ def serve_mini_app():
             margin: 0 auto;
         }
         
+        /* Navigation Styles */
+        .nav-bar {
+            background: white;
+            border-radius: 16px;
+            padding: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            display: flex;
+            gap: 8px;
+        }
+        
+        .nav-button {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #8e8e93;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Page Styles */
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        /* Balance Page Styles */
         .balance-card {
             background: white;
             border-radius: 16px;
@@ -1559,6 +1549,100 @@ def serve_mini_app():
             color: #34c759;
         }
         
+        /* Statistics Page Styles */
+        .stats-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stats-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1d1d1f;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #1d1d1f;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .stat-positive {
+            color: #34c759;
+        }
+        
+        .stat-negative {
+            color: #ff3b30;
+        }
+        
+        .stat-neutral {
+            color: #007AFF;
+        }
+        
+        .category-breakdown {
+            margin-top: 20px;
+        }
+        
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f2f2f7;
+        }
+        
+        .category-item:last-child {
+            border-bottom: none;
+        }
+        
+        .category-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .category-emoji {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .category-name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .category-amount {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
         .loading {
             text-align: center;
             padding: 20px;
@@ -1570,61 +1654,117 @@ def serve_mini_app():
             padding: 20px;
             color: #ff3b30;
         }
-        
-        .user-info {
-            background: white;
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            text-align: center;
-            font-size: 14px;
-            color: #8e8e93;
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="user-info" id="userInfo">
-            Loading user info...
+        <!-- Navigation Bar -->
+        <div class="nav-bar">
+            <button class="nav-button active" data-page="balance">Balance</button>
+            <button class="nav-button" data-page="statistics">Statistics</button>
         </div>
         
-        <div class="balance-card">
-            <div class="health-indicator" id="healthIndicator" style="display: none;">
-                <div class="health-label">Financial Health</div>
-                <div class="health-display" id="healthDisplay">⛺️ 0%</div>
-            </div>
-            <div class="balance-label">Current Balance</div>
-            <div class="balance-amount" id="balanceAmount">0₴</div>
-            
-            <!-- Add Daily Averages Section -->
-            <div class="averages-section" id="averagesSection" style="display: none;">
-                <div class="averages-row">
-                    <div class="average-item">
-                        <div class="average-label">📈 Daily Income</div>
-                        <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+        <!-- Balance Page -->
+        <div class="page active" id="balancePage">
+            <div class="balance-card">
+                <div class="health-indicator" id="healthIndicator" style="display: none;">
+                    <div class="health-label">Financial Health</div>
+                    <div class="health-display" id="healthDisplay">⛺️ 0%</div>
+                </div>
+                <div class="balance-label">Current Balance</div>
+                <div class="balance-amount" id="balanceAmount">0₴</div>
+                
+                <div class="averages-section" id="averagesSection" style="display: none;">
+                    <div class="averages-row">
+                        <div class="average-item">
+                            <div class="average-label">📈 Daily Income</div>
+                            <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+                        </div>
+                        <div class="average-item">
+                            <div class="average-label">📉 Daily Spending</div>
+                            <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                        </div>
                     </div>
-                    <div class="average-item">
-                        <div class="average-label">📉 Daily Spending</div>
-                        <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                </div>
+                
+                <div class="income-expense">
+                    <div class="expense">
+                        <div class="expense-amount" id="expenseAmount">0₴</div>
+                        <div class="expense-label">Spending</div>
+                    </div>
+                    <div class="income">
+                        <div class="income-amount" id="incomeAmount">0₴</div>
+                        <div class="income-label">Income</div>
                     </div>
                 </div>
             </div>
             
-            <div class="income-expense">
-                <div class="expense">
-                    <div class="expense-amount" id="expenseAmount">0₴</div>
-                    <div class="expense-label">Spending</div>
-                </div>
-                <div class="income">
-                    <div class="income-amount" id="incomeAmount">0₴</div>
-                    <div class="income-label">Income</div>
-                </div>
+            <div class="transactions" id="transactionsContainer">
+                <div class="loading">Loading transactions...</div>
             </div>
         </div>
         
-        <div class="transactions" id="transactionsContainer">
-            <div class="loading">Loading transactions...</div>
+        <!-- Statistics Page -->
+        <div class="page" id="statisticsPage">
+            <div class="stats-card">
+                <div class="stats-header">Financial Overview</div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value stat-positive" id="totalIncome">0₴</div>
+                        <div class="stat-label">Total Income</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value stat-negative" id="totalExpenses">0₴</div>
+                        <div class="stat-label">Total Expenses</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value stat-neutral" id="totalSavings">0₴</div>
+                        <div class="stat-label">Total Savings</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="transactionCount">0</div>
+                        <div class="stat-label">Transactions</div>
+                    </div>
+                </div>
+                
+                <div class="averages-section">
+                    <div class="averages-row">
+                        <div class="average-item">
+                            <div class="average-label">📈 Daily Income</div>
+                            <div class="average-amount stat-positive" id="statsDailyIncome">0₴</div>
+                        </div>
+                        <div class="average-item">
+                            <div class="average-label">📉 Daily Spending</div>
+                            <div class="average-amount stat-negative" id="statsDailyExpense">0₴</div>
+                        </div>
+                    </div>
+                    <div class="averages-row" style="margin-top: 8px;">
+                        <div class="average-item">
+                            <div class="average-label">💰 Daily Net</div>
+                            <div class="average-amount" id="statsDailyNet">0₴</div>
+                        </div>
+                        <div class="average-item">
+                            <div class="average-label">📅 Tracking Days</div>
+                            <div class="average-amount" id="trackingDays">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats-card">
+                <div class="stats-header">Financial Health</div>
+                <div class="health-indicator" style="margin: 0;">
+                    <div class="health-label">Overall Score</div>
+                    <div class="health-display" id="statsHealthDisplay">⛺️ 0%</div>
+                </div>
+            </div>
+            
+            <div class="stats-card" id="categoryBreakdown" style="display: none;">
+                <div class="stats-header">Spending by Category</div>
+                <div class="category-breakdown" id="categoryList">
+                    <!-- Categories will be populated here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1633,26 +1773,38 @@ def serve_mini_app():
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
 
-        // Get user information from Telegram
-        function getUserInfo() {
-            const user = Telegram.WebApp.initDataUnsafe?.user;
-            const user_id = user?.id;
+        let currentUserData = null;
+
+        // Navigation functionality
+        function setupNavigation() {
+            const navButtons = document.querySelectorAll('.nav-button');
+            const pages = document.querySelectorAll('.page');
             
-            if (user_id) {
-                const userName = user.first_name || user.username || 'User';
-                document.getElementById('userInfo').textContent = `👋 Hello, ${userName} (ID: ${user_id})`;
-                return user_id;
-            } else {
-                document.getElementById('userInfo').textContent = '❌ Cannot identify user';
-                return null;
-            }
+            navButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons and pages
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    pages.forEach(page => page.classList.remove('active'));
+                    
+                    // Add active class to clicked button and corresponding page
+                    this.classList.add('active');
+                    const pageId = this.getAttribute('data-page') + 'Page';
+                    document.getElementById(pageId).classList.add('active');
+                    
+                    // If switching to statistics page and we have data, update it
+                    if (this.getAttribute('data-page') === 'statistics' && currentUserData) {
+                        updateStatisticsPage(currentUserData);
+                    }
+                });
+            });
         }
 
         // Load financial data and transactions
         async function loadFinancialData() {
             try {
                 // Get user ID from Telegram
-                const user_id = getUserInfo();
+                const user = Telegram.WebApp.initDataUnsafe?.user;
+                const user_id = user?.id;
                 
                 if (!user_id) {
                     showError('Cannot identify user. Please open via Telegram.');
@@ -1666,7 +1818,9 @@ def serve_mini_app():
                 const financeData = await financeResponse.json();
                 
                 if (financeResponse.ok) {
-                    updateFinancialDisplay(financeData);
+                    currentUserData = financeData;
+                    updateBalancePage(financeData);
+                    updateStatisticsPage(financeData);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
@@ -1687,7 +1841,7 @@ def serve_mini_app():
             }
         }
         
-        function updateFinancialDisplay(data) {
+        function updateBalancePage(data) {
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
             if (data.balance !== undefined) {
@@ -1706,27 +1860,80 @@ def serve_mini_app():
             // Update daily averages
             const averagesSection = document.getElementById('averagesSection');
             if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
-                // Show averages section only if we have data
                 averagesSection.style.display = 'block';
-                
-                // Update average amounts
-                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
-                
-                // Color coding for averages
+                document.getElementById('dailyIncomeAvg').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+                document.getElementById('dailyExpenseAvg').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
                 document.getElementById('dailyIncomeAvg').style.color = '#34c759';
                 document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
             } else {
-                // Hide averages if no data
                 averagesSection.style.display = 'none';
             }
+            
+            // Update financial health
             const healthIndicator = document.getElementById('healthIndicator');
-            if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
+            if (data.financial_health !== null && data.financial_health !== undefined && 
+                data.financial_health_emoji !== null && data.financial_health_emoji !== undefined) {
                 healthIndicator.style.display = 'block';
                 document.getElementById('healthDisplay').textContent = 
                     `${data.financial_health_emoji} ${data.financial_health}%`;
+                
+                // Color code based on health score
+                updateHealthIndicatorColor(data.financial_health, healthIndicator);
             } else {
                 healthIndicator.style.display = 'none';
+            }
+        }
+        
+        function updateStatisticsPage(data) {
+            // Update main statistics
+            if (data.income !== undefined) {
+                document.getElementById('totalIncome').textContent = `+${data.income.toLocaleString()}₴`;
+            }
+            if (data.spending !== undefined) {
+                document.getElementById('totalExpenses').textContent = `-${data.spending.toLocaleString()}₴`;
+            }
+            if (data.savings !== undefined) {
+                document.getElementById('totalSavings').textContent = `${data.savings.toLocaleString()}₴`;
+            }
+            if (data.transaction_count !== undefined) {
+                document.getElementById('transactionCount').textContent = data.transaction_count;
+            }
+            
+            // Update averages in statistics
+            if (data.daily_income_avg !== undefined) {
+                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+            }
+            if (data.daily_expense_avg !== undefined) {
+                document.getElementById('statsDailyExpense').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
+            }
+            if (data.daily_net_avg !== undefined) {
+                const netAvgElement = document.getElementById('statsDailyNet');
+                netAvgElement.textContent = `${data.daily_net_avg >= 0 ? '+' : ''}${Math.round(data.daily_net_avg).toLocaleString()}₴`;
+                netAvgElement.style.color = data.daily_net_avg >= 0 ? '#34c759' : '#ff3b30';
+            }
+            if (data.tracking_days !== undefined) {
+                document.getElementById('trackingDays').textContent = data.tracking_days;
+            }
+            
+            // Update financial health in statistics
+            if (data.financial_health !== null && data.financial_health_emoji !== null) {
+                document.getElementById('statsHealthDisplay').textContent = 
+                    `${data.financial_health_emoji} ${data.financial_health}%`;
+                
+                const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
+                updateHealthIndicatorColor(data.financial_health, statsHealthIndicator);
+            }
+        }
+        
+        function updateHealthIndicatorColor(score, element) {
+            if (score >= 80) {
+                element.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+            } else if (score >= 60) {
+                element.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+            } else if (score >= 40) {
+                element.style.background = 'linear-gradient(135deg, #FF5722 0%, #D84315 100%)';
+            } else {
+                element.style.background = 'linear-gradient(135deg, #F44336 0%, #C62828 100%)';
             }
         }
         
@@ -1755,7 +1962,6 @@ def serve_mini_app():
                 const isPositive = amount >= 0;
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
-                // Handle different possible data structures
                 const displayName = transaction.name || transaction.category || 'Transaction';
                 const displayDescription = transaction.description || '';
                 
@@ -1786,6 +1992,7 @@ def serve_mini_app():
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
+            setupNavigation();
             loadFinancialData();
         });
         
