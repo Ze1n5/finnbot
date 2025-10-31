@@ -1674,19 +1674,6 @@ def serve_mini_app():
                 <div class="balance-label">Current Balance</div>
                 <div class="balance-amount" id="balanceAmount">0₴</div>
                 
-                <div class="averages-section" id="averagesSection" style="display: none;">
-                    <div class="averages-row">
-                        <div class="average-item">
-                            <div class="average-label">📈 Daily Income</div>
-                            <div class="average-amount" id="dailyIncomeAvg">0₴</div>
-                        </div>
-                        <div class="average-item">
-                            <div class="average-label">📉 Daily Spending</div>
-                            <div class="average-amount" id="dailyExpenseAvg">0₴</div>
-                        </div>
-                    </div>
-                </div>
-                
                 <div class="income-expense">
                     <div class="expense">
                         <div class="expense-amount" id="expenseAmount">0₴</div>
@@ -1754,7 +1741,6 @@ def serve_mini_app():
             <div class="stats-card">
                 <div class="stats-header">Financial Health</div>
                 <div class="health-indicator" style="margin: 0;">
-                    <div class="health-label">Overall Score</div>
                     <div class="health-display" id="statsHealthDisplay">⛺️ 0%</div>
                 </div>
             </div>
