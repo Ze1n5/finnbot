@@ -543,6 +543,92 @@ Net Savings: {net_savings:,.0f}₴"""
                 summary += "💡 Future can be improved"
         
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+    
+    def parse_transaction_date(self, date_string):
+        """Parse transaction date for sorting"""
+        if not date_string:
+            return datetime.min  # Very old date for missing dates
+        
+        try:
+            if 'T' in date_string:
+                # ISO format with time
+                if '.' in date_string:
+                    return datetime.fromisoformat(date_string.replace('Z', '+00:00'))
+                else:
+                    return datetime.fromisoformat(date_string.replace('Z', '+00:00').split('+')[0])
+            else:
+                # Simple date format
+                return datetime.strptime(date_string.split(' ')[0], '%Y-%m-%d')
+        except Exception as e:
+            print(f"❌ Error parsing date '{date_string}': {e}")
+            return datetime.min  # Very old date for invalid dates
+        
+    def create_simplified_delete_list(self, chat_id, transaction_map):
+        """Create simplified list when too many transactions"""
+        user_lang = self.get_user_language(chat_id)
+        user_transactions = self.get_user_transactions(chat_id)
+        
+        # Sort transactions by date (newest first) for simplified list too
+        sorted_transactions = sorted(
+            user_transactions, 
+            key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+            reverse=True
+        )
+        
+        if user_lang == 'uk':
+            delete_text = "🗑️ *Список транзакцій*\n\n"
+            delete_text += "⏹️  `0` - Скасувати\n\n"
+        else:
+            delete_text = "🗑️ *Transaction List*\n\n"
+            delete_text += "⏹️  `0` - Cancel\n\n"
+        
+        current_number = 1
+        new_transaction_map = {}
+        
+        for transaction in sorted_transactions:
+            if current_number > 50:  # Limit to 50 transactions in simplified view
+                break
+                
+            original_index = user_transactions.index(transaction)
+            
+            # Get amount with symbol
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Brief date
+            date_display = self.format_brief_date(transaction, chat_id)
+            
+            # Truncate description
+            description = transaction['description']
+            if len(description) > 20:
+                description = description[:17] + "..."
+            
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            new_transaction_map[current_number] = original_index
+            current_number += 1
+        
+        # Update the transaction map for this simplified view
+        self.delete_mode[chat_id] = new_transaction_map
+        
+        if user_lang == 'uk':
+            delete_text += "💡 *Введіть номер для видалення*"
+        else:
+            delete_text += "💡 *Type a number to delete*"
+        
+        return delete_text
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
@@ -557,14 +643,24 @@ Net Savings: {net_savings:,.0f}₴"""
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
+        # Sort transactions by date (newest first)
+        sorted_transactions = sorted(
+            user_transactions, 
+            key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+            reverse=True  # Newest first
+        )
+        
         delete_text = "🗑️ *Select Transaction to Delete*\n\n"
         delete_text += "⏹️  `0` - Cancel & Exit\n\n"
         
         current_number = 1
-        transaction_map = {}  # Map display numbers to actual indices
+        transaction_map = {}  # Map display numbers to actual indices in ORIGINAL list
         
-        # Show all transactions in simple list format
-        for i, transaction in enumerate(user_transactions):
+        # Show all transactions in simple list format (newest first)
+        for i, transaction in enumerate(sorted_transactions):
+            # Find the original index of this transaction
+            original_index = user_transactions.index(transaction)
+            
             # Get transaction symbol and amount
             trans_type = transaction['type']
             if trans_type == 'income':
@@ -599,7 +695,8 @@ Net Savings: {net_savings:,.0f}₴"""
             delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
             delete_text += f"    {amount_display}  {date_display}\n\n"
             
-            transaction_map[current_number] = i
+            # Map display number to ORIGINAL index in user_transactions
+            transaction_map[current_number] = original_index
             current_number += 1
         
         delete_text += "💡 *Type a number to delete, or 0 to cancel*"
