@@ -563,7 +563,7 @@ Net Savings: {net_savings:,.0f}₴"""
             return datetime.min
 
     def format_transaction_date(self, transaction, chat_id):
-        """Format transaction date for display with local timezone"""
+        """Format transaction date for display - FORCE UTC+2"""
         user_lang = self.get_user_language(chat_id)
         
         transaction_date = transaction.get('date')
@@ -573,16 +573,17 @@ Net Savings: {net_savings:,.0f}₴"""
         try:
             # Parse the date string
             if 'T' in transaction_date:
-                # ISO format with time - handle timezone
-                if '.' in transaction_date:
-                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
-                else:
-                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00').split('+')[0])
+                # Extract the datetime parts manually
+                date_part, time_part = transaction_date.split('T')
+                time_part = time_part.split('+')[0].split('.')[0]  # Remove timezone and milliseconds
                 
-                # Convert to local system timezone
-                dt_local = dt.astimezone()  # No arguments = convert to local timezone
+                # Parse as naive datetime
+                dt_naive = datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S")
+                
+                # Add 2 hours for Ukraine time (UTC+2)
+                dt_local = dt_naive + timedelta(hours=2)
             else:
-                # Simple date format - assume it's already local time
+                # Simple date format
                 dt_local = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
             
             # Format based on user language
