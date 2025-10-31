@@ -1661,8 +1661,6 @@ def serve_mini_app():
         <!-- Balance Page -->
         <div class="page active" id="balancePage">
             <div class="balance-card">
-                <div class="health-indicator" id="healthIndicator" style="display: none;">
-                </div>
                 <div class="balance-label">Current Balance</div>
                 <div class="balance-amount" id="balanceAmount">0₴</div>
                 
@@ -1834,21 +1832,6 @@ def serve_mini_app():
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
             }
-            
-            // Update financial health
-            const healthIndicator = document.getElementById('healthIndicator');
-            if (data.financial_health !== null && data.financial_health !== undefined && 
-                data.financial_health_emoji !== null && data.financial_health_emoji !== undefined) {
-                healthIndicator.style.display = 'block';
-                document.getElementById('healthDisplay').textContent = 
-                    `${data.financial_health_emoji} ${data.financial_health}%`;
-                
-                // Color code based on health score
-                updateHealthIndicatorColor(data.financial_health, healthIndicator);
-            } else {
-                healthIndicator.style.display = 'none';
-            }
-        }
         
         function updateStatisticsPage(data) {
             // Update main statistics
