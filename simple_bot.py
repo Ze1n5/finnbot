@@ -400,23 +400,23 @@ class SimpleFinnBot:
         if user_lang == 'uk':
             summary_text = f"""📊 *Фінансовий звіт*
 
-    💎 *Фінансове здоров'я:* {health_emoji} {health_display}
+💎 *Фінансове здоров'я:* {health_emoji} {health_display}
 
-    💸 *Аналіз готівкового потоку:*
-    Дохід: {income:,.0f}₴
-    Витрати: {expenses:,.0f}₴
-    Заощадження: {net_savings:,.0f}₴
-    ─────────────────
-    Чистий потік: {net_flow:,.0f}₴
+💸 *Аналіз готівкового потоку:*
+Дохід: {income:,.0f}₴
+Витрати: {expenses:,.0f}₴
+Заощадження: {net_savings:,.0f}₴
+─────────────────
+Чистий потік: {net_flow:,.0f}₴
 
-    📈 *Щоденні середні показники (за останні 30 днів):*
-    Середній дохід/день: {daily_income_avg:,.0f}₴
-    Середні витрати/день: {daily_expense_avg:,.0f}₴
-    Середній чистий потік/день: {daily_net_avg:,.0f}₴
+📈 *Щоденні середні показники (за останні 30 днів):*
+Середній дохід/день: {daily_income_avg:,.0f}₴
+Cередні витрати/день: {daily_expense_avg:,.0f}₴
+Середній чистий потік/день: {daily_net_avg:,.0f}₴
 
-    🏦 *Заощадження:*
-    Внесено: {savings_deposits:,.0f}₴
-    Чисті заощадження: {net_savings:,.0f}₴"""
+🏦 *Заощадження:*
+Внесено: {savings_deposits:,.0f}₴
+Чисті заощадження: {net_savings:,.0f}₴"""
             
             if debt_incurred > 0 or debt_returned > 0:
                 summary_text += f"\n\n💳 *Борги:*\n   Заборгованість: {debt_incurred:,.0f}₴"
@@ -432,23 +432,23 @@ class SimpleFinnBot:
         else:
             summary_text = f"""📊 *Financial Summary*
 
-    💎 *Financial Health:* {health_emoji} {health_display}
+💎 *Financial Health:* {health_emoji} {health_display}
 
-    💸 *Cash Flow Analysis:*
-    Income: {income:,.0f}₴
-    Expenses: {expenses:,.0f}₴
-    Savings: {net_savings:,.0f}₴
-    ─────────────────
-    Net Cash Flow: {net_flow:,.0f}₴
+💸 *Cash Flow Analysis:*
+Income: {income:,.0f}₴
+Expenses: {expenses:,.0f}₴
+Savings: {net_savings:,.0f}₴
+────────────────────
+Net Cash Flow: {net_flow:,.0f}₴
 
-    📈 *Daily Averages (Last 30 Days):*
-    Avg Income/Day: {daily_income_avg:,.0f}₴
-    Avg Expenses/Day: {daily_expense_avg:,.0f}₴
-    Avg Net Flow/Day: {daily_net_avg:,.0f}₴
+📈 *Daily Averages (Last 30 Days):*
+Avg Income/Day: {daily_income_avg:,.0f}₴
+Avg Expenses/Day: {daily_expense_avg:,.0f}₴
+Avg Net Flow/Day: {daily_net_avg:,.0f}₴
 
-    🏦 *Savings Account:*
-    Deposited: {savings_deposits:,.0f}₴
-    Net Savings: {net_savings:,.0f}₴"""
+🏦 *Savings Account:*
+Deposited: {savings_deposits:,.0f}₴
+Net Savings: {net_savings:,.0f}₴"""
             
             if debt_incurred > 0 or debt_returned > 0:
                 summary_text += f"\n\n💳 *Debt Account:*\n   Incurred: {debt_incurred:,.0f}₴"
@@ -1342,10 +1342,25 @@ class SimpleFinnBot:
         return messages
 
     def calculate_expression(self, text):
-        """Calculate mathematical expressions with percentages"""
+        """Calculate mathematical expressions with percentages and currency"""
         try:
+            # Check for currency symbols
+            has_usd = '$' in text
+            has_eur = '€' in text or 'eur' in text.lower()
+            
+            # Default to UAH if no currency specified
+            currency = 'UAH'
+            if has_usd:
+                currency = 'USD'
+            elif has_eur:
+                currency = 'EUR'
+            
+            # Remove currency symbols for calculation
+            expression_text = text.replace('$', '').replace('€', '').replace('₴', '')
+            expression_text = re.sub(r'\b(uah|eur|usd)\b', '', expression_text, flags=re.IGNORECASE).strip()
+            
             # Remove spaces and convert to lowercase
-            expression = text.replace(' ', '').lower()
+            expression = expression_text.replace(' ', '').lower()
             
             # Handle percentages: convert 1.5% to *0.015
             expression = re.sub(r'(\d+(?:\.\d+)?)%', r'*(\1/100)', expression)
@@ -1383,7 +1398,7 @@ class SimpleFinnBot:
             # For debt transactions, we need the POSITIVE amount since it increases balance
             amount = abs(result)
             
-            return amount, trans_type, symbol
+            return amount, trans_type, symbol, currency  # Return currency as well
             
         except Exception as e:
             print(f"❌ Calculation error: {e}")
@@ -1767,16 +1782,34 @@ class SimpleFinnBot:
             return self.send_message(chat_id, text, parse_mode=parse_mode)
     
     def extract_amount(self, text):
-    # Clean the text first
+        # Clean the text first
         clean_text = text.strip()
         print(f"🔍 DEBUG extract_amount: text='{clean_text}'")
         
+        # Check for currency symbols
+        has_usd = '$' in clean_text
+        has_eur = '€' in clean_text or 'eur' in clean_text.lower()
+        has_uah = '₴' in clean_text or 'uah' in clean_text.lower()
+        
+        # Default to UAH if no currency specified
+        currency = 'UAH'
+        if has_usd:
+            currency = 'USD'
+        elif has_eur:
+            currency = 'EUR'
+        
+        print(f"🔍 DEBUG: Currency detected: {currency}")
+        
+        # Remove currency symbols for amount parsing
+        clean_text_for_parsing = clean_text.replace('$', '').replace('€', '').replace('₴', '')
+        clean_text_for_parsing = re.sub(r'\b(uah|eur|usd)\b', '', clean_text_for_parsing, flags=re.IGNORECASE).strip()
+        
         # Check transaction types in priority order
-        is_savings = '++' in clean_text
-        is_debt_return = '+-' in clean_text
-        is_savings_withdraw = '-+' in clean_text
-        is_income = '+' in clean_text and not any(x in clean_text for x in ['++', '+-', '-+'])
-        is_debt = clean_text.startswith('-') and not is_savings_withdraw
+        is_savings = '++' in clean_text_for_parsing
+        is_debt_return = '+-' in clean_text_for_parsing
+        is_savings_withdraw = '-+' in clean_text_for_parsing
+        is_income = '+' in clean_text_for_parsing and not any(x in clean_text_for_parsing for x in ['++', '+-', '-+'])
+        is_debt = clean_text_for_parsing.startswith('-') and not is_savings_withdraw
         
         print(f"   Transaction type detection:")
         print(f"   - is_savings: {is_savings}")
@@ -1784,10 +1817,11 @@ class SimpleFinnBot:
         print(f"   - is_debt: {is_debt}")
         print(f"   - is_debt_return: {is_debt_return}")
         print(f"   - is_savings_withdraw: {is_savings_withdraw}")
+        print(f"   - currency: {currency}")
         
         # Extract amount using regex that handles various formats
         amount_pattern = r'[+-]*\s*(\d+(?:[.,]\d{1,2})?)'
-        amounts = re.findall(amount_pattern, clean_text)
+        amounts = re.findall(amount_pattern, clean_text_for_parsing)
         
         if amounts:
             # Get the first valid amount found
@@ -1796,13 +1830,13 @@ class SimpleFinnBot:
                     # Clean the amount string
                     clean_amt = amt_str.replace(',', '.').strip()
                     amount = float(clean_amt)
-                    print(f"   ✅ Extracted amount: {amount}")
-                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                    print(f"   ✅ Extracted amount: {amount} {currency}")
+                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency
                 except ValueError:
                     continue
         
         print(f"   ❌ No valid amount found")
-        return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+        return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency
 
     def guess_category(self, text, user_id):
         """Guess spending category for a specific user"""
@@ -2499,7 +2533,8 @@ class SimpleFinnBot:
                 'amount': test_amount, 
                 'text': "Test savings transaction", 
                 'category': "Savings",
-                'type': "savings"
+                'type': "savings",
+                'currency': currency
             }
             
             self.send_message(chat_id, message, keyboard)
@@ -2916,14 +2951,15 @@ This will help me provide better financial recommendations!"""
                 result = self.calculate_expression(text)
                 
                 if result is not None and result[0] is not None:
-                    amount, trans_type, symbol = result
+                    amount, trans_type, symbol, currency = result
                     
                     # Store pending transaction
                     self.pending[chat_id] = {
                         'amount': amount, 
-                        'text': f"{text} = {symbol}{amount:,.0f}₴",
+                        'text': f"{text} = {symbol}{amount:,.0f}{'₴' if currency == 'UAH' else '$' if currency == 'USD' else '€'}",
                         'category': "Salary" if trans_type == 'income' else "Other",
-                        'type': trans_type
+                        'type': trans_type,
+                        'currency': currency  # Add currency
                     }
                     
                     # Show calculation result and ask for category
@@ -3021,52 +3057,54 @@ This will help me provide better financial recommendations!"""
                     # ADD THIS: Show formatting help only for unrecognized transaction formats
                     user_lang = self.get_user_language(chat_id)
                     
-                    if user_lang == 'uk':
-                        help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
+                    # In the process_message method, update the help text:
 
-            🛒 10 - Витрата (обід, шопінг тощо)
-                                            
-            💰 +100 - Дохід (зарплата, бізнес тощо) 
-                                            
-            🏦 ++100 - Заощадження (відкласти гроші)
-                                            
-            💳 -100 - Борг (позичені гроші)
-                                            
-            🔙 +-100 - Повернення боргу (повернення)
-                                            
-            📥 -+100 - Зняття заощаджень (зняття з заощаджень)
+                if user_lang == 'uk':
+                    help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
 
-            💡 *Приклади:*
-            `150 обід` - Витрата на обід
-            `+5000 зарплата` - Дохід
-            `++1000` - Заощадження
-            `-200 кредит` - Борг"""
-                    else:
-                        help_text = """🤔 Oops! Let me help you format that correctly:
-                                            
-            🛒 10 - Expense (lunch, shopping, etc.)
-                                            
-            💰 +100 - Income (salary, business, etc.) 
-                                            
-            🏦 ++100 - Savings (put money aside)
-                                            
-            💳 -100 - Debt (borrowed money)
-                                            
-            🔙 +-100 - Returned debt (paying back)
-                                            
-            📥 -+100 - Savings withdrawal (taking from savings)
+🛒 10 - Витрата в гривнях (обід, шопінг тощо)
+🛒 10$ - Витрата в доларах  
+🛒 10€ - Витрата в євро
+                                        
+💰 +100 - Дохід в гривнях (зарплата, бізнес тощо) 
+💰 +100$ - Дохід в доларах
+💰 +100€ - Дохід в євро
+                                        
+🏦 ++100 - Заощадження в гривнях
+🏦 ++100$ - Заощадження в доларах
+🏦 ++100€ - Заощадження в євро
 
-            💡 *Examples:*
-            `150 lunch` - Expense for lunch
-            `+5000 salary` - Income  
-            `++1000` - Savings
-            `-200 loan` - Debt"""
+💡 *Приклади:*
+`150 обід` - Витрата на обід в гривнях
+`50$ кава` - Витрата на каву в доларах
+`+5000 зарплата` - Дохід в гривнях
+`+1000$ фріланс` - Дохід в доларах"""
+                else:
+                    help_text = """🤔 Oops! Let me help you format that correctly:
+                                        
+🛒 10 - Expense in UAH (lunch, shopping, etc.)
+🛒 10$ - Expense in USD  
+🛒 10€ - Expense in EUR
+                                        
+💰 +100 - Income in UAH (salary, business, etc.) 
+💰 +100$ - Income in USD
+💰 +100€ - Income in EUR
+                                        
+🏦 ++100 - Savings in UAH
+🏦 ++100$ - Savings in USD  
+🏦 ++100€ - Savings in EUR
+
+💡 *Examples:*
+`150 lunch` - Expense for lunch in UAH
+`50$ coffee` - Expense for coffee in USD
+`+5000 salary` - Income in UAH  
+`+1000$ freelance` - Income in USD"""
 
                     self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     return
             
             # Original transaction processing (keep your existing code)
-            amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
+            amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency = self.extract_amount(text)
             print(f"🔍 DEBUG process_message - Transaction analysis:")
             print(f"   Amount: {amount}")
             print(f"   Is savings: {is_savings}")
@@ -3094,7 +3132,8 @@ This will help me provide better financial recommendations!"""
                         'amount': amount, 
                         'text': text, 
                         'category': "Savings",
-                        'type': "savings"
+                        'type': "savings",
+                        'currency': currency
                     }
                     
                     # Get user language
@@ -3149,7 +3188,8 @@ This will help me provide better financial recommendations!"""
                     'amount': amount, 
                     'text': text, 
                     'category': category,
-                    'type': transaction_type
+                    'type': transaction_type,
+                    'currency': currency
                 }
                 
                 # Create appropriate message and keyboard
@@ -3380,13 +3420,23 @@ You're now ready to use Finn! 🚀
             category = data[4:]
             print(f"🔍 DEBUG: Processing category selection - category: '{category}', chat_id in pending: {chat_id in self.pending}")
             
+            # In the process_callback method, update the category selection part:
+
             if chat_id in self.pending:
                 pending = self.pending[chat_id]
                 amount = pending["amount"]
                 text = pending["text"]
                 transaction_type = pending["type"]
+                currency = pending.get("currency", "UAH")  # Default to UAH if not specified
                 
-                print(f"🔍 DEBUG: Processing {transaction_type} transaction - amount: {amount}, category: {category}")
+                # Get currency symbol for display
+                currency_symbol = '₴'
+                if currency == 'USD':
+                    currency_symbol = '$'
+                elif currency == 'EUR':
+                    currency_symbol = '€'
+                
+                print(f"🔍 DEBUG: Processing {transaction_type} transaction - amount: {amount}, currency: {currency}, category: {category}")
                 
                 # Learn if corrected (only for expenses, not income)
                 if pending["category"] != category and transaction_type == "expense":
@@ -3403,6 +3453,7 @@ You're now ready to use Finn! 🚀
                         "category": category,
                         "description": text,
                         "type": transaction_type,
+                        "currency": currency,  # Add this line
                         "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
@@ -3461,23 +3512,23 @@ You're now ready to use Finn! 🚀
                     
                     # Send confirmation WITH MENU
                     if user_lang == 'uk':
-                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     else:
-                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     self.send_message(chat_id, confirmation_msg, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings':
                     if user_lang == 'uk':
-                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}₴"
+                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
+                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt':        
                     if user_lang == 'uk':
-                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
+                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
+                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt_return':
@@ -3496,9 +3547,9 @@ You're now ready to use Finn! 🚀
                     
                 else:  # expense
                     if user_lang == 'uk':
-                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     else:
-                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                 
                 # ===== STEP 6: Show menu after transaction in groups =====
