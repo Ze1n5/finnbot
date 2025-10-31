@@ -1893,7 +1893,6 @@ def serve_mini_app():
         let currentUserData = null;
 
         // Navigation functionality
-        // In your navigation setup, call debug when switching to statistics
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
@@ -1914,8 +1913,13 @@ def serve_mini_app():
                         const user = Telegram.WebApp.initDataUnsafe?.user;
                         const user_id = user?.id;
                         
+                        console.log('🔄 Switching to Statistics page, user_id:', user_id);
+                        
                         if (user_id) {
+                            console.log('🚀 Loading category summary for user:', user_id);
                             loadCategorySummary(user_id);
+                        } else {
+                            console.log('❌ No user_id found for category summary');
                         }
                         
                         if (currentUserData) {
@@ -1924,6 +1928,19 @@ def serve_mini_app():
                     }
                 });
             });
+        }
+
+        // Manual test function - call this in browser console
+        function testCategorySummary() {
+            const user = Telegram.WebApp.initDataUnsafe?.user;
+            const user_id = user?.id;
+            
+            if (user_id) {
+                console.log('🧪 Manual test: Loading category summary for user:', user_id);
+                loadCategorySummary(user_id);
+            } else {
+                console.log('❌ No user_id found for manual test');
+            }
         }
 
         // Load category summary data
@@ -2200,9 +2217,9 @@ def serve_mini_app():
                     return;
                 }
 
-                console.log('Loading data for user:', user_id);
+                console.log('📱 Loading ALL data for user:', user_id);
 
-                // Load balance and totals WITH user_id parameter
+                // Load balance and totals
                 const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
                 const financeData = await financeResponse.json();
                 
@@ -2211,13 +2228,15 @@ def serve_mini_app():
                     updateBalancePage(financeData);
                     updateStatisticsPage(financeData);
                     
-                    // Load category summary when we have user data
+                    console.log('✅ Financial data loaded, now loading category summary...');
+                    
+                    // ALSO load category summary when app starts (for Statistics page)
                     loadCategorySummary(user_id);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
                 
-                // Load transactions WITH user_id parameter
+                // Load transactions for Balance page
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
                 const transactionsData = await transactionsResponse.json();
                 
