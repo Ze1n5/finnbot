@@ -545,17 +545,20 @@ Net Savings: {net_savings:,.0f}₴"""
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
     
     def parse_transaction_date(self, date_string):
-        """Parse transaction date for sorting"""
+        """Parse transaction date for sorting - FIXED timezone issue"""
         if not date_string:
             return datetime.min  # Very old date for missing dates
         
         try:
             if 'T' in date_string:
-                # ISO format with time
+                # ISO format with time - handle timezone properly
                 if '.' in date_string:
-                    return datetime.fromisoformat(date_string.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(date_string.replace('Z', '+00:00'))
                 else:
-                    return datetime.fromisoformat(date_string.replace('Z', '+00:00').split('+')[0])
+                    dt = datetime.fromisoformat(date_string.replace('Z', '+00:00').split('+')[0])
+                
+                # Make it offset-naive by removing timezone info for comparison
+                return dt.replace(tzinfo=None)
             else:
                 # Simple date format
                 return datetime.strptime(date_string.split(' ')[0], '%Y-%m-%d')
@@ -643,12 +646,17 @@ Net Savings: {net_savings:,.0f}₴"""
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
-        # Sort transactions by date (newest first)
-        sorted_transactions = sorted(
-            user_transactions, 
-            key=lambda x: self.parse_transaction_date(x.get('date', '')), 
-            reverse=True  # Newest first
-        )
+        # Sort transactions by date (newest first) with error handling
+        try:
+            sorted_transactions = sorted(
+                user_transactions, 
+                key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+                reverse=True  # Newest first
+            )
+            print(f"🔍 DEBUG: Successfully sorted {len(sorted_transactions)} transactions")
+        except Exception as e:
+            print(f"❌ Error sorting transactions: {e}. Using original order.")
+            sorted_transactions = user_transactions 
         
         delete_text = "🗑️ *Select Transaction to Delete*\n\n"
         delete_text += "⏹️  `0` - Cancel & Exit\n\n"
