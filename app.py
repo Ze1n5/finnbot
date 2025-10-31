@@ -1360,6 +1360,12 @@ def api_user_categories():
         # Get categories for this user from the bot instance
         categories = bot_instance.get_user_categories(user_id)
         
+        # Ensure we always return a list, even if empty
+        if not categories:
+            categories = []
+            
+        print(f"📋 Returning {len(categories)} categories for user {user_id}: {categories}")
+        
         return jsonify({
             'categories': categories,
             'user_id': user_id
@@ -1367,6 +1373,8 @@ def api_user_categories():
         
     except Exception as e:
         print(f"❌ Error loading user categories: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to load categories'}), 500
 
 @app.route('/mini-app')
@@ -1975,31 +1983,26 @@ def serve_mini_app():
             }
         }
 
-        // Load category summary data
+        // Load category summary data - IMPROVED VERSION
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // Run debug first
-                await debugAPIs(user_id);
-                
                 // First, load user categories
                 const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
-                const categoriesData = await categoriesResponse.json();
-                
                 if (!categoriesResponse.ok) {
-                    throw new Error(categoriesData.error || 'Failed to load categories');
+                    throw new Error('Failed to load categories');
                 }
+                const categoriesData = await categoriesResponse.json();
                 
                 // Then load transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                if (!transactionsResponse.ok) {
+                    throw new Error('Failed to load transactions');
+                }
                 const transactionsData = await transactionsResponse.json();
                 
-                if (!transactionsResponse.ok) {
-                    throw new Error(transactionsData.error || 'Failed to load transactions');
-                }
-                
-                const transactions = transactionsData.transactions || transactionsData;
+                const transactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
                 
                 console.log('📊 Final data for rendering:');
@@ -2017,7 +2020,7 @@ def serve_mini_app():
             }
         }
 
-        // Render category summary
+        // Render category summary - FIXED VERSION
         function renderCategorySummary(transactions, userCategories) {
             const container = document.getElementById('categorySummaryContent');
             
@@ -2103,7 +2106,7 @@ def serve_mini_app():
                                 <div class="category-summary-info">
                                     <span class="category-summary-name">${category}</span>
                                 </div>
-                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
+                                <div class="category-summary-amount negative">-${Math.abs(data.expense).toLocaleString()}₴</div>
                             </div>
                         `).join('')}
                     </div>
@@ -2113,8 +2116,7 @@ def serve_mini_app():
                     <div class="summary-section">
                         <div class="summary-header">🛒 Spending</div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No spending transactions found<br>
-                            <small>Check console for debug info</small>
+                            No spending transactions found
                         </div>
                     </div>
                 `;
@@ -2169,8 +2171,7 @@ def serve_mini_app():
                     <div class="summary-section">
                         <div class="summary-header">🏦 Savings</div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No savings transactions found<br>
-                            <small>Check console for debug info</small>
+                            No savings transactions found
                         </div>
                     </div>
                 `;
