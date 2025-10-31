@@ -5,11 +5,12 @@ import asyncio
 import threading
 import atexit
 import signal
-from datetime import datetime
 from flask import Flask, jsonify, request
 import psycopg2
 from urllib.parse import urlparse
 from simple_bot import get_bot_instance, save_all_data
+from datetime import datetime, timedelta
+
 
 bot_instance = get_bot_instance()
 print(f"🔍 DEBUG: Bot instance created: {bool(bot_instance)}")
@@ -291,14 +292,59 @@ def api_financial_data():
                 
                 transaction_count += 1
         
-        # NEW: Calculate daily averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = total_income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = total_expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (total_income - total_expenses) / total_days if total_days > 0 else 0
+        from datetime import datetime, timedelta
+
+        current_date = datetime.now().date()
+        thirty_days_ago = current_date - timedelta(days=30)
+
+        recent_income = 0
+        recent_expenses = 0
+        recent_days_count = 0
+
+        for transaction in user_transactions:
+            if isinstance(transaction, dict):
+                transaction_date = None
+                if 'date' in transaction:
+                    try:
+                        if 'T' in transaction['date']:
+                            date_str = transaction['date'].split('T')[0]
+                            transaction_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        else:
+                            date_str = transaction['date'].split(' ')[0]
+                            transaction_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        
+                        # Only include transactions from last 30 days
+                        if transaction_date >= thirty_days_ago:
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            if trans_type == 'income':
+                                recent_income += amount
+                            elif trans_type == 'expense':
+                                recent_expenses += amount
+                            
+                            # Count unique days with activity
+                            if transaction_date not in all_dates:
+                                all_dates.add(transaction_date)
+                                recent_days_count += 1
+                                
+                    except Exception as e:
+                        print(f"⚠️ Error parsing transaction date: {e}")
+                        continue
+
+        # Calculate averages based on last 30 days
+        # Use actual days with activity, but minimum 1 to avoid division by zero
+        active_days = max(recent_days_count, 1)
+        daily_income_avg = recent_income / 30  # Always divide by 30 for monthly average
+        daily_expense_avg = recent_expenses / 30
+        daily_net_avg = (recent_income - recent_expenses) / 30
+
+        print(f"🔍 Last 30 days analysis:")
+        print(f"   Recent income (30 days): {recent_income:,.0f}₴")
+        print(f"   Recent expenses (30 days): {recent_expenses:,.0f}₴")
+        print(f"   Active days in period: {recent_days_count}")
+        print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
 
         # Get recent transactions for display (last 5)
         for transaction in user_transactions[-5:]:
