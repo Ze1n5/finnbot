@@ -1346,6 +1346,28 @@ def check_data_files():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/user-categories', methods=['GET'])
+def api_user_categories():
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get categories for this user from the bot instance
+        categories = bot_instance.get_user_categories(user_id)
+        
+        return jsonify({
+            'categories': categories,
+            'user_id': user_id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error loading user categories: {e}")
+        return jsonify({'error': 'Failed to load categories'}), 500
 
 @app.route('/mini-app')
 def serve_mini_app():
@@ -1904,26 +1926,37 @@ def serve_mini_app():
         }
 
         // Load category summary data
+        // Load category summary data
         async function loadCategorySummary(user_id) {
             try {
+                // First, load user categories
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                const categoriesData = await categoriesResponse.json();
+                
+                if (!categoriesResponse.ok) {
+                    throw new Error(categoriesData.error || 'Failed to load categories');
+                }
+                
+                // Then load transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
                 const transactionsData = await transactionsResponse.json();
                 
-                if (transactionsResponse.ok) {
-                    renderCategorySummary(transactionsData.transactions || transactionsData);
-                } else {
-                    document.getElementById('categorySummaryContent').innerHTML = 
-                        '<div class="error">Failed to load category data</div>';
+                if (!transactionsResponse.ok) {
+                    throw new Error(transactionsData.error || 'Failed to load transactions');
                 }
+                
+                // Render summary with both categories and transactions
+                renderCategorySummary(transactionsData.transactions || transactionsData, categoriesData.categories || []);
+                
             } catch (error) {
                 console.error('Error loading category summary:', error);
                 document.getElementById('categorySummaryContent').innerHTML = 
-                    '<div class="error">Error loading category data</div>';
+                    `<div class="error">Error loading category data: ${error.message}</div>`;
             }
         }
 
-        // Render category summary
-        function renderCategorySummary(transactions) {
+        // Render category summary with proper category data
+        function renderCategorySummary(transactions, userCategories) {
             const container = document.getElementById('categorySummaryContent');
             
             if (!transactions || transactions.length === 0) {
@@ -1935,14 +1968,33 @@ def serve_mini_app():
                 return;
             }
             
+            console.log('Available categories:', userCategories);
+            console.log('Transactions:', transactions);
+            
             // Group transactions by category and type
             const categoryData = {};
             
+            // Initialize all user categories (including custom ones)
+            userCategories.forEach(category => {
+                if (!categoryData[category]) {
+                    categoryData[category] = {
+                        income: 0,
+                        expense: 0,
+                        savings: 0,
+                        debt: 0,
+                        debt_return: 0,
+                        savings_withdraw: 0
+                    };
+                }
+            });
+            
+            // Process transactions
             transactions.forEach(transaction => {
                 const category = transaction.category || 'Other';
                 const type = transaction.type || 'expense';
                 const amount = parseFloat(transaction.amount) || 0;
                 
+                // Initialize category if it doesn't exist (for categories not in userCategories)
                 if (!categoryData[category]) {
                     categoryData[category] = {
                         income: 0,
@@ -1970,13 +2022,17 @@ def serve_mini_app():
                 }
             });
             
+            console.log('Category data:', categoryData);
+            
             // Create summary HTML
             let summaryHTML = '';
             
-            // Spending Categories
+            // Spending Categories - include ALL categories that have expenses
             const spendingCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.expense > 0)
                 .sort((a, b) => b[1].expense - a[1].expense);
+            
+            console.log('Spending categories found:', spendingCategories);
             
             if (spendingCategories.length > 0) {
                 summaryHTML += `
@@ -1990,6 +2046,15 @@ def serve_mini_app():
                                 <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
+                    </div>
+                `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🛒 Spending</div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93;">
+                            No spending transactions
+                        </div>
                     </div>
                 `;
             }
