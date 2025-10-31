@@ -1928,6 +1928,37 @@ def serve_mini_app():
 
         // Load category summary data
         // Load category summary data
+        // Debug function to check API responses
+        async function debugAPIs(user_id) {
+            console.log('🔍 DEBUG: Testing APIs for user:', user_id);
+            
+            try {
+                // Test transactions API
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                const transactionsData = await transactionsResponse.json();
+                
+                console.log('🔍 DEBUG - Transactions API response:', transactionsData);
+                
+                if (transactionsData.transactions) {
+                    console.log('🔍 DEBUG - Transaction types found:', 
+                        [...new Set(transactionsData.transactions.map(t => t.type))]);
+                    console.log('🔍 DEBUG - Transaction categories found:', 
+                        [...new Set(transactionsData.transactions.map(t => t.category))]);
+                    console.log('🔍 DEBUG - Sample transactions:', 
+                        transactionsData.transactions.slice(0, 5));
+                }
+                
+                // Test categories API
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                const categoriesData = await categoriesResponse.json();
+                console.log('🔍 DEBUG - Categories API response:', categoriesData);
+                
+            } catch (error) {
+                console.error('🔍 DEBUG - API test error:', error);
+            }
+        }
+
+        // Load category summary data
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
@@ -1969,7 +2000,7 @@ def serve_mini_app():
             }
         }
 
-        // Render category summary with proper category data
+        // Render category summary
         function renderCategorySummary(transactions, userCategories) {
             const container = document.getElementById('categorySummaryContent');
             
@@ -1981,6 +2012,9 @@ def serve_mini_app():
                 `;
                 return;
             }
+            
+            console.log('🔍 DEBUG - All transactions:', transactions);
+            console.log('🔍 DEBUG - User categories:', userCategories);
             
             // Group transactions by category and type
             const categoryData = {};
@@ -2003,6 +2037,13 @@ def serve_mini_app():
                 const type = transaction.type || 'expense';
                 const amount = parseFloat(transaction.amount) || 0;
                 
+                console.log(`📝 Processing transaction:`, {
+                    category: category,
+                    type: type,
+                    amount: amount,
+                    description: transaction.description
+                });
+                
                 // Initialize category if it doesn't exist
                 if (!categoryData[category]) {
                     categoryData[category] = {
@@ -2018,10 +2059,13 @@ def serve_mini_app():
                 // Add amount to the correct type
                 if (categoryData[category][type] !== undefined) {
                     categoryData[category][type] += amount;
+                    console.log(`✅ Added ${amount} to ${category}.${type}`);
+                } else {
+                    console.log(`❌ Unknown transaction type: ${type} for category: ${category}`);
                 }
             });
             
-            console.log('🔍 Processed category data:', categoryData);
+            console.log('🔍 DEBUG - Final category data:', categoryData);
             
             // Create summary HTML
             let summaryHTML = '';
@@ -2063,6 +2107,8 @@ def serve_mini_app():
             const incomeCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.income > 0)
                 .sort((a, b) => b[1].income - a[1].income);
+            
+            console.log('🔍 Income categories found:', incomeCategories);
             
             if (incomeCategories.length > 0) {
                 summaryHTML += `
