@@ -1389,51 +1389,11 @@ def serve_mini_app():
             color: white;
         }
 
-        .health-label {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 2px;
-        }
-
         .health-display {
             font-size: 18px;
             font-weight: bold;
         }
 
-        .averages-section {
-            margin: 15px 0;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            border: 1px solid #e9ecef;
-        }
-
-        .averages-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .average-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1;
-        }
-
-        .average-label {
-            font-size: 12px;
-            color: #6c757d;
-            text-align: center;
-            margin-bottom: 4px;
-        }
-
-        .average-amount {
-            font-size: 14px;
-            font-weight: 600;
-            color: #495057;
-        }
-        
         .balance-label {
             font-size: 16px;
             color: #8e8e93;
@@ -1643,6 +1603,40 @@ def serve_mini_app():
             font-weight: 600;
         }
         
+        .averages-section {
+            margin: 15px 0;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+
+        .averages-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .average-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .average-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .average-amount {
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
         .loading {
             text-align: center;
             padding: 20px;
@@ -1668,7 +1662,6 @@ def serve_mini_app():
         <div class="page active" id="balancePage">
             <div class="balance-card">
                 <div class="health-indicator" id="healthIndicator" style="display: none;">
-                    <div class="health-label">Financial Health</div>
                     <div class="health-display" id="healthDisplay">⛺️ 0%</div>
                 </div>
                 <div class="balance-label">Current Balance</div>
@@ -1841,18 +1834,6 @@ def serve_mini_app():
             }
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
-            }
-            
-            // Update daily averages
-            const averagesSection = document.getElementById('averagesSection');
-            if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
-                averagesSection.style.display = 'block';
-                document.getElementById('dailyIncomeAvg').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
-                document.getElementById('dailyIncomeAvg').style.color = '#34c759';
-                document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
-            } else {
-                averagesSection.style.display = 'none';
             }
             
             // Update financial health
