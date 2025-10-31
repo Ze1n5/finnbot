@@ -545,26 +545,149 @@ Net Savings: {net_savings:,.0f}₴"""
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
     
     def parse_transaction_date(self, date_string):
-        """Parse transaction date for sorting - FIXED timezone issue"""
+        """Parse transaction date for sorting"""
         if not date_string:
             return datetime.min  # Very old date for missing dates
         
         try:
+            # Extract just the date part (YYYY-MM-DD) for comparison
             if 'T' in date_string:
-                # ISO format with time - handle timezone properly
-                if '.' in date_string:
-                    dt = datetime.fromisoformat(date_string.replace('Z', '+00:00'))
-                else:
-                    dt = datetime.fromisoformat(date_string.replace('Z', '+00:00').split('+')[0])
-                
-                # Make it offset-naive by removing timezone info for comparison
-                return dt.replace(tzinfo=None)
+                date_part = date_string.split('T')[0]
             else:
-                # Simple date format
-                return datetime.strptime(date_string.split(' ')[0], '%Y-%m-%d')
+                date_part = date_string.split(' ')[0]
+            
+            # Parse as naive datetime (no timezone)
+            return datetime.strptime(date_part, '%Y-%m-%d')
         except Exception as e:
             print(f"❌ Error parsing date '{date_string}': {e}")
-            return datetime.min  # Very old date for invalid dates
+            return datetime.min
+
+    def format_transaction_date(self, transaction, chat_id):
+        """Format transaction date for display"""
+        user_lang = self.get_user_language(chat_id)
+        
+        transaction_date = transaction.get('date')
+        if not transaction_date:
+            return "???" if user_lang == 'uk' else "???"
+        
+        try:
+            # Parse the date string
+            if 'T' in transaction_date:
+                # ISO format with time
+                if '.' in transaction_date:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
+                else:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00').split('+')[0])
+            else:
+                # Simple date format
+                dt = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
+            
+            # Simple format: DD.MM.YYYY HH:MM
+            if user_lang == 'uk':
+                return dt.strftime("%d.%m.%Y %H:%M")
+            else:
+                return dt.strftime("%m/%d/%Y %H:%M")
+                
+        except Exception as e:
+            print(f"❌ Error formatting date '{transaction_date}': {e}")
+            return "???" if user_lang == 'uk' else "???"
+
+    def format_brief_date(self, transaction, chat_id):
+        """Format date in brief format"""
+        user_lang = self.get_user_language(chat_id)
+        
+        transaction_date = transaction.get('date')
+        if not transaction_date:
+            return "???" if user_lang == 'uk' else "???"
+        
+        try:
+            if 'T' in transaction_date:
+                if '.' in transaction_date:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
+                else:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00').split('+')[0])
+            else:
+                dt = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
+            
+            # Brief format: DD.MM HH:MM
+            if user_lang == 'uk':
+                return dt.strftime("%d.%m %H:%M")
+            else:
+                return dt.strftime("%m/%d %H:%M")
+                
+        except Exception:
+            return "???" if user_lang == 'uk' else "???"
+
+    def create_simplified_delete_list(self, chat_id, transaction_map):
+        """Create simplified list when too many transactions"""
+        user_lang = self.get_user_language(chat_id)
+        user_transactions = self.get_user_transactions(chat_id)
+        
+        # Sort transactions by date (newest first) for simplified list too
+        try:
+            sorted_transactions = sorted(
+                user_transactions, 
+                key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+                reverse=True
+            )
+        except Exception as e:
+            print(f"❌ Error sorting in simplified list: {e}")
+            sorted_transactions = user_transactions
+        
+        if user_lang == 'uk':
+            delete_text = "🗑️ *Список транзакцій*\n\n"
+            delete_text += "⏹️  `0` - Скасувати\n\n"
+        else:
+            delete_text = "🗑️ *Transaction List*\n\n"
+            delete_text += "⏹️  `0` - Cancel\n\n"
+        
+        current_number = 1
+        new_transaction_map = {}
+        
+        for transaction in sorted_transactions:
+            if current_number > 50:  # Limit to 50 transactions in simplified view
+                break
+                
+            original_index = user_transactions.index(transaction)
+            
+            # Get amount with symbol
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Brief date
+            date_display = self.format_brief_date(transaction, chat_id)
+            
+            # Truncate description
+            description = transaction['description']
+            if len(description) > 20:
+                description = description[:17] + "..."
+            
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            new_transaction_map[current_number] = original_index
+            current_number += 1
+        
+        # Update the transaction map for this simplified view
+        self.delete_mode[chat_id] = new_transaction_map
+        
+        if user_lang == 'uk':
+            delete_text += "💡 *Введіть номер для видалення*"
+        else:
+            delete_text += "💡 *Type a number to delete*"
+        
+        return delete_text
         
     def create_simplified_delete_list(self, chat_id, transaction_map):
         """Create simplified list when too many transactions"""
@@ -656,7 +779,7 @@ Net Savings: {net_savings:,.0f}₴"""
             print(f"🔍 DEBUG: Successfully sorted {len(sorted_transactions)} transactions")
         except Exception as e:
             print(f"❌ Error sorting transactions: {e}. Using original order.")
-            sorted_transactions = user_transactions 
+            sorted_transactions = user_transactions  # Fallback to original order
         
         delete_text = "🗑️ *Select Transaction to Delete*\n\n"
         delete_text += "⏹️  `0` - Cancel & Exit\n\n"
@@ -672,22 +795,16 @@ Net Savings: {net_savings:,.0f}₴"""
             # Get transaction symbol and amount
             trans_type = transaction['type']
             if trans_type == 'income':
-                symbol = "+"
                 amount_display = f"+{transaction['amount']:,.0f}₴"
             elif trans_type == 'savings':
-                symbol = "++"
                 amount_display = f"++{transaction['amount']:,.0f}₴"
             elif trans_type == 'debt':
-                symbol = "-"
                 amount_display = f"-{transaction['amount']:,.0f}₴"
             elif trans_type == 'debt_return':
-                symbol = "+-"
                 amount_display = f"+-{transaction['amount']:,.0f}₴"
             elif trans_type == 'savings_withdraw':
-                symbol = "-+"
                 amount_display = f"-+{transaction['amount']:,.0f}₴"
             else:  # expense
-                symbol = "-"
                 amount_display = f"-{transaction['amount']:,.0f}₴"
             
             # Get date and time
