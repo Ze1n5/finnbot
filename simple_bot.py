@@ -5,13 +5,13 @@ import requests
 import time
 from dotenv import load_dotenv
 from datetime import datetime
-from flask import Flask, jsonify, request
 import threading
 import atexit
 import signal
 import psycopg2
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
 
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
@@ -563,7 +563,7 @@ Net Savings: {net_savings:,.0f}₴"""
             return datetime.min
 
     def format_transaction_date(self, transaction, chat_id):
-        """Format transaction date for display"""
+        """Format transaction date for display with local timezone"""
         user_lang = self.get_user_language(chat_id)
         
         transaction_date = transaction.get('date')
@@ -573,20 +573,23 @@ Net Savings: {net_savings:,.0f}₴"""
         try:
             # Parse the date string
             if 'T' in transaction_date:
-                # ISO format with time
+                # ISO format with time - handle timezone
                 if '.' in transaction_date:
                     dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
                 else:
                     dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00').split('+')[0])
+                
+                # Convert to local system timezone
+                dt_local = dt.astimezone()  # No arguments = convert to local timezone
             else:
-                # Simple date format
-                dt = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
+                # Simple date format - assume it's already local time
+                dt_local = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
             
-            # Simple format: DD.MM.YYYY HH:MM
+            # Format based on user language
             if user_lang == 'uk':
-                return dt.strftime("%d.%m.%Y %H:%M")
+                return dt_local.strftime("%d.%m.%Y %H:%M")
             else:
-                return dt.strftime("%m/%d/%Y %H:%M")
+                return dt_local.strftime("%m/%d/%Y %H:%M")
                 
         except Exception as e:
             print(f"❌ Error formatting date '{transaction_date}': {e}")
