@@ -1661,6 +1661,8 @@ def serve_mini_app():
         <!-- Balance Page -->
         <div class="page active" id="balancePage">
             <div class="balance-card">
+                <div class="health-indicator" id="healthIndicator" style="display: none;">
+                </div>
                 <div class="balance-label">Current Balance</div>
                 <div class="balance-amount" id="balanceAmount">0₴</div>
                 
