@@ -2538,6 +2538,11 @@ def serve_mini_app():
             }
         }
 
+        function showError(message) {
+            const container = document.getElementById('transactionsContainer');
+            container.innerHTML = `<div class="error">${message}</div>`;
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
             setupNavigation();
@@ -2571,6 +2576,7 @@ def serve_mini_app():
             } else {
                 return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
             }
+        }
 
     </script>
 </body>
