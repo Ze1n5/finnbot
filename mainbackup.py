@@ -5,12 +5,13 @@ import requests
 import time
 from dotenv import load_dotenv
 from datetime import datetime
-from flask import Flask, jsonify, request
 import threading
 import atexit
 import signal
 import psycopg2
 from urllib.parse import urlparse
+from datetime import datetime, timedelta, timezone
+
 
 
 PERSISTENT_DIR = "/data" if os.path.exists("/data") else "."
@@ -340,14 +341,58 @@ class SimpleFinnBot:
         net_debt = debt_incurred - debt_returned
         net_flow = income - expenses - net_savings
         
-        # Calculate averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (income - expenses) / total_days if total_days > 0 else 0
+        # Calculate averages based on last 30 days
+        current_date = datetime.now().date()
+        thirty_days_ago = current_date - timedelta(days=30)
+
+        # Filter transactions from last 30 days
+        recent_income = 0
+        recent_expenses = 0
+        all_recent_days = set()
+
+        print(f"🔍 DEBUG: Filtering transactions from {thirty_days_ago} to {current_date}")
+
+        for transaction in user_transactions:
+            if 'date' in transaction:
+                try:
+                    # Parse transaction date
+                    transaction_date = None
+                    if 'T' in transaction['date']:
+                        transaction_date_str = transaction['date'].split('T')[0]
+                        transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                    else:
+                        # Try different date formats
+                        transaction_date_str = transaction['date'].split(' ')[0]
+                        transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                    
+                    # Only include transactions from last 30 days
+                    if transaction_date >= thirty_days_ago:
+                        all_recent_days.add(transaction_date)
+                        
+                        if transaction['type'] == 'income':
+                            recent_income += transaction['amount']
+                            print(f"🔍 DEBUG: Added income {transaction['amount']} from {transaction_date}")
+                        elif transaction['type'] == 'expense':
+                            recent_expenses += transaction['amount']
+                            print(f"🔍 DEBUG: Added expense {transaction['amount']} from {transaction_date}")
+                            
+                except Exception as e:
+                    print(f"⚠️ Error parsing transaction date '{transaction.get('date')}': {e}")
+                    continue
+
+        print(f"🔍 DEBUG FINAL TOTALS:")
+        print(f"   Recent income total: {recent_income:,.0f}₴")
+        print(f"   Recent expenses total: {recent_expenses:,.0f}₴")
+        print(f"   Unique days with activity: {len(all_recent_days)}")
+
+        # Calculate daily averages for last 30 days
+        daily_income_avg = recent_income / 30
+        daily_expense_avg = recent_expenses / 30
+        daily_net_avg = (recent_income - recent_expenses) / 30
+
+        print(f"🔍 DEBUG DAILY AVERAGES:")
+        print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
         
         user_lang = self.get_user_language(chat_id)
         
@@ -355,23 +400,23 @@ class SimpleFinnBot:
         if user_lang == 'uk':
             summary_text = f"""📊 *Фінансовий звіт*
 
-    💎 *Фінансове здоров'я:* {health_emoji} {health_display}
+💎 *Фінансове здоров'я:* {health_emoji} {health_display}
 
-    💸 *Аналіз готівкового потоку:*
-    Дохід: {income:,.0f}₴
-    Витрати: {expenses:,.0f}₴
-    Заощадження: {net_savings:,.0f}₴
-    ─────────────────
-    Чистий потік: {net_flow:,.0f}₴
+💸 *Аналіз готівкового потоку:*
+Дохід: {income:,.0f}₴
+Витрати: {expenses:,.0f}₴
+Заощадження: {net_savings:,.0f}₴
+─────────────────
+Чистий потік: {net_flow:,.0f}₴
 
-    📈 *Щоденні середні показники:*
-    Середній дохід/день: {daily_income_avg:,.0f}₴
-    Середні витрати/день: {daily_expense_avg:,.0f}₴
-    Середній чистий потік/день: {daily_net_avg:,.0f}₴
+📈 *Щоденні середні показники (за останні 30 днів):*
+Середній дохід/день: {daily_income_avg:,.0f}₴
+Cередні витрати/день: {daily_expense_avg:,.0f}₴
+Середній чистий потік/день: {daily_net_avg:,.0f}₴
 
-    🏦 *Заощадження:*
-    Внесено: {savings_deposits:,.0f}₴
-    Чисті заощадження: {net_savings:,.0f}₴"""
+🏦 *Заощадження:*
+Внесено: {savings_deposits:,.0f}₴
+Чисті заощадження: {net_savings:,.0f}₴"""
             
             if debt_incurred > 0 or debt_returned > 0:
                 summary_text += f"\n\n💳 *Борги:*\n   Заборгованість: {debt_incurred:,.0f}₴"
@@ -380,29 +425,30 @@ class SimpleFinnBot:
                 summary_text += f"\n   Чистий борг: {net_debt:,.0f}₴"
             
             # Add context about tracking period
-            if all_dates:
-                summary_text += f"\n\n📅 *Період відстеження:* {len(all_dates)} днів"
+            recent_days_count = len(all_recent_days)
+            if recent_days_count > 0:
+                summary_text += f"\n\n📅 *Активність за останні 30 днів:* {recent_days_count} днів"
             
         else:
             summary_text = f"""📊 *Financial Summary*
 
-    💎 *Financial Health:* {health_emoji} {health_display}
+💎 *Financial Health:* {health_emoji} {health_display}
 
-    💸 *Cash Flow Analysis:*
-    Income: {income:,.0f}₴
-    Expenses: {expenses:,.0f}₴
-    Savings: {net_savings:,.0f}₴
-    ─────────────────
-    Net Cash Flow: {net_flow:,.0f}₴
+💸 *Cash Flow Analysis:*
+Income: {income:,.0f}₴
+Expenses: {expenses:,.0f}₴
+Savings: {net_savings:,.0f}₴
+────────────────────
+Net Cash Flow: {net_flow:,.0f}₴
 
-    📈 *Daily Averages:*
-    Avg Income/Day: {daily_income_avg:,.0f}₴
-    Avg Expenses/Day: {daily_expense_avg:,.0f}₴
-    Avg Net Flow/Day: {daily_net_avg:,.0f}₴
+📈 *Daily Averages (Last 30 Days):*
+Avg Income/Day: {daily_income_avg:,.0f}₴
+Avg Expenses/Day: {daily_expense_avg:,.0f}₴
+Avg Net Flow/Day: {daily_net_avg:,.0f}₴
 
-    🏦 *Savings Account:*
-    Deposited: {savings_deposits:,.0f}₴
-    Net Savings: {net_savings:,.0f}₴"""
+🏦 *Savings Account:*
+Deposited: {savings_deposits:,.0f}₴
+Net Savings: {net_savings:,.0f}₴"""
             
             if debt_incurred > 0 or debt_returned > 0:
                 summary_text += f"\n\n💳 *Debt Account:*\n   Incurred: {debt_incurred:,.0f}₴"
@@ -411,10 +457,12 @@ class SimpleFinnBot:
                 summary_text += f"\n   Net Debt: {net_debt:,.0f}₴"
             
             # Add context about tracking period
-            if all_dates:
-                summary_text += f"\n\n📅 *Tracking Period:* {len(all_dates)} days"
+            recent_days_count = len(all_recent_days)
+            if recent_days_count > 0:
+                summary_text += f"\n\n📅 *Activity in last 30 days:* {recent_days_count} days"
         
         self.send_message(chat_id, summary_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+
     def handle_503020_status(self, chat_id):
         """Handle 50/30/20 Status button"""
         print(f"🔍 Handling 50/30/20 Status for {chat_id}")
@@ -495,6 +543,222 @@ class SimpleFinnBot:
                 summary += "💡 Future can be improved"
         
         self.send_message(chat_id, summary, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+    
+    def parse_transaction_date(self, date_string):
+        """Parse transaction date for sorting"""
+        if not date_string:
+            return datetime.min  # Very old date for missing dates
+        
+        try:
+            # Extract just the date part (YYYY-MM-DD) for comparison
+            if 'T' in date_string:
+                date_part = date_string.split('T')[0]
+            else:
+                date_part = date_string.split(' ')[0]
+            
+            # Parse as naive datetime (no timezone)
+            return datetime.strptime(date_part, '%Y-%m-%d')
+        except Exception as e:
+            print(f"❌ Error parsing date '{date_string}': {e}")
+            return datetime.min
+
+    def format_transaction_date(self, transaction, chat_id):
+        """Format transaction date for display - FORCE UTC+2"""
+        user_lang = self.get_user_language(chat_id)
+        
+        transaction_date = transaction.get('date')
+        if not transaction_date:
+            return "???" if user_lang == 'uk' else "???"
+        
+        try:
+            # Parse the date string
+            if 'T' in transaction_date:
+                # Extract the datetime parts manually
+                date_part, time_part = transaction_date.split('T')
+                time_part = time_part.split('+')[0].split('.')[0]  # Remove timezone and milliseconds
+                
+                # Parse as naive datetime
+                dt_naive = datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S")
+                
+                # Add 2 hours for Ukraine time (UTC+2)
+                dt_local = dt_naive + timedelta(hours=2)
+            else:
+                # Simple date format
+                dt_local = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
+            
+            # Format based on user language
+            if user_lang == 'uk':
+                return dt_local.strftime("%d.%m.%Y %H:%M")
+            else:
+                return dt_local.strftime("%m/%d/%Y %H:%M")
+                
+        except Exception as e:
+            print(f"❌ Error formatting date '{transaction_date}': {e}")
+            return "???" if user_lang == 'uk' else "???"
+
+    def format_brief_date(self, transaction, chat_id):
+        """Format date in brief format"""
+        user_lang = self.get_user_language(chat_id)
+        
+        transaction_date = transaction.get('date')
+        if not transaction_date:
+            return "???" if user_lang == 'uk' else "???"
+        
+        try:
+            if 'T' in transaction_date:
+                if '.' in transaction_date:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
+                else:
+                    dt = datetime.fromisoformat(transaction_date.replace('Z', '+00:00').split('+')[0])
+            else:
+                dt = datetime.strptime(transaction_date.split(' ')[0], '%Y-%m-%d')
+            
+            # Brief format: DD.MM HH:MM
+            if user_lang == 'uk':
+                return dt.strftime("%d.%m %H:%M")
+            else:
+                return dt.strftime("%m/%d %H:%M")
+                
+        except Exception:
+            return "???" if user_lang == 'uk' else "???"
+
+    def create_simplified_delete_list(self, chat_id, transaction_map):
+        """Create simplified list when too many transactions"""
+        user_lang = self.get_user_language(chat_id)
+        user_transactions = self.get_user_transactions(chat_id)
+        
+        # Sort transactions by date (newest first) for simplified list too
+        try:
+            sorted_transactions = sorted(
+                user_transactions, 
+                key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+                reverse=True
+            )
+        except Exception as e:
+            print(f"❌ Error sorting in simplified list: {e}")
+            sorted_transactions = user_transactions
+        
+        if user_lang == 'uk':
+            delete_text = "🗑️ *Список транзакцій*\n\n"
+            delete_text += "⏹️  `0` - Скасувати\n\n"
+        else:
+            delete_text = "🗑️ *Transaction List*\n\n"
+            delete_text += "⏹️  `0` - Cancel\n\n"
+        
+        current_number = 1
+        new_transaction_map = {}
+        
+        for transaction in sorted_transactions:
+            if current_number > 50:  # Limit to 50 transactions in simplified view
+                break
+                
+            original_index = user_transactions.index(transaction)
+            
+            # Get amount with symbol
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Brief date
+            date_display = self.format_brief_date(transaction, chat_id)
+            
+            # Truncate description
+            description = transaction['description']
+            if len(description) > 20:
+                description = description[:17] + "..."
+            
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            new_transaction_map[current_number] = original_index
+            current_number += 1
+        
+        # Update the transaction map for this simplified view
+        self.delete_mode[chat_id] = new_transaction_map
+        
+        if user_lang == 'uk':
+            delete_text += "💡 *Введіть номер для видалення*"
+        else:
+            delete_text += "💡 *Type a number to delete*"
+        
+        return delete_text
+        
+    def create_simplified_delete_list(self, chat_id, transaction_map):
+        """Create simplified list when too many transactions"""
+        user_lang = self.get_user_language(chat_id)
+        user_transactions = self.get_user_transactions(chat_id)
+        
+        # Sort transactions by date (newest first) for simplified list too
+        sorted_transactions = sorted(
+            user_transactions, 
+            key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+            reverse=True
+        )
+        
+        if user_lang == 'uk':
+            delete_text = "🗑️ *Список транзакцій*\n\n"
+            delete_text += "⏹️  `0` - Скасувати\n\n"
+        else:
+            delete_text = "🗑️ *Transaction List*\n\n"
+            delete_text += "⏹️  `0` - Cancel\n\n"
+        
+        current_number = 1
+        new_transaction_map = {}
+        
+        for transaction in sorted_transactions:
+            if current_number > 50:  # Limit to 50 transactions in simplified view
+                break
+                
+            original_index = user_transactions.index(transaction)
+            
+            # Get amount with symbol
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Brief date
+            date_display = self.format_brief_date(transaction, chat_id)
+            
+            # Truncate description
+            description = transaction['description']
+            if len(description) > 20:
+                description = description[:17] + "..."
+            
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            new_transaction_map[current_number] = original_index
+            current_number += 1
+        
+        # Update the transaction map for this simplified view
+        self.delete_mode[chat_id] = new_transaction_map
+        
+        if user_lang == 'uk':
+            delete_text += "💡 *Введіть номер для видалення*"
+        else:
+            delete_text += "💡 *Type a number to delete*"
+        
+        return delete_text
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
@@ -509,65 +773,69 @@ class SimpleFinnBot:
                 self.send_message(chat_id, "📭 No transactions to delete.", reply_markup=self.get_main_menu(chat_id))
             return
         
-        # COPY YOUR EXISTING DELETE TRANSACTION LOGIC HERE
-        # Group transactions by type for better organization
-        transactions_by_type = {
-            'income': [],
-            'expense': [],
-            'savings': [],
-            'debt': [],
-            'debt_return': [],
-            'savings_withdraw': []
-        }
-        
-        for i, transaction in enumerate(user_transactions):
-            transactions_by_type[transaction['type']].append((i, transaction))
+        # Sort transactions by date (newest first) with error handling
+        try:
+            sorted_transactions = sorted(
+                user_transactions, 
+                key=lambda x: self.parse_transaction_date(x.get('date', '')), 
+                reverse=True  # Newest first
+            )
+            print(f"🔍 DEBUG: Successfully sorted {len(sorted_transactions)} transactions")
+        except Exception as e:
+            print(f"❌ Error sorting transactions: {e}. Using original order.")
+            sorted_transactions = user_transactions  # Fallback to original order
         
         delete_text = "🗑️ *Select Transaction to Delete*\n\n"
         delete_text += "⏹️  `0` - Cancel & Exit\n\n"
         
         current_number = 1
-        transaction_map = {}  # Map display numbers to actual indices
+        transaction_map = {}  # Map display numbers to actual indices in ORIGINAL list
         
-        # Display transactions by type with clear sections
-        for trans_type, trans_list in transactions_by_type.items():
-            if trans_list:
-                # Add transactions for this type
-                for orig_index, transaction in trans_list:
-                    # Get proper symbol and amount display
-                    if trans_type == 'income':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'savings':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'debt':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'debt_return':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    elif trans_type == 'savings_withdraw':
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    else:  # expense
-                        amount_display = f"{transaction['amount']:,.0f} ₴"
-                    
-                    # Truncate long descriptions
-                    description = transaction['description']
-                    if len(description) > 25:
-                        description = description[:22] + "..."
-                    
-                    delete_text += f"*`{current_number:2d} `* {amount_display} • {transaction['category']}\n"
-                    
-                    transaction_map[current_number] = orig_index
-                    current_number += 1
-                
-                delete_text += "\n"
+        # Show all transactions in simple list format (newest first)
+        for i, transaction in enumerate(sorted_transactions):
+            # Find the original index of this transaction
+            original_index = user_transactions.index(transaction)
+            
+            # Get transaction symbol and amount
+            trans_type = transaction['type']
+            if trans_type == 'income':
+                amount_display = f"+{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings':
+                amount_display = f"++{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt':
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'debt_return':
+                amount_display = f"+-{transaction['amount']:,.0f}₴"
+            elif trans_type == 'savings_withdraw':
+                amount_display = f"-+{transaction['amount']:,.0f}₴"
+            else:  # expense
+                amount_display = f"-{transaction['amount']:,.0f}₴"
+            
+            # Get date and time
+            date_display = self.format_transaction_date(transaction, chat_id)
+            
+            # Truncate description if too long
+            description = transaction['description']
+            if len(description) > 30:
+                description = description[:27] + "..."
+            
+            # Simple format: Number. Category: Description
+            #              Amount Date Time
+            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
+            delete_text += f"    {amount_display}  {date_display}\n\n"
+            
+            # Map display number to ORIGINAL index in user_transactions
+            transaction_map[current_number] = original_index
+            current_number += 1
         
         delete_text += "💡 *Type a number to delete, or 0 to cancel*"
         
         # Store the mapping for this user
         self.delete_mode[chat_id] = transaction_map
         
-        # Split long messages if needed (Telegram has 4096 char limit)
+        # Split long messages if needed
         if len(delete_text) > 4000:
-            delete_text = delete_text[:4000] + "\n\n... (showing first 4000 characters)"
+            delete_text = self.create_simplified_delete_list(chat_id, transaction_map)
         
         self.send_message(chat_id, delete_text, parse_mode='Markdown')
 
@@ -1294,10 +1562,25 @@ class SimpleFinnBot:
         return messages
 
     def calculate_expression(self, text):
-        """Calculate mathematical expressions with percentages"""
+        """Calculate mathematical expressions with percentages and currency"""
         try:
+            # Check for currency symbols
+            has_usd = '$' in text
+            has_eur = '€' in text or 'eur' in text.lower()
+            
+            # Default to UAH if no currency specified
+            currency = 'UAH'
+            if has_usd:
+                currency = 'USD'
+            elif has_eur:
+                currency = 'EUR'
+            
+            # Remove currency symbols for calculation
+            expression_text = text.replace('$', '').replace('€', '').replace('₴', '')
+            expression_text = re.sub(r'\b(uah|eur|usd)\b', '', expression_text, flags=re.IGNORECASE).strip()
+            
             # Remove spaces and convert to lowercase
-            expression = text.replace(' ', '').lower()
+            expression = expression_text.replace(' ', '').lower()
             
             # Handle percentages: convert 1.5% to *0.015
             expression = re.sub(r'(\d+(?:\.\d+)?)%', r'*(\1/100)', expression)
@@ -1335,7 +1618,7 @@ class SimpleFinnBot:
             # For debt transactions, we need the POSITIVE amount since it increases balance
             amount = abs(result)
             
-            return amount, trans_type, symbol
+            return amount, trans_type, symbol, currency  # Return currency as well
             
         except Exception as e:
             print(f"❌ Calculation error: {e}")
@@ -1719,16 +2002,34 @@ class SimpleFinnBot:
             return self.send_message(chat_id, text, parse_mode=parse_mode)
     
     def extract_amount(self, text):
-    # Clean the text first
+        # Clean the text first
         clean_text = text.strip()
         print(f"🔍 DEBUG extract_amount: text='{clean_text}'")
         
+        # Check for currency symbols
+        has_usd = '$' in clean_text
+        has_eur = '€' in clean_text or 'eur' in clean_text.lower()
+        has_uah = '₴' in clean_text or 'uah' in clean_text.lower()
+        
+        # Default to UAH if no currency specified
+        currency = 'UAH'
+        if has_usd:
+            currency = 'USD'
+        elif has_eur:
+            currency = 'EUR'
+        
+        print(f"🔍 DEBUG: Currency detected: {currency}")
+        
+        # Remove currency symbols for amount parsing
+        clean_text_for_parsing = clean_text.replace('$', '').replace('€', '').replace('₴', '')
+        clean_text_for_parsing = re.sub(r'\b(uah|eur|usd)\b', '', clean_text_for_parsing, flags=re.IGNORECASE).strip()
+        
         # Check transaction types in priority order
-        is_savings = '++' in clean_text
-        is_debt_return = '+-' in clean_text
-        is_savings_withdraw = '-+' in clean_text
-        is_income = '+' in clean_text and not any(x in clean_text for x in ['++', '+-', '-+'])
-        is_debt = clean_text.startswith('-') and not is_savings_withdraw
+        is_savings = '++' in clean_text_for_parsing
+        is_debt_return = '+-' in clean_text_for_parsing
+        is_savings_withdraw = '-+' in clean_text_for_parsing
+        is_income = '+' in clean_text_for_parsing and not any(x in clean_text_for_parsing for x in ['++', '+-', '-+'])
+        is_debt = clean_text_for_parsing.startswith('-') and not is_savings_withdraw
         
         print(f"   Transaction type detection:")
         print(f"   - is_savings: {is_savings}")
@@ -1736,10 +2037,11 @@ class SimpleFinnBot:
         print(f"   - is_debt: {is_debt}")
         print(f"   - is_debt_return: {is_debt_return}")
         print(f"   - is_savings_withdraw: {is_savings_withdraw}")
+        print(f"   - currency: {currency}")
         
         # Extract amount using regex that handles various formats
         amount_pattern = r'[+-]*\s*(\d+(?:[.,]\d{1,2})?)'
-        amounts = re.findall(amount_pattern, clean_text)
+        amounts = re.findall(amount_pattern, clean_text_for_parsing)
         
         if amounts:
             # Get the first valid amount found
@@ -1748,13 +2050,13 @@ class SimpleFinnBot:
                     # Clean the amount string
                     clean_amt = amt_str.replace(',', '.').strip()
                     amount = float(clean_amt)
-                    print(f"   ✅ Extracted amount: {amount}")
-                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+                    print(f"   ✅ Extracted amount: {amount} {currency}")
+                    return amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency
                 except ValueError:
                     continue
         
         print(f"   ❌ No valid amount found")
-        return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw
+        return None, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency
 
     def guess_category(self, text, user_id):
         """Guess spending category for a specific user"""
@@ -2451,7 +2753,8 @@ class SimpleFinnBot:
                 'amount': test_amount, 
                 'text': "Test savings transaction", 
                 'category': "Savings",
-                'type': "savings"
+                'type': "savings",
+                'currency': currency
             }
             
             self.send_message(chat_id, message, keyboard)
@@ -2868,14 +3171,15 @@ This will help me provide better financial recommendations!"""
                 result = self.calculate_expression(text)
                 
                 if result is not None and result[0] is not None:
-                    amount, trans_type, symbol = result
+                    amount, trans_type, symbol, currency = result
                     
                     # Store pending transaction
                     self.pending[chat_id] = {
                         'amount': amount, 
-                        'text': f"{text} = {symbol}{amount:,.0f}₴",
+                        'text': f"{text} = {symbol}{amount:,.0f}{'₴' if currency == 'UAH' else '$' if currency == 'USD' else '€'}",
                         'category': "Salary" if trans_type == 'income' else "Other",
-                        'type': trans_type
+                        'type': trans_type,
+                        'currency': currency  # Add currency
                     }
                     
                     # Show calculation result and ask for category
@@ -2973,52 +3277,54 @@ This will help me provide better financial recommendations!"""
                     # ADD THIS: Show formatting help only for unrecognized transaction formats
                     user_lang = self.get_user_language(chat_id)
                     
-                    if user_lang == 'uk':
-                        help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
+                    # In the process_message method, update the help text:
 
-            🛒 10 - Витрата (обід, шопінг тощо)
-                                            
-            💰 +100 - Дохід (зарплата, бізнес тощо) 
-                                            
-            🏦 ++100 - Заощадження (відкласти гроші)
-                                            
-            💳 -100 - Борг (позичені гроші)
-                                            
-            🔙 +-100 - Повернення боргу (повернення)
-                                            
-            📥 -+100 - Зняття заощаджень (зняття з заощаджень)
+                if user_lang == 'uk':
+                    help_text = """🤔 Ой! Дозвольте допомогти вам правильно відформатувати:
 
-            💡 *Приклади:*
-            `150 обід` - Витрата на обід
-            `+5000 зарплата` - Дохід
-            `++1000` - Заощадження
-            `-200 кредит` - Борг"""
-                    else:
-                        help_text = """🤔 Oops! Let me help you format that correctly:
-                                            
-            🛒 10 - Expense (lunch, shopping, etc.)
-                                            
-            💰 +100 - Income (salary, business, etc.) 
-                                            
-            🏦 ++100 - Savings (put money aside)
-                                            
-            💳 -100 - Debt (borrowed money)
-                                            
-            🔙 +-100 - Returned debt (paying back)
-                                            
-            📥 -+100 - Savings withdrawal (taking from savings)
+🛒 10 - Витрата в гривнях (обід, шопінг тощо)
+🛒 10$ - Витрата в доларах  
+🛒 10€ - Витрата в євро
+                                        
+💰 +100 - Дохід в гривнях (зарплата, бізнес тощо) 
+💰 +100$ - Дохід в доларах
+💰 +100€ - Дохід в євро
+                                        
+🏦 ++100 - Заощадження в гривнях
+🏦 ++100$ - Заощадження в доларах
+🏦 ++100€ - Заощадження в євро
 
-            💡 *Examples:*
-            `150 lunch` - Expense for lunch
-            `+5000 salary` - Income  
-            `++1000` - Savings
-            `-200 loan` - Debt"""
+💡 *Приклади:*
+`150 обід` - Витрата на обід в гривнях
+`50$ кава` - Витрата на каву в доларах
+`+5000 зарплата` - Дохід в гривнях
+`+1000$ фріланс` - Дохід в доларах"""
+                else:
+                    help_text = """🤔 Oops! Let me help you format that correctly:
+                                        
+🛒 10 - Expense in UAH (lunch, shopping, etc.)
+🛒 10$ - Expense in USD  
+🛒 10€ - Expense in EUR
+                                        
+💰 +100 - Income in UAH (salary, business, etc.) 
+💰 +100$ - Income in USD
+💰 +100€ - Income in EUR
+                                        
+🏦 ++100 - Savings in UAH
+🏦 ++100$ - Savings in USD  
+🏦 ++100€ - Savings in EUR
+
+💡 *Examples:*
+`150 lunch` - Expense for lunch in UAH
+`50$ coffee` - Expense for coffee in USD
+`+5000 salary` - Income in UAH  
+`+1000$ freelance` - Income in USD"""
 
                     self.send_message(chat_id, help_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
                     return
             
             # Original transaction processing (keep your existing code)
-            amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw = self.extract_amount(text)
+            amount, is_income, is_debt, is_savings, is_debt_return, is_savings_withdraw, currency = self.extract_amount(text)
             print(f"🔍 DEBUG process_message - Transaction analysis:")
             print(f"   Amount: {amount}")
             print(f"   Is savings: {is_savings}")
@@ -3046,7 +3352,8 @@ This will help me provide better financial recommendations!"""
                         'amount': amount, 
                         'text': text, 
                         'category': "Savings",
-                        'type': "savings"
+                        'type': "savings",
+                        'currency': currency
                     }
                     
                     # Get user language
@@ -3101,7 +3408,8 @@ This will help me provide better financial recommendations!"""
                     'amount': amount, 
                     'text': text, 
                     'category': category,
-                    'type': transaction_type
+                    'type': transaction_type,
+                    'currency': currency
                 }
                 
                 # Create appropriate message and keyboard
@@ -3332,13 +3640,23 @@ You're now ready to use Finn! 🚀
             category = data[4:]
             print(f"🔍 DEBUG: Processing category selection - category: '{category}', chat_id in pending: {chat_id in self.pending}")
             
+            # In the process_callback method, update the category selection part:
+
             if chat_id in self.pending:
                 pending = self.pending[chat_id]
                 amount = pending["amount"]
                 text = pending["text"]
                 transaction_type = pending["type"]
+                currency = pending.get("currency", "UAH")  # Default to UAH if not specified
                 
-                print(f"🔍 DEBUG: Processing {transaction_type} transaction - amount: {amount}, category: {category}")
+                # Get currency symbol for display
+                currency_symbol = '₴'
+                if currency == 'USD':
+                    currency_symbol = '$'
+                elif currency == 'EUR':
+                    currency_symbol = '€'
+                
+                print(f"🔍 DEBUG: Processing {transaction_type} transaction - amount: {amount}, currency: {currency}, category: {category}")
                 
                 # Learn if corrected (only for expenses, not income)
                 if pending["category"] != category and transaction_type == "expense":
@@ -3355,6 +3673,7 @@ You're now ready to use Finn! 🚀
                         "category": category,
                         "description": text,
                         "type": transaction_type,
+                        "currency": currency,  # Add this line
                         "date": datetime.now().astimezone().isoformat()
                     }
                     user_transactions.append(transaction)
@@ -3413,23 +3732,23 @@ You're now ready to use Finn! 🚀
                     
                     # Send confirmation WITH MENU
                     if user_lang == 'uk':
-                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     else:
-                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}₴\n🏷️ {category}"
+                        confirmation_msg = f"✅ Income saved!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     self.send_message(chat_id, confirmation_msg, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings':
                     if user_lang == 'uk':
-                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}₴"
+                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}₴"
+                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt':        
                     if user_lang == 'uk':
-                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}₴"
+                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}₴"
+                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt_return':
@@ -3448,9 +3767,9 @@ You're now ready to use Finn! 🚀
                     
                 else:  # expense
                     if user_lang == 'uk':
-                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     else:
-                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}₴\n🏷️ {category}"
+                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                 
                 # ===== STEP 6: Show menu after transaction in groups =====

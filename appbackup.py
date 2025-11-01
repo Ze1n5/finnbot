@@ -5,11 +5,12 @@ import asyncio
 import threading
 import atexit
 import signal
-from datetime import datetime
 from flask import Flask, jsonify, request
 import psycopg2
 from urllib.parse import urlparse
 from simple_bot import get_bot_instance, save_all_data
+from datetime import datetime, timedelta
+
 
 bot_instance = get_bot_instance()
 print(f"🔍 DEBUG: Bot instance created: {bool(bot_instance)}")
@@ -291,14 +292,59 @@ def api_financial_data():
                 
                 transaction_count += 1
         
-        # NEW: Calculate daily averages
-        total_days = len(all_dates) if all_dates else 1
-        total_income_days = len(income_dates) if income_dates else 1
-        total_expense_days = len(expense_dates) if expense_dates else 1
-        
-        daily_income_avg = total_income / total_income_days if total_income_days > 0 else 0
-        daily_expense_avg = total_expenses / total_expense_days if total_expense_days > 0 else 0
-        daily_net_avg = (total_income - total_expenses) / total_days if total_days > 0 else 0
+        from datetime import datetime, timedelta
+
+        current_date = datetime.now().date()
+        thirty_days_ago = current_date - timedelta(days=30)
+
+        recent_income = 0
+        recent_expenses = 0
+        recent_days_count = 0
+        recent_dates = set()  # Track unique dates in last 30 days
+
+        for transaction in user_transactions:
+            if isinstance(transaction, dict):
+                transaction_date = None
+                if 'date' in transaction:
+                    try:
+                        if 'T' in transaction['date']:
+                            date_str = transaction['date'].split('T')[0]
+                            transaction_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        else:
+                            date_str = transaction['date'].split(' ')[0]
+                            transaction_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                        
+                        # Only include transactions from last 30 days
+                        if transaction_date >= thirty_days_ago:
+                            amount = float(transaction.get('amount', 0))
+                            trans_type = transaction.get('type', 'expense')
+                            
+                            if trans_type == 'income':
+                                recent_income += amount
+                            elif trans_type == 'expense':
+                                recent_expenses += amount
+                            
+                            # Track unique dates in the recent period
+                            recent_dates.add(transaction_date)
+                                
+                    except Exception as e:
+                        print(f"⚠️ Error parsing transaction date: {e}")
+                        continue
+
+        # Calculate averages based on last 30 days
+        daily_income_avg = recent_income / 30
+        daily_expense_avg = recent_expenses / 30
+        daily_net_avg = (recent_income - recent_expenses) / 30
+
+        # Use the count of recent unique dates for tracking_days
+        tracking_days = len(recent_dates)
+
+        print(f"🔍 Last 30 days analysis:")
+        print(f"   Recent income (30 days): {recent_income:,.0f}₴")
+        print(f"   Recent expenses (30 days): {recent_expenses:,.0f}₴")
+        print(f"   Active days in period: {tracking_days}")
+        print(f"   Daily income avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily expense avg: {daily_expense_avg:,.0f}₴")
 
         # Get recent transactions for display (last 5)
         for transaction in user_transactions[-5:]:
@@ -372,7 +418,7 @@ def api_financial_data():
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
-            'tracking_days': total_days,
+            'tracking_days': tracking_days,  # This was missing!
             'financial_health': health_score,
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
@@ -1300,58 +1346,72 @@ def check_data_files():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-app.route('/api/transactions')
-def api_transactions():
+    
+@app.route('/api/debug-savings-transactions')
+def debug_savings_transactions():
+    """Debug savings transactions specifically"""
     try:
-        page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 10))
         user_id = request.args.get('user_id', type=int)
-        
         if not user_id:
-            return jsonify({'error': 'user_id parameter required'}), 400
+            return jsonify({'error': 'user_id parameter is required'}), 400
+            
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions for this user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        
+        # Find all savings transactions
+        savings_transactions = [t for t in user_transactions if t.get('type') == 'savings']
+        
+        # Also check for any transaction with "savings" in category or description
+        savings_related = [t for t in user_transactions if 
+                          'savings' in str(t.get('category', '')).lower() or 
+                          'savings' in str(t.get('description', '')).lower()]
+        
+        return jsonify({
+            'user_id': user_id,
+            'total_transactions': len(user_transactions),
+            'savings_transactions_count': len(savings_transactions),
+            'savings_transactions': savings_transactions,
+            'savings_related_transactions': savings_related,
+            'all_transaction_types': list(set(t.get('type') for t in user_transactions)),
+            'total_savings_calculated': sum(t['amount'] for t in user_transactions if t.get('type') == 'savings')
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/user-categories', methods=['GET'])
+def api_user_categories():
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
         
         if not bot_instance:
             return jsonify({'error': 'Bot not initialized'}), 500
         
-        # Get transactions ONLY for this specific user
-        user_transactions = bot_instance.transactions.get(user_id, [])
+        # Get categories for this user from the bot instance
+        categories = bot_instance.get_user_categories(user_id)
         
-        # Sort by date (newest first)
-        user_transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
-        
-        # Calculate pagination
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        paginated_transactions = user_transactions[start_idx:end_idx]
-        
-        # Format transactions for display
-        formatted_transactions = []
-        for transaction in paginated_transactions:
-            amount = float(transaction.get('amount', 0))
-            trans_type = transaction.get('type', 'expense')
-            description = transaction.get('description', '')
-            category = transaction.get('category', 'Other')
-            timestamp = transaction.get('date', '')
+        # Ensure we always return a list, even if empty
+        if not categories:
+            categories = []
             
-            # ... rest of your existing formatting code ...
-            
-        has_more = len(user_transactions) > end_idx
+        print(f"📋 Returning {len(categories)} categories for user {user_id}: {categories}")
         
         return jsonify({
-            'transactions': formatted_transactions,
-            'has_more': has_more,
-            'current_page': page,
-            'total_transactions': len(user_transactions)
+            'categories': categories,
+            'user_id': user_id
         })
         
     except Exception as e:
-        print(f"❌ Error in transactions API: {e}")
+        print(f"❌ Error loading user categories: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Failed to load transactions'}), 500
+        return jsonify({'error': 'Failed to load categories'}), 500
 
-# Serve mini app main page
 @app.route('/mini-app')
 def serve_mini_app():
     return """
@@ -1381,6 +1441,47 @@ def serve_mini_app():
             margin: 0 auto;
         }
         
+        /* Navigation Styles */
+        .nav-bar {
+            background: white;
+            border-radius: 16px;
+            padding: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            display: flex;
+            gap: 8px;
+        }
+        
+        .nav-button {
+            flex: 1;
+            padding: 12px 16px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #8e8e93;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Page Styles */
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        /* Balance Page Styles */
         .balance-card {
             background: white;
             border-radius: 16px;
@@ -1390,60 +1491,6 @@ def serve_mini_app():
             text-align: center;
         }
 
-        .health-indicator {
-            text-align: center;
-            margin: 10px 0;
-            padding: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
-            color: white;
-        }
-
-        .health-label {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 2px;
-        }
-
-        .health-display {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .averages-section {
-            margin: 15px 0;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            border: 1px solid #e9ecef;
-        }
-
-        .averages-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .average-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1;
-        }
-
-        .average-label {
-            font-size: 12px;
-            color: #6c757d;
-            text-align: center;
-            margin-bottom: 4px;
-        }
-
-        .average-amount {
-            font-size: 14px;
-            font-weight: 600;
-            color: #495057;
-        }
-        
         .balance-label {
             font-size: 16px;
             color: #8e8e93;
@@ -1559,6 +1606,214 @@ def serve_mini_app():
             color: #34c759;
         }
         
+        /* Statistics Page Styles */
+        .stats-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .stats-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1d1d1f;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #1d1d1f;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .stat-positive {
+            color: #34c759;
+        }
+        
+        .stat-negative {
+            color: #ff3b30;
+        }
+        
+        .stat-neutral {
+            color: #007AFF;
+        }
+        
+        .category-breakdown {
+            margin-top: 20px;
+        }
+        
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f2f2f7;
+        }
+        
+        .category-item:last-child {
+            border-bottom: none;
+        }
+        
+        .category-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .category-emoji {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .category-name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .category-amount {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* Category Summary Styles */
+        .summary-section {
+            margin-bottom: 20px;
+        }
+
+        .summary-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .category-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .category-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .category-summary-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .debt-detail {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .category-summary-amount {
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+
+        .category-summary-amount.positive {
+            color: #34c759;
+        }
+
+        .category-summary-amount.negative {
+            color: #ff3b30;
+        }
+
+        .category-summary-amount.neutral {
+            color: #007AFF;
+        }
+        
+        .averages-section {
+            margin: 15px 0;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+
+        .averages-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .average-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .average-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .average-amount {
+            font-size: 14px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .health-indicator {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            color: white;
+        }
+
+        .health-display {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
         .loading {
             text-align: center;
             padding: 20px;
@@ -1570,61 +1825,106 @@ def serve_mini_app():
             padding: 20px;
             color: #ff3b30;
         }
-        
-        .user-info {
-            background: white;
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            text-align: center;
-            font-size: 14px;
-            color: #8e8e93;
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="user-info" id="userInfo">
-            Loading user info...
+        <!-- Navigation Bar -->
+        <div class="nav-bar">
+            <button class="nav-button active" data-page="balance">Balance</button>
+            <button class="nav-button" data-page="statistics">Statistics</button>
         </div>
         
-        <div class="balance-card">
-            <div class="health-indicator" id="healthIndicator" style="display: none;">
-                <div class="health-label">Financial Health</div>
-                <div class="health-display" id="healthDisplay">⛺️ 0%</div>
-            </div>
-            <div class="balance-label">Current Balance</div>
-            <div class="balance-amount" id="balanceAmount">0₴</div>
-            
-            <!-- Add Daily Averages Section -->
-            <div class="averages-section" id="averagesSection" style="display: none;">
-                <div class="averages-row">
-                    <div class="average-item">
-                        <div class="average-label">📈 Daily Income</div>
-                        <div class="average-amount" id="dailyIncomeAvg">0₴</div>
+        <!-- Balance Page -->
+        <div class="page active" id="balancePage">
+            <div class="balance-card">
+                <div class="balance-label">Current Balance</div>
+                <div class="balance-amount" id="balanceAmount">0₴</div>
+                
+                <div class="income-expense">
+                    <div class="expense">
+                        <div class="expense-amount" id="expenseAmount">0₴</div>
+                        <div class="expense-label">Spending</div>
                     </div>
-                    <div class="average-item">
-                        <div class="average-label">📉 Daily Spending</div>
-                        <div class="average-amount" id="dailyExpenseAvg">0₴</div>
+                    <div class="income">
+                        <div class="income-amount" id="incomeAmount">0₴</div>
+                        <div class="income-label">Income</div>
                     </div>
                 </div>
             </div>
             
-            <div class="income-expense">
-                <div class="expense">
-                    <div class="expense-amount" id="expenseAmount">0₴</div>
-                    <div class="expense-label">Spending</div>
-                </div>
-                <div class="income">
-                    <div class="income-amount" id="incomeAmount">0₴</div>
-                    <div class="income-label">Income</div>
-                </div>
+            <div class="transactions" id="transactionsContainer">
+                <div class="loading">Loading transactions...</div>
             </div>
         </div>
         
-        <div class="transactions" id="transactionsContainer">
-            <div class="loading">Loading transactions...</div>
+        <!-- Statistics Page -->
+        <div class="page" id="statisticsPage">
+            <div class="stats-card">
+                <div class="stats-header">Financial Overview</div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value stat-positive" id="totalIncome">0₴</div>
+                        <div class="stat-label">Total Income</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value stat-negative" id="totalExpenses">0₴</div>
+                        <div class="stat-label">Total Expenses</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value stat-neutral" id="totalSavings">0₴</div>
+                        <div class="stat-label">Total Savings</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="transactionCount">0</div>
+                        <div class="stat-label">Transactions</div>
+                    </div>
+                </div>
+                
+                <div class="averages-section">
+                    <div class="averages-row">
+                        <div class="average-item">
+                            <div class="average-label">📈 Daily Income</div>
+                            <div class="average-amount stat-positive" id="statsDailyIncome">0₴</div>
+                        </div>
+                        <div class="average-item">
+                            <div class="average-label">📉 Daily Spending</div>
+                            <div class="average-amount stat-negative" id="statsDailyExpense">0₴</div>
+                        </div>
+                    </div>
+                    <div class="averages-row" style="margin-top: 8px;">
+                        <div class="average-item">
+                            <div class="average-label">💰 Daily Net</div>
+                            <div class="average-amount" id="statsDailyNet">0₴</div>
+                        </div>
+                        <div class="average-item">
+                            <div class="average-label">📅 Tracking Days</div>
+                            <div class="average-amount" id="trackingDays">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="stats-card">
+                <div class="stats-header">Financial Health</div>
+                <div class="health-indicator" style="margin: 0;">
+                    <div class="health-display" id="statsHealthDisplay">⛺️ 0%</div>
+                </div>
+            </div>
+
+            <div class="stats-card" id="categorySummary">
+                <div class="stats-header">Category Summary</div>
+                <div id="categorySummaryContent">
+                    <div class="loading">Loading category data...</div>
+                </div>
+            </div>
+            
+            <div class="stats-card" id="categoryBreakdown" style="display: none;">
+                <div class="stats-header">Spending by Category</div>
+                <div class="category-breakdown" id="categoryList">
+                    <!-- Categories will be populated here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1633,45 +1933,372 @@ def serve_mini_app():
         Telegram.WebApp.ready();
         Telegram.WebApp.expand();
 
-        // Get user information from Telegram
-        function getUserInfo() {
+        let currentUserData = null;
+
+        // Navigation functionality
+        function setupNavigation() {
+            const navButtons = document.querySelectorAll('.nav-button');
+            const pages = document.querySelectorAll('.page');
+            
+            navButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons and pages
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    pages.forEach(page => page.classList.remove('active'));
+                    
+                    // Add active class to clicked button and corresponding page
+                    this.classList.add('active');
+                    const pageId = this.getAttribute('data-page') + 'Page';
+                    document.getElementById(pageId).classList.add('active');
+                    
+                    // If switching to statistics page, load category summary
+                    if (this.getAttribute('data-page') === 'statistics') {
+                        const user = Telegram.WebApp.initDataUnsafe?.user;
+                        const user_id = user?.id;
+                        
+                        console.log('🔄 Switching to Statistics page, user_id:', user_id);
+                        
+                        if (user_id) {
+                            console.log('🚀 Loading category summary for user:', user_id);
+                            loadCategorySummary(user_id);
+                        } else {
+                            console.log('❌ No user_id found for category summary');
+                        }
+                        
+                        if (currentUserData) {
+                            updateStatisticsPage(currentUserData);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Manual test function - call this in browser console
+        function testCategorySummary() {
             const user = Telegram.WebApp.initDataUnsafe?.user;
             const user_id = user?.id;
             
             if (user_id) {
-                const userName = user.first_name || user.username || 'User';
-                document.getElementById('userInfo').textContent = `👋 Hello, ${userName} (ID: ${user_id})`;
-                return user_id;
+                console.log('🧪 Manual test: Loading category summary for user:', user_id);
+                loadCategorySummary(user_id);
             } else {
-                document.getElementById('userInfo').textContent = '❌ Cannot identify user';
-                return null;
+                console.log('❌ No user_id found for manual test');
             }
+        }
+
+        // Load category summary data
+        // Load category summary data
+        // Debug function to check API responses
+        async function debugAPIs(user_id) {
+            console.log('🔍 DEBUG: Testing APIs for user:', user_id);
+            
+            try {
+                // Test transactions API
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                const transactionsData = await transactionsResponse.json();
+                
+                console.log('🔍 DEBUG - Transactions API response:', transactionsData);
+                
+                if (transactionsData.transactions) {
+                    console.log('🔍 DEBUG - Transaction types found:', 
+                        [...new Set(transactionsData.transactions.map(t => t.type))]);
+                    console.log('🔍 DEBUG - Transaction categories found:', 
+                        [...new Set(transactionsData.transactions.map(t => t.category))]);
+                    console.log('🔍 DEBUG - Sample transactions:', 
+                        transactionsData.transactions.slice(0, 5));
+                }
+                
+                // Test categories API
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                const categoriesData = await categoriesResponse.json();
+                console.log('🔍 DEBUG - Categories API response:', categoriesData);
+                
+            } catch (error) {
+                console.error('🔍 DEBUG - API test error:', error);
+            }
+        }
+
+        // Load category summary data - WITH EXTRA DEBUGGING
+        async function loadCategorySummary(user_id) {
+            try {
+                console.log('🔍 Loading category summary for user:', user_id);
+                
+                // First, let's debug the transactions API
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                if (!transactionsResponse.ok) {
+                    throw new Error('Failed to load transactions');
+                }
+                const transactionsData = await transactionsResponse.json();
+                
+                console.log('🔍 Transactions API response:', transactionsData);
+                
+                // Debug savings specifically
+                const savingsDebugResponse = await fetch(`/api/debug-savings-transactions?user_id=${user_id}`);
+                if (savingsDebugResponse.ok) {
+                    const savingsDebug = await savingsDebugResponse.json();
+                    console.log('🔍 Savings debug:', savingsDebug);
+                }
+                
+                // Then load user categories
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                if (!categoriesResponse.ok) {
+                    throw new Error('Failed to load categories');
+                }
+                const categoriesData = await categoriesResponse.json();
+                
+                const transactions = transactionsData.transactions || [];
+                const categories = categoriesData.categories || [];
+                
+                console.log('📊 Final data for rendering:');
+                console.log('Total transactions:', transactions.length);
+                console.log('Transaction types found:', [...new Set(transactions.map(t => t.type))]);
+                console.log('Savings transactions:', transactions.filter(t => t.type === 'savings'));
+                
+                // Render summary
+                renderCategorySummary(transactions, categories);
+                
+            } catch (error) {
+                console.error('❌ Error loading category summary:', error);
+                document.getElementById('categorySummaryContent').innerHTML = 
+                    `<div class="error">Error loading category data: ${error.message}</div>`;
+            }
+        }
+
+        // Render category summary - FIXED FOR SAVINGS
+        function renderCategorySummary(transactions, userCategories) {
+            const container = document.getElementById('categorySummaryContent');
+            
+            if (!transactions || transactions.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #8e8e93;">
+                        No transactions to summarize
+                    </div>
+                `;
+                return;
+            }
+            
+            console.log('🔍 DEBUG - All transactions for summary:', transactions);
+            console.log('🔍 DEBUG - User categories:', userCategories);
+            
+            // Group transactions by category and type
+            const categoryData = {};
+            
+            // Initialize with user categories
+            userCategories.forEach(category => {
+                categoryData[category] = {
+                    income: 0,
+                    expense: 0,
+                    savings: 0,
+                    debt: 0,
+                    debt_return: 0,
+                    savings_withdraw: 0
+                };
+            });
+            
+            // Process all transactions
+            transactions.forEach(transaction => {
+                const category = transaction.category || 'Other';
+                const type = transaction.type || 'expense';
+                const amount = parseFloat(transaction.amount) || 0;
+                
+                console.log(`📝 Processing transaction:`, {
+                    category: category,
+                    type: type,
+                    amount: amount,
+                    description: transaction.description
+                });
+                
+                // Initialize category if it doesn't exist
+                if (!categoryData[category]) {
+                    categoryData[category] = {
+                        income: 0,
+                        expense: 0,
+                        savings: 0,
+                        debt: 0,
+                        debt_return: 0,
+                        savings_withdraw: 0
+                    };
+                }
+                
+                // Handle different transaction types - FIXED FOR SAVINGS
+                if (type === 'savings') {
+                    categoryData[category].savings += Math.abs(amount);
+                    console.log(`💰 Added to SAVINGS: ${amount} for ${category}`);
+                }
+                else if (type === 'income') {
+                    categoryData[category].income += amount;
+                }
+                else if (type === 'expense') {
+                    categoryData[category].expense += Math.abs(amount);
+                }
+                else if (type === 'debt') {
+                    categoryData[category].debt += amount;
+                }
+                else if (type === 'debt_return') {
+                    categoryData[category].debt_return += Math.abs(amount);
+                }
+                else if (type === 'savings_withdraw') {
+                    categoryData[category].savings_withdraw += amount;
+                }
+                else {
+                    console.log(`❓ Unknown transaction type: ${type}`);
+                }
+            });
+            
+            console.log('🔍 DEBUG - Final category data:', categoryData);
+            
+            // Create summary HTML
+            let summaryHTML = '';
+            
+            // Spending Categories (expense type)
+            const spendingCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.expense > 0)
+                .sort((a, b) => b[1].expense - a[1].expense);
+            
+            console.log('🔍 Spending categories found:', spendingCategories);
+            
+            if (spendingCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🛒 Spending</div>
+                        ${spendingCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🛒 Spending</div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No spending transactions found
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Income Categories
+            const incomeCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.income > 0)
+                .sort((a, b) => b[1].income - a[1].income);
+            
+            console.log('🔍 Income categories found:', incomeCategories);
+            
+            if (incomeCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">💰 Income</div>
+                        ${incomeCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Savings Categories - FIXED: Now properly checking for savings transactions
+            const savingsCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.savings > 0)
+                .sort((a, b) => b[1].savings - a[1].savings);
+            
+            console.log('🔍 Savings categories found:', savingsCategories);
+            console.log('🔍 All category data for savings:', Object.entries(categoryData).map(([cat, data]) => ({ category: cat, savings: data.savings })));
+            
+            if (savingsCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🏦 Savings</div>
+                        ${savingsCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount neutral">${data.savings.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">🏦 Savings</div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No savings transactions found
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Debt Categories
+            const debtCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.debt > 0 || data.debt_return > 0)
+                .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
+            
+            if (debtCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">💳 Debt</div>
+                        ${debtCategories.map(([category, data]) => {
+                            const netDebt = data.debt - data.debt_return;
+                            return `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                    ${data.debt_return > 0 ? `<span class="debt-detail">(Returned: ${data.debt_return.toLocaleString()}₴)</span>` : ''}
+                                </div>
+                                <div class="category-summary-amount ${netDebt >= 0 ? 'negative' : 'positive'}">
+                                    ${netDebt >= 0 ? '-' : '+'}${Math.abs(netDebt).toLocaleString()}₴
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = summaryHTML;
         }
 
         // Load financial data and transactions
         async function loadFinancialData() {
             try {
                 // Get user ID from Telegram
-                const user_id = getUserInfo();
+                const user = Telegram.WebApp.initDataUnsafe?.user;
+                const user_id = user?.id;
                 
                 if (!user_id) {
                     showError('Cannot identify user. Please open via Telegram.');
                     return;
                 }
 
-                console.log('Loading data for user:', user_id);
+                console.log('📱 Loading ALL data for user:', user_id);
 
-                // Load balance and totals WITH user_id parameter
+                // Load balance and totals
                 const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
                 const financeData = await financeResponse.json();
                 
                 if (financeResponse.ok) {
-                    updateFinancialDisplay(financeData);
+                    currentUserData = financeData;
+                    updateBalancePage(financeData);
+                    updateStatisticsPage(financeData);
+                    
+                    console.log('✅ Financial data loaded, now loading category summary...');
+                    
+                    // ALSO load category summary when app starts (for Statistics page)
+                    loadCategorySummary(user_id);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
                 
-                // Load transactions WITH user_id parameter
+                // Load transactions for Balance page
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
                 const transactionsData = await transactionsResponse.json();
                 
@@ -1687,7 +2314,7 @@ def serve_mini_app():
             }
         }
         
-        function updateFinancialDisplay(data) {
+        function updateBalancePage(data) {
             // Update balance
             const balanceElement = document.getElementById('balanceAmount');
             if (data.balance !== undefined) {
@@ -1703,30 +2330,60 @@ def serve_mini_app():
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
             }
             
-            // Update daily averages
-            const averagesSection = document.getElementById('averagesSection');
-            if (data.daily_income_avg !== undefined && data.daily_expense_avg !== undefined) {
-                // Show averages section only if we have data
-                averagesSection.style.display = 'block';
-                
-                // Update average amounts
-                document.getElementById('dailyIncomeAvg').textContent = `+${data.daily_income_avg.toLocaleString()}₴`;
-                document.getElementById('dailyExpenseAvg').textContent = `-${data.daily_expense_avg.toLocaleString()}₴`;
-                
-                // Color coding for averages
-                document.getElementById('dailyIncomeAvg').style.color = '#34c759';
-                document.getElementById('dailyExpenseAvg').style.color = '#ff3b30';
-            } else {
-                // Hide averages if no data
-                averagesSection.style.display = 'none';
+            // Financial health removed from balance page - only show in statistics
+        }
+        
+        function updateStatisticsPage(data) {
+            // Update main statistics
+            if (data.income !== undefined) {
+                document.getElementById('totalIncome').textContent = `+${data.income.toLocaleString()}₴`;
             }
-            const healthIndicator = document.getElementById('healthIndicator');
-            if (data.financial_health !== undefined && data.financial_health_emoji !== undefined) {
-                healthIndicator.style.display = 'block';
-                document.getElementById('healthDisplay').textContent = 
+            if (data.spending !== undefined) {
+                document.getElementById('totalExpenses').textContent = `-${data.spending.toLocaleString()}₴`;
+            }
+            if (data.savings !== undefined) {
+                document.getElementById('totalSavings').textContent = `${data.savings.toLocaleString()}₴`;
+            }
+            if (data.transaction_count !== undefined) {
+                document.getElementById('transactionCount').textContent = data.transaction_count;
+            }
+            
+            // Update averages in statistics
+            if (data.daily_income_avg !== undefined) {
+                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+            }
+            if (data.daily_expense_avg !== undefined) {
+                document.getElementById('statsDailyExpense').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
+            }
+            if (data.daily_net_avg !== undefined) {
+                const netAvgElement = document.getElementById('statsDailyNet');
+                netAvgElement.textContent = `${data.daily_net_avg >= 0 ? '+' : ''}${Math.round(data.daily_net_avg).toLocaleString()}₴`;
+                netAvgElement.style.color = data.daily_net_avg >= 0 ? '#34c759' : '#ff3b30';
+            }
+            if (data.tracking_days !== undefined) {
+                document.getElementById('trackingDays').textContent = data.tracking_days;
+            }
+            
+            // Update financial health in statistics
+            if (data.financial_health !== null && data.financial_health_emoji !== null) {
+                document.getElementById('statsHealthDisplay').textContent = 
                     `${data.financial_health_emoji} ${data.financial_health}%`;
+                
+                const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
+                updateHealthIndicatorColor(data.financial_health, statsHealthIndicator);
+            }
+            
+        }
+        
+        function updateHealthIndicatorColor(score, element) {
+            if (score >= 80) {
+                element.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+            } else if (score >= 60) {
+                element.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+            } else if (score >= 40) {
+                element.style.background = 'linear-gradient(135deg, #FF5722 0%, #D84315 100%)';
             } else {
-                healthIndicator.style.display = 'none';
+                element.style.background = 'linear-gradient(135deg, #F44336 0%, #C62828 100%)';
             }
         }
         
@@ -1755,7 +2412,6 @@ def serve_mini_app():
                 const isPositive = amount >= 0;
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
-                // Handle different possible data structures
                 const displayName = transaction.name || transaction.category || 'Transaction';
                 const displayDescription = transaction.description || '';
                 
@@ -1786,6 +2442,7 @@ def serve_mini_app():
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
+            setupNavigation();
             loadFinancialData();
         });
         

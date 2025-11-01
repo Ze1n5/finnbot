@@ -410,19 +410,23 @@ def api_financial_data():
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
         
+        # NEW - Returning last 30 days totals
         response_data = {
             'balance': balance,
-            'income': total_income,
-            'spending': total_expenses,
+            'income': recent_income,        # ← Last 30 days income
+            'spending': recent_expenses,    # ← Last 30 days spending
             'savings': actual_savings,
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
-            'tracking_days': tracking_days,  # This was missing!
+            'tracking_days': tracking_days,
             'financial_health': health_score,
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
-            'transaction_count': transaction_count
+            'transaction_count': transaction_count,
+            # Optional: Keep all-time totals if needed for other features
+            'all_time_income': total_income,
+            'all_time_spending': total_expenses
         }
         
         return jsonify(response_data)
