@@ -1974,6 +1974,11 @@ def serve_mini_app():
 
         let currentUserData = null;
 
+        // ========== ADD PAGINATION VARIABLES HERE ==========
+        let currentTransactionPage = 1;
+        let transactionsLoading = false;
+        let hasMoreTransactions = true;
+
         // Navigation functionality
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
@@ -2566,7 +2571,7 @@ def serve_mini_app():
             } else {
                 return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
             }
-        });
+
     </script>
 </body>
 </html>"""
