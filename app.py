@@ -2561,6 +2561,7 @@ def serve_mini_app():
         });
 
         // Helper function to format dates nicely
+        // Helper function to format dates nicely - LOCAL TIMEZONE
         function formatTransactionDate(date) {
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -2568,10 +2569,13 @@ def serve_mini_app():
             yesterday.setDate(yesterday.getDate() - 1);
             
             const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            const todayStart = new Date(today.getTime());
+            const yesterdayStart = new Date(yesterday.getTime());
             
-            if (transactionDay.getTime() === today.getTime()) {
+            // Compare dates in local timezone
+            if (transactionDay.getTime() === todayStart.getTime()) {
                 return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else if (transactionDay.getTime() === yesterday.getTime()) {
+            } else if (transactionDay.getTime() === yesterdayStart.getTime()) {
                 return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
             } else {
                 return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
