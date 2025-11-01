@@ -9,9 +9,9 @@ from flask import Flask, jsonify, request
 import psycopg2
 from urllib.parse import urlparse
 from simple_bot import get_bot_instance, save_all_data
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
-
+timestamp = datetime.now(timezone.utc).isoformat()
 bot_instance = get_bot_instance()
 print(f"🔍 DEBUG: Bot instance created: {bool(bot_instance)}")
 
@@ -2422,6 +2422,26 @@ def serve_mini_app():
             
             // Financial health removed from balance page - only show in statistics
         }
+
+        // Temporary debug function
+        function debugTransactionDates(transactions) {
+            console.log('🕒 DATE DEBUG:');
+            transactions.forEach((transaction, index) => {
+                const rawTimestamp = transaction.timestamp || transaction.date;
+                if (rawTimestamp) {
+                    const date = new Date(rawTimestamp);
+                    console.log(`Transaction ${index}:`, {
+                        raw: rawTimestamp,
+                        toISOString: date.toISOString(),
+                        toUTCString: date.toUTCString(),
+                        toLocaleString: date.toLocaleString(),
+                        timezoneOffset: date.getTimezoneOffset(),
+                        hours: date.getHours(),
+                        localHours: date.getHours()
+                    });
+                }
+            });
+        }
         
         function updateStatisticsPage(data) {
             // Update main statistics
@@ -2509,8 +2529,7 @@ def serve_mini_app():
                 // Format the date
                 let dateDisplay = '';
                 if (transaction.timestamp || transaction.date) {
-                    const transactionDate = new Date(transaction.timestamp || transaction.date);
-                    dateDisplay = formatTransactionDate(transactionDate);
+                    dateDisplay = formatTransactionDate(transaction.timestamp || transaction.date);
                 }
                 
                 transactionsHTML += `
