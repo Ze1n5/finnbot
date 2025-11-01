@@ -1347,6 +1347,41 @@ def check_data_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
+@app.route('/api/debug-savings-transactions')
+def debug_savings_transactions():
+    """Debug savings transactions specifically"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+            
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get transactions for this user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        
+        # Find all savings transactions
+        savings_transactions = [t for t in user_transactions if t.get('type') == 'savings']
+        
+        # Also check for any transaction with "savings" in category or description
+        savings_related = [t for t in user_transactions if 
+                          'savings' in str(t.get('category', '')).lower() or 
+                          'savings' in str(t.get('description', '')).lower()]
+        
+        return jsonify({
+            'user_id': user_id,
+            'total_transactions': len(user_transactions),
+            'savings_transactions_count': len(savings_transactions),
+            'savings_transactions': savings_transactions,
+            'savings_related_transactions': savings_related,
+            'all_transaction_types': list(set(t.get('type') for t in user_transactions)),
+            'total_savings_calculated': sum(t['amount'] for t in user_transactions if t.get('type') == 'savings')
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/api/user-categories', methods=['GET'])
 def api_user_categories():
     try:
@@ -1983,32 +2018,41 @@ def serve_mini_app():
             }
         }
 
-        // Load category summary data - IMPROVED VERSION
+        // Load category summary data - WITH EXTRA DEBUGGING
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // First, load user categories
-                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
-                if (!categoriesResponse.ok) {
-                    throw new Error('Failed to load categories');
-                }
-                const categoriesData = await categoriesResponse.json();
-                
-                // Then load transactions
+                // First, let's debug the transactions API
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
                 if (!transactionsResponse.ok) {
                     throw new Error('Failed to load transactions');
                 }
                 const transactionsData = await transactionsResponse.json();
                 
+                console.log('🔍 Transactions API response:', transactionsData);
+                
+                // Debug savings specifically
+                const savingsDebugResponse = await fetch(`/api/debug-savings-transactions?user_id=${user_id}`);
+                if (savingsDebugResponse.ok) {
+                    const savingsDebug = await savingsDebugResponse.json();
+                    console.log('🔍 Savings debug:', savingsDebug);
+                }
+                
+                // Then load user categories
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                if (!categoriesResponse.ok) {
+                    throw new Error('Failed to load categories');
+                }
+                const categoriesData = await categoriesResponse.json();
+                
                 const transactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
                 
                 console.log('📊 Final data for rendering:');
                 console.log('Total transactions:', transactions.length);
-                console.log('Transaction types:', [...new Set(transactions.map(t => t.type))]);
-                console.log('Transaction categories:', [...new Set(transactions.map(t => t.category))]);
+                console.log('Transaction types found:', [...new Set(transactions.map(t => t.type))]);
+                console.log('Savings transactions:', transactions.filter(t => t.type === 'savings'));
                 
                 // Render summary
                 renderCategorySummary(transactions, categories);
@@ -2020,7 +2064,7 @@ def serve_mini_app():
             }
         }
 
-        // Render category summary - FIXED VERSION
+        // Render category summary - FIXED FOR SAVINGS
         function renderCategorySummary(transactions, userCategories) {
             const container = document.getElementById('categorySummaryContent');
             
@@ -2033,7 +2077,7 @@ def serve_mini_app():
                 return;
             }
             
-            console.log('🔍 DEBUG - All transactions:', transactions);
+            console.log('🔍 DEBUG - All transactions for summary:', transactions);
             console.log('🔍 DEBUG - User categories:', userCategories);
             
             // Group transactions by category and type
@@ -2076,12 +2120,28 @@ def serve_mini_app():
                     };
                 }
                 
-                // Add amount to the correct type
-                if (categoryData[category][type] !== undefined) {
-                    categoryData[category][type] += amount;
-                    console.log(`✅ Added ${amount} to ${category}.${type}`);
-                } else {
-                    console.log(`❌ Unknown transaction type: ${type} for category: ${category}`);
+                // Handle different transaction types - FIXED FOR SAVINGS
+                if (type === 'savings') {
+                    categoryData[category].savings += Math.abs(amount);
+                    console.log(`💰 Added to SAVINGS: ${amount} for ${category}`);
+                }
+                else if (type === 'income') {
+                    categoryData[category].income += amount;
+                }
+                else if (type === 'expense') {
+                    categoryData[category].expense += Math.abs(amount);
+                }
+                else if (type === 'debt') {
+                    categoryData[category].debt += amount;
+                }
+                else if (type === 'debt_return') {
+                    categoryData[category].debt_return += Math.abs(amount);
+                }
+                else if (type === 'savings_withdraw') {
+                    categoryData[category].savings_withdraw += amount;
+                }
+                else {
+                    console.log(`❓ Unknown transaction type: ${type}`);
                 }
             });
             
@@ -2106,7 +2166,7 @@ def serve_mini_app():
                                 <div class="category-summary-info">
                                     <span class="category-summary-name">${category}</span>
                                 </div>
-                                <div class="category-summary-amount negative">-${Math.abs(data.expense).toLocaleString()}₴</div>
+                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
                     </div>
@@ -2145,12 +2205,13 @@ def serve_mini_app():
                 `;
             }
             
-            // Savings Categories
+            // Savings Categories - FIXED: Now properly checking for savings transactions
             const savingsCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.savings > 0)
                 .sort((a, b) => b[1].savings - a[1].savings);
             
             console.log('🔍 Savings categories found:', savingsCategories);
+            console.log('🔍 All category data for savings:', Object.entries(categoryData).map(([cat, data]) => ({ category: cat, savings: data.savings })));
             
             if (savingsCategories.length > 0) {
                 summaryHTML += `
