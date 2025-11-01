@@ -2560,22 +2560,47 @@ def serve_mini_app():
             });
         });
 
-        // Helper function to format dates nicely
-        // Helper function to format dates nicely - LOCAL TIMEZONE
-        function formatTransactionDate(date) {
+        // Helper function to format dates nicely - PROPER TIMEZONE HANDLING
+        function formatTransactionDate(dateString) {
+            if (!dateString) return '';
+            
+            // Parse the date string properly
+            let date;
+            
+            // If it's already a Date object
+            if (dateString instanceof Date) {
+                date = dateString;
+            } 
+            // If it's a string with timezone info
+            else if (typeof dateString === 'string') {
+                // Check if it has timezone info (ends with Z or +00:00)
+                if (dateString.endsWith('Z') || dateString.includes('+')) {
+                    // It has timezone info, parse as UTC
+                    date = new Date(dateString);
+                } else {
+                    // No timezone info, assume it's local time and parse directly
+                    date = new Date(dateString);
+                }
+            } else {
+                return '';
+            }
+            
+            // If invalid date, return empty
+            if (isNaN(date.getTime())) {
+                return '';
+            }
+            
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
             
+            // Create dates for comparison in local timezone
             const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            const todayStart = new Date(today.getTime());
-            const yesterdayStart = new Date(yesterday.getTime());
             
-            // Compare dates in local timezone
-            if (transactionDay.getTime() === todayStart.getTime()) {
+            if (transactionDay.getTime() === today.getTime()) {
                 return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else if (transactionDay.getTime() === yesterdayStart.getTime()) {
+            } else if (transactionDay.getTime() === yesterday.getTime()) {
                 return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
             } else {
                 return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
