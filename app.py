@@ -351,9 +351,7 @@ def api_financial_data():
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
         print(f"   Total Savings: {total_savings}")
-        print(f"   Total Debt Incurred: {total_debt}")
-        print(f"   Total Debt Returned: {total_debt_return}")
-        print(f"   Outstanding Debt: {outstanding_debt}")  # This is what we show
+        print(f"   Total Debt: {outstanding_debt}")  # This should be outstanding_debt
         print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
         print(f"   Transaction Count: {transaction_count}")
@@ -373,7 +371,7 @@ def api_financial_data():
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count,
-            'total_debt': outstanding_debt,  # Show current debt owed
+            'total_debt': outstanding_debt,  # Make sure this is outstanding_debt
             'all_time_income': total_income,
             'all_time_spending': total_expenses
         }
