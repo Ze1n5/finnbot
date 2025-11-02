@@ -302,6 +302,47 @@ def api_financial_data():
         recent_days_count = 0
         recent_dates = set()  # Track unique dates in last 30 days
 
+        # Add these variables with your other totals
+        total_debt = 0
+        total_debt_return = 0
+
+        # In your transaction loop, add debt calculations:
+        for transaction in user_transactions:
+            if isinstance(transaction, dict):
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                # ... your existing code ...
+                
+                # Add debt calculations
+                if trans_type == 'debt':
+                    total_debt += amount
+                elif trans_type == 'debt_return':
+                    total_debt_return += amount
+                
+                transaction_count += 1
+
+        # Calculate net debt
+        net_debt = total_debt - total_debt_return
+
+        # Add to your response_data:
+        response_data = {
+            'balance': balance,
+            'income': recent_income,
+            'spending': recent_expenses,
+            'savings': actual_savings,
+            'daily_income_avg': daily_income_avg,
+            'daily_expense_avg': daily_expense_avg,
+            'daily_net_avg': daily_net_avg,
+            'tracking_days': tracking_days,
+            'financial_health': health_score,
+            'financial_health_emoji': health_emoji,
+            'transactions': recent_transactions,
+            'transaction_count': transaction_count,
+            'total_debt': net_debt,  # Add this line
+            'all_time_income': total_income,
+            'all_time_spending': total_expenses
+        }
+
         for transaction in user_transactions:
             if isinstance(transaction, dict):
                 transaction_date = None
@@ -1904,8 +1945,8 @@ def serve_mini_app():
                         <div class="stat-label">Total Savings</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-value" id="transactionCount">0</div>
-                        <div class="stat-label">Transactions</div>
+                        <div class="stat-value stat-negative" id="totalDebt">0₴</div>
+                        <div class="stat-label">Total Debt</div>
                     </div>
                 </div>
                 
@@ -2364,8 +2405,11 @@ def serve_mini_app():
             if (data.savings !== undefined) {
                 document.getElementById('totalSavings').textContent = `${data.savings.toLocaleString()}₴`;
             }
-            if (data.transaction_count !== undefined) {
-                document.getElementById('transactionCount').textContent = data.transaction_count;
+            if (data.total_debt !== undefined) {
+                const debtElement = document.getElementById('totalDebt');
+                debtElement.textContent = `${data.total_debt.toLocaleString()}₴`;
+                // Make it red if there's debt, green if negative (credit)
+                debtElement.style.color = data.total_debt > 0 ? '#ff3b30' : '#34c759';
             }
             
             // Update averages in statistics
