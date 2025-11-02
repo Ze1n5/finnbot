@@ -242,6 +242,7 @@ def api_financial_data():
         total_savings = 0
         total_debt = 0
         total_debt_return = 0
+        outstanding_debt = 0  
         transaction_count = 0
         recent_transactions = []
 
@@ -283,6 +284,7 @@ def api_financial_data():
                     all_dates.add(transaction_date)
                 
                 # CORRECTED BALANCE CALCULATION
+                # CORRECTED BALANCE CALCULATION
                 if trans_type == 'income':
                     balance += amount
                     total_income += amount
@@ -298,8 +300,12 @@ def api_financial_data():
                     total_savings += amount
                 elif trans_type == 'debt':
                     balance += amount  # You receive money as debt
+                    total_debt += amount
+                    outstanding_debt += amount  # Current debt increases
                 elif trans_type == 'debt_return':
                     balance -= amount  # You pay back debt
+                    total_debt_return += amount
+                    outstanding_debt -= amount  # Current debt decreases
                 elif trans_type == 'savings_withdraw':
                     balance += amount  # You take money from savings
                     total_savings -= amount
@@ -345,15 +351,15 @@ def api_financial_data():
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
         print(f"   Total Savings: {total_savings}")
-        print(f"   Total Debt: {outstanding_debt}")  # Show actual debt owed
-        print(f"   Debt Returned: {total_debt_return}")  # For debugging
+        print(f"   Total Debt Incurred: {total_debt}")
+        print(f"   Total Debt Returned: {total_debt_return}")
+        print(f"   Outstanding Debt: {outstanding_debt}")  # This is what we show
         print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
         print(f"   Transaction Count: {transaction_count}")
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
 
-        # In response_data, use outstanding_debt instead of net_debt
         response_data = {
             'balance': balance,
             'income': recent_income,
@@ -367,7 +373,7 @@ def api_financial_data():
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count,
-            'total_debt': outstanding_debt,  # Show actual debt owed
+            'total_debt': outstanding_debt,  # Show current debt owed
             'all_time_income': total_income,
             'all_time_spending': total_expenses
         }
