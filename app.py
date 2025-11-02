@@ -332,7 +332,7 @@ def api_financial_data():
             'balance': balance,
             'income': recent_income,
             'spending': recent_expenses,
-            'savings': actual_savings,
+            'savings': total_savings,
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
