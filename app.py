@@ -234,8 +234,8 @@ def api_financial_data():
         # Calculate financial health FIRST
         health_score = bot_instance.calculate_financial_health(user_id)
         health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
-        # Initialize totals for THIS USER ONLY
-        # Initialize totals for THIS USER ONLY
+        
+        # ========== INITIALIZE ALL VARIABLES ==========
         balance = 0
         total_income = 0
         total_expenses = 0
@@ -245,7 +245,18 @@ def api_financial_data():
         transaction_count = 0
         recent_transactions = []
 
-        # NEW: Track dates for averages
+        # Initialize recent period variables
+        recent_income = 0
+        recent_expenses = 0
+        recent_dates = set()
+
+        # Initialize average variables
+        daily_income_avg = 0
+        daily_expense_avg = 0
+        daily_net_avg = 0
+        tracking_days = 0
+
+        # Track dates for averages
         income_dates = set()
         expense_dates = set()
         all_dates = set()
@@ -376,8 +387,9 @@ def api_financial_data():
                         continue
 
         # Calculate averages based on last 30 days
-        daily_income_avg = recent_income / 30
-        daily_expense_avg = recent_expenses / 30
+        # Calculate averages based on last 30 days - WITH PROPER INITIALIZATION
+        daily_income_avg = recent_income / 30 if recent_income > 0 else 0
+        daily_expense_avg = recent_expenses / 30 if recent_expenses > 0 else 0
         daily_net_avg = (recent_income - recent_expenses) / 30
 
         # Use the count of recent unique dates for tracking_days
@@ -2403,44 +2415,44 @@ def serve_mini_app():
         function updateStatisticsPage(data) {
             // Update main statistics
             if (data.income !== undefined) {
-                document.getElementById('totalIncome').textContent = `+${data.income.toLocaleString()}₴`;
+                document.getElementById('totalIncome').textContent = `+${(data.income || 0).toLocaleString()}₴`;
             }
             if (data.spending !== undefined) {
-                document.getElementById('totalExpenses').textContent = `-${data.spending.toLocaleString()}₴`;
+                document.getElementById('totalExpenses').textContent = `${(data.spending || 0).toLocaleString()}₴`;
             }
             if (data.savings !== undefined) {
-                document.getElementById('totalSavings').textContent = `${data.savings.toLocaleString()}₴`;
+                document.getElementById('totalSavings').textContent = `${(data.savings || 0).toLocaleString()}₴`;
             }
             if (data.total_debt !== undefined) {
                 const debtElement = document.getElementById('totalDebt');
-                debtElement.textContent = `${data.total_debt.toLocaleString()}₴`;
-                // Make it red if there's debt, green if negative (credit)
-                debtElement.style.color = data.total_debt > 0 ? '#ff3b30' : '#34c759';
+                debtElement.textContent = `${(data.total_debt || 0).toLocaleString()}₴`;
+                debtElement.style.color = (data.total_debt || 0) > 0 ? '#ff3b30' : '#34c759';
             }
             
             // Update averages in statistics
             if (data.daily_income_avg !== undefined) {
-                document.getElementById('statsDailyIncome').textContent = `${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg || 0).toLocaleString()}₴`;
             }
             if (data.daily_expense_avg !== undefined) {
-                document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg || 0).toLocaleString()}₴`;
             }
             if (data.daily_net_avg !== undefined) {
                 const netAvgElement = document.getElementById('statsDailyNet');
-                netAvgElement.textContent = `${data.daily_net_avg >= 0 ? '+' : ''}${Math.round(data.daily_net_avg).toLocaleString()}₴`;
-                netAvgElement.style.color = data.daily_net_avg >= 0 ? '#34c759' : '#ff3b30';
+                const netAvg = data.daily_net_avg || 0;
+                netAvgElement.textContent = `${netAvg >= 0 ? '+' : ''}${Math.round(netAvg).toLocaleString()}₴`;
+                netAvgElement.style.color = netAvg >= 0 ? '#34c759' : '#ff3b30';
             }
             if (data.tracking_days !== undefined) {
-                document.getElementById('trackingDays').textContent = data.tracking_days;
+                document.getElementById('trackingDays').textContent = data.tracking_days || 0;
             }
             
             // Update financial health in statistics
             if (data.financial_health !== null && data.financial_health_emoji !== null) {
                 document.getElementById('statsHealthDisplay').textContent = 
-                    `${data.financial_health_emoji} ${data.financial_health}%`;
+                    `${data.financial_health_emoji} ${data.financial_health || 0}%`;
                 
                 const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
-                updateHealthIndicatorColor(data.financial_health, statsHealthIndicator);
+                updateHealthIndicatorColor(data.financial_health || 0, statsHealthIndicator);
             }
         }
         
