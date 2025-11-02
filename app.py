@@ -341,41 +341,6 @@ def api_financial_data():
                 
                 transaction_count += 1
 
-        # Calculate net debt
-        # Calculate outstanding debt (debt you currently owe)
-        outstanding_debt = total_debt
-
-        print("=" * 50)
-        print(f"✅ USER {user_id} CALCULATION:")
-        print(f"   Balance: {balance}")
-        print(f"   Total Income: {total_income}") 
-        print(f"   Total Expenses: {total_expenses}")
-        print(f"   Total Savings: {total_savings}")
-        print(f"   Total Debt: {outstanding_debt}")  # This should be outstanding_debt
-        print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
-        print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
-        print(f"   Transaction Count: {transaction_count}")
-        print(f"   Recent Transactions: {len(recent_transactions)}")
-        print("=" * 50)
-
-        response_data = {
-            'balance': balance,
-            'income': recent_income,
-            'spending': recent_expenses,
-            'savings': total_savings,
-            'daily_income_avg': daily_income_avg,
-            'daily_expense_avg': daily_expense_avg,
-            'daily_net_avg': daily_net_avg,
-            'tracking_days': tracking_days,
-            'financial_health': health_score,
-            'financial_health_emoji': health_emoji,
-            'transactions': recent_transactions,
-            'transaction_count': transaction_count,
-            'total_debt': outstanding_debt,  # Make sure this is outstanding_debt
-            'all_time_income': total_income,
-            'all_time_spending': total_expenses
-        }
-
         for transaction in user_transactions:
             if isinstance(transaction, dict):
                 transaction_date = None
@@ -471,6 +436,41 @@ def api_financial_data():
                 })
 
         # Use total_savings for savings display
+        # Calculate net debt
+        outstanding_debt = total_debt
+
+        print("=" * 50)
+        print(f"✅ USER {user_id} CALCULATION:")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income: {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {total_savings}")
+        print(f"   Total Debt: {outstanding_debt}")  # This should be outstanding_debt
+        print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
+        print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
+        print("=" * 50)
+
+        response_data = {
+            'balance': balance,
+            'income': recent_income,
+            'spending': recent_expenses,
+            'savings': total_savings,
+            'daily_income_avg': daily_income_avg,
+            'daily_expense_avg': daily_expense_avg,
+            'daily_net_avg': daily_net_avg,
+            'tracking_days': tracking_days,
+            'financial_health': health_score,
+            'financial_health_emoji': health_emoji,
+            'transactions': recent_transactions,
+            'transaction_count': transaction_count,
+            'total_debt': outstanding_debt,  # Make sure this is outstanding_debt
+            'all_time_income': total_income,
+            'all_time_spending': total_expenses
+        }
+        
+        return jsonify(response_data)
         
     except Exception as e:
         print(f"❌ CRITICAL ERROR: {e}")
