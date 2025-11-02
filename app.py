@@ -235,10 +235,13 @@ def api_financial_data():
         health_score = bot_instance.calculate_financial_health(user_id)
         health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
         # Initialize totals for THIS USER ONLY
+        # Initialize totals for THIS USER ONLY
         balance = 0
         total_income = 0
         total_expenses = 0
         total_savings = 0
+        total_debt = 0
+        total_debt_return = 0
         transaction_count = 0
         recent_transactions = []
 
@@ -437,26 +440,28 @@ def api_financial_data():
                 })
 
         # Use total_savings for savings display
-        actual_savings = total_savings
-        
+        # Calculate net debt
+        net_debt = total_debt - total_debt_return
+
         print("=" * 50)
         print(f"✅ USER {user_id} CALCULATION:")
         print(f"   Balance: {balance}")
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
-        print(f"   Total Savings: {actual_savings}")
+        print(f"   Total Savings: {total_savings}")
+        print(f"   Total Debt: {net_debt}")
         print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
         print(f"   Transaction Count: {transaction_count}")
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
-        
+
         # NEW - Returning last 30 days totals
         response_data = {
             'balance': balance,
             'income': recent_income,        # ← Last 30 days income
             'spending': recent_expenses,    # ← Last 30 days spending
-            'savings': actual_savings,
+            'savings': total_savings,       # Use total_savings directly
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
@@ -465,6 +470,7 @@ def api_financial_data():
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count,
+            'total_debt': net_debt,  # Add debt data
             # Optional: Keep all-time totals if needed for other features
             'all_time_income': total_income,
             'all_time_spending': total_expenses
