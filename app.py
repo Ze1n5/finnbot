@@ -2370,10 +2370,10 @@ def serve_mini_app():
             
             // Update averages in statistics
             if (data.daily_income_avg !== undefined) {
-                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyIncome').textContent = `${Math.round(data.daily_income_avg).toLocaleString()}₴`;
             }
             if (data.daily_expense_avg !== undefined) {
-                document.getElementById('statsDailyExpense').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
             }
             if (data.daily_net_avg !== undefined) {
                 const netAvgElement = document.getElementById('statsDailyNet');
