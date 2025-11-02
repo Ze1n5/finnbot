@@ -336,9 +336,24 @@ def api_financial_data():
                 transaction_count += 1
 
         # Calculate net debt
-        net_debt = total_debt - total_debt_return
+        # Calculate outstanding debt (debt you currently owe)
+        outstanding_debt = total_debt
 
-        # Add to your response_data:
+        print("=" * 50)
+        print(f"✅ USER {user_id} CALCULATION:")
+        print(f"   Balance: {balance}")
+        print(f"   Total Income: {total_income}") 
+        print(f"   Total Expenses: {total_expenses}")
+        print(f"   Total Savings: {total_savings}")
+        print(f"   Total Debt: {outstanding_debt}")  # Show actual debt owed
+        print(f"   Debt Returned: {total_debt_return}")  # For debugging
+        print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
+        print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
+        print(f"   Transaction Count: {transaction_count}")
+        print(f"   Recent Transactions: {len(recent_transactions)}")
+        print("=" * 50)
+
+        # In response_data, use outstanding_debt instead of net_debt
         response_data = {
             'balance': balance,
             'income': recent_income,
@@ -352,7 +367,7 @@ def api_financial_data():
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count,
-            'total_debt': net_debt,  # Add this line
+            'total_debt': outstanding_debt,  # Show actual debt owed
             'all_time_income': total_income,
             'all_time_spending': total_expenses
         }
@@ -1964,7 +1979,7 @@ def serve_mini_app():
                     </div>
                     <div class="stat-item">
                         <div class="stat-value stat-negative" id="totalDebt">0₴</div>
-                        <div class="stat-label">Total Debt</div>
+                        <div class="stat-label">Outstanding Debt</div>
                     </div>
                 </div>
                 
