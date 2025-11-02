@@ -9,9 +9,9 @@ from flask import Flask, jsonify, request
 import psycopg2
 from urllib.parse import urlparse
 from simple_bot import get_bot_instance, save_all_data
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
-
+timestamp = datetime.now(timezone.utc).isoformat()
 bot_instance = get_bot_instance()
 print(f"🔍 DEBUG: Bot instance created: {bool(bot_instance)}")
 
@@ -410,19 +410,23 @@ def api_financial_data():
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
         
+        # NEW - Returning last 30 days totals
         response_data = {
             'balance': balance,
-            'income': total_income,
-            'spending': total_expenses,
+            'income': recent_income,        # ← Last 30 days income
+            'spending': recent_expenses,    # ← Last 30 days spending
             'savings': actual_savings,
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
-            'tracking_days': tracking_days,  # This was missing!
+            'tracking_days': tracking_days,
             'financial_health': health_score,
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
-            'transaction_count': transaction_count
+            'transaction_count': transaction_count,
+            # Optional: Keep all-time totals if needed for other features
+            'all_time_income': total_income,
+            'all_time_spending': total_expenses
         }
         
         return jsonify(response_data)
@@ -534,9 +538,10 @@ def api_transactions():
                 "name": display_name,
                 "display_name": display_name,
                 "amount": display_amount,
-                "timestamp": timestamp,
+                "timestamp": timestamp,  # Make sure this is included
                 "type": trans_type,
-                "category": category
+                "category": category,
+                "date": timestamp  # Add this for frontend date formatting
             })
         
         has_more = len(user_transactions) > end_idx
@@ -1629,6 +1634,32 @@ def serve_mini_app():
             gap: 12px;
             margin-bottom: 20px;
         }
+
+        .transaction-date {
+            font-size: 12px;
+            color: #8e8e93;
+            margin-top: 2px;
+        }
+
+        #loadMoreBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.3s ease;
+        }
+
+        #loadMoreBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #loadMoreBtn:hover:not(:disabled) {
+            opacity: 0.9;
+        }
         
         .stat-item {
             background: #f8f9fa;
@@ -1856,6 +1887,14 @@ def serve_mini_app():
             <div class="transactions" id="transactionsContainer">
                 <div class="loading">Loading transactions...</div>
             </div>
+
+            <div id="loadMoreContainer" style="text-align: center; margin-top: 16px; display: none;">
+                <button id="loadMoreBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                            color: white; border: none; padding: 12px 24px; 
+                                            border-radius: 12px; cursor: pointer; font-size: 14px;">
+                    Load More Transactions
+                </button>
+            </div>
         </div>
         
         <!-- Statistics Page -->
@@ -1934,6 +1973,11 @@ def serve_mini_app():
         Telegram.WebApp.expand();
 
         let currentUserData = null;
+
+        // ========== ADD PAGINATION VARIABLES HERE ==========
+        let currentTransactionPage = 1;
+        let transactionsLoading = false;
+        let hasMoreTransactions = true;
 
         // Navigation functionality
         function setupNavigation() {
@@ -2270,7 +2314,10 @@ def serve_mini_app():
         // Load financial data and transactions
         async function loadFinancialData() {
             try {
-                // Get user ID from Telegram
+                // Reset pagination when loading fresh data
+                currentTransactionPage = 1;
+                hasMoreTransactions = true;
+                
                 const user = Telegram.WebApp.initDataUnsafe?.user;
                 const user_id = user?.id;
                 
@@ -2279,9 +2326,6 @@ def serve_mini_app():
                     return;
                 }
 
-                console.log('📱 Loading ALL data for user:', user_id);
-
-                // Load balance and totals
                 const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
                 const financeData = await financeResponse.json();
                 
@@ -2290,27 +2334,73 @@ def serve_mini_app():
                     updateBalancePage(financeData);
                     updateStatisticsPage(financeData);
                     
-                    console.log('✅ Financial data loaded, now loading category summary...');
+                    // Load first page of transactions
+                    await loadTransactionsPage(user_id, 1);
                     
-                    // ALSO load category summary when app starts (for Statistics page)
+                    console.log('✅ Financial data loaded');
+                    
+                    // Load category summary for Statistics page
                     loadCategorySummary(user_id);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
                 
-                // Load transactions for Balance page
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}`);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Network error - please check your connection');
+            }
+        }
+
+        async function loadTransactionsPage(user_id, page, append = false) {
+            if (transactionsLoading) return;
+            
+            transactionsLoading = true;
+            
+            try {
+                const limit = 10; // Load 10 transactions per page
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&page=${page}&limit=${limit}`);
                 const transactionsData = await transactionsResponse.json();
                 
                 if (transactionsResponse.ok) {
-                    renderTransactions(transactionsData.transactions || transactionsData);
+                    const transactions = transactionsData.transactions || [];
+                    hasMoreTransactions = transactionsData.has_more;
+                    
+                    if (append) {
+                        // Append to existing transactions
+                        const existingTransactions = document.getElementById('transactionsContainer').children;
+                        const currentTransactions = Array.from(existingTransactions).filter(el => 
+                            !el.classList.contains('loading-message')
+                        );
+                        
+                        // Remove "No transactions" message if it exists
+                        const noTransactionsMsg = document.querySelector('.no-transactions-message');
+                        if (noTransactionsMsg) {
+                            noTransactionsMsg.remove();
+                        }
+                        
+                        renderTransactions(transactions, true);
+                    } else {
+                        // Replace transactions
+                        renderTransactions(transactions, false);
+                    }
+                    
+                    // Show/hide load more button
+                    const loadMoreContainer = document.getElementById('loadMoreContainer');
+                    if (hasMoreTransactions) {
+                        loadMoreContainer.style.display = 'block';
+                    } else {
+                        loadMoreContainer.style.display = 'none';
+                    }
+                    
                 } else {
                     showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
                 }
                 
             } catch (error) {
-                console.error('Error loading data:', error);
-                showError('Network error - please check your connection');
+                console.error('Error loading transactions:', error);
+                showError('Failed to load transactions');
+            } finally {
+                transactionsLoading = false;
             }
         }
         
@@ -2331,6 +2421,26 @@ def serve_mini_app():
             }
             
             // Financial health removed from balance page - only show in statistics
+        }
+
+        // Temporary debug function
+        function debugTransactionDates(transactions) {
+            console.log('🕒 DATE DEBUG:');
+            transactions.forEach((transaction, index) => {
+                const rawTimestamp = transaction.timestamp || transaction.date;
+                if (rawTimestamp) {
+                    const date = new Date(rawTimestamp);
+                    console.log(`Transaction ${index}:`, {
+                        raw: rawTimestamp,
+                        toISOString: date.toISOString(),
+                        toUTCString: date.toUTCString(),
+                        toLocaleString: date.toLocaleString(),
+                        timezoneOffset: date.getTimezoneOffset(),
+                        hours: date.getHours(),
+                        localHours: date.getHours()
+                    });
+                }
+            });
         }
         
         function updateStatisticsPage(data) {
@@ -2387,21 +2497,23 @@ def serve_mini_app():
             }
         }
         
-        function renderTransactions(transactions) {
+        function renderTransactions(transactions, append = false) {
             const container = document.getElementById('transactionsContainer');
             
             if (!transactions || transactions.length === 0) {
-                container.innerHTML = `
-                    <div class="transaction">
-                        <div class="transaction-info">
-                            <div class="transaction-emoji">📭</div>
-                            <div class="transaction-details">
-                                <div class="transaction-title">No transactions yet</div>
-                                <div class="transaction-category">Start adding transactions in the bot</div>
+                if (!append) {
+                    container.innerHTML = `
+                        <div class="transaction no-transactions-message">
+                            <div class="transaction-info">
+                                <div class="transaction-emoji">📭</div>
+                                <div class="transaction-details">
+                                    <div class="transaction-title">No transactions yet</div>
+                                    <div class="transaction-category">Start adding transactions in the bot</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
                 return;
             }
             
@@ -2413,7 +2525,12 @@ def serve_mini_app():
                 const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
                 
                 const displayName = transaction.name || transaction.category || 'Transaction';
-                const displayDescription = transaction.description || '';
+                
+                // Format the date
+                let dateDisplay = '';
+                if (transaction.timestamp || transaction.date) {
+                    dateDisplay = formatTransactionDate(transaction.timestamp || transaction.date);
+                }
                 
                 transactionsHTML += `
                     <div class="transaction">
@@ -2421,7 +2538,9 @@ def serve_mini_app():
                             <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">${displayName}</div>
-                                ${displayDescription ? `<div class="transaction-category">${displayDescription}</div>` : ''}
+                                <div class="transaction-date" style="font-size: 12px; color: #8e8e93; margin-top: 2px;">
+                                    ${dateDisplay}
+                                </div>
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
@@ -2431,30 +2550,82 @@ def serve_mini_app():
                 `;
             });
             
-            container.innerHTML = transactionsHTML;
+            if (append) {
+                container.innerHTML += transactionsHTML;
+            } else {
+                container.innerHTML = transactionsHTML;
+            }
         }
-        
+
         function showError(message) {
             const container = document.getElementById('transactionsContainer');
             container.innerHTML = `<div class="error">${message}</div>`;
         }
-        
-        // Initialize the app
+
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
             setupNavigation();
             loadFinancialData();
+            
+            // Add load more button event listener
+            document.getElementById('loadMoreBtn').addEventListener('click', function() {
+                const user = Telegram.WebApp.initDataUnsafe?.user;
+                const user_id = user?.id;
+                
+                if (user_id && hasMoreTransactions && !transactionsLoading) {
+                    currentTransactionPage++;
+                    loadTransactionsPage(user_id, currentTransactionPage, true);
+                }
+            });
         });
-        
-        // Refresh data every 30 seconds
-        setInterval(loadFinancialData, 30000);
-        
-        // Also refresh when the app becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                loadFinancialData();
+
+        // Helper function to format dates nicely - PROPER TIMEZONE HANDLING
+        function formatTransactionDate(dateString) {
+            if (!dateString) return '';
+            
+            // Parse the date string properly
+            let date;
+            
+            // If it's already a Date object
+            if (dateString instanceof Date) {
+                date = dateString;
+            } 
+            // If it's a string with timezone info
+            else if (typeof dateString === 'string') {
+                // Check if it has timezone info (ends with Z or +00:00)
+                if (dateString.endsWith('Z') || dateString.includes('+')) {
+                    // It has timezone info, parse as UTC
+                    date = new Date(dateString);
+                } else {
+                    // No timezone info, assume it's local time and parse directly
+                    date = new Date(dateString);
+                }
+            } else {
+                return '';
             }
-        });
+            
+            // If invalid date, return empty
+            if (isNaN(date.getTime())) {
+                return '';
+            }
+            
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            // Create dates for comparison in local timezone
+            const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            if (transactionDay.getTime() === today.getTime()) {
+                return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (transactionDay.getTime() === yesterday.getTime()) {
+                return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            } else {
+                return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            }
+        }
+
     </script>
 </body>
 </html>"""
