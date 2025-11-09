@@ -234,15 +234,30 @@ def api_financial_data():
         # Calculate financial health FIRST
         health_score = bot_instance.calculate_financial_health(user_id)
         health_emoji, health_display = bot_instance.get_financial_health_display(health_score)
-        # Initialize totals for THIS USER ONLY
+        
+        # ========== INITIALIZE ALL VARIABLES ==========
         balance = 0
         total_income = 0
         total_expenses = 0
         total_savings = 0
+        total_debt = 0
+        total_debt_return = 0
+        outstanding_debt = 0  
         transaction_count = 0
         recent_transactions = []
 
-        # NEW: Track dates for averages
+        # Initialize recent period variables
+        recent_income = 0
+        recent_expenses = 0
+        recent_dates = set()
+
+        # Initialize average variables
+        daily_income_avg = 0
+        daily_expense_avg = 0
+        daily_net_avg = 0
+        tracking_days = 0
+
+        # Track dates for averages
         income_dates = set()
         expense_dates = set()
         all_dates = set()
@@ -269,6 +284,7 @@ def api_financial_data():
                     all_dates.add(transaction_date)
                 
                 # CORRECTED BALANCE CALCULATION
+                # CORRECTED BALANCE CALCULATION
                 if trans_type == 'income':
                     balance += amount
                     total_income += amount
@@ -284,8 +300,12 @@ def api_financial_data():
                     total_savings += amount
                 elif trans_type == 'debt':
                     balance += amount  # You receive money as debt
+                    total_debt += amount
+                    outstanding_debt += amount  # Current debt increases
                 elif trans_type == 'debt_return':
                     balance -= amount  # You pay back debt
+                    total_debt_return += amount
+                    outstanding_debt -= amount  # Current debt decreases
                 elif trans_type == 'savings_withdraw':
                     balance += amount  # You take money from savings
                     total_savings -= amount
@@ -301,6 +321,25 @@ def api_financial_data():
         recent_expenses = 0
         recent_days_count = 0
         recent_dates = set()  # Track unique dates in last 30 days
+
+        # Add these variables with your other totals
+        total_debt = 0
+        total_debt_return = 0
+
+        # In your transaction loop, add debt calculations:
+        for transaction in user_transactions:
+            if isinstance(transaction, dict):
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                # ... your existing code ...
+                
+                # Add debt calculations
+                if trans_type == 'debt':
+                    total_debt += amount
+                elif trans_type == 'debt_return':
+                    total_debt_return += amount
+                
+                transaction_count += 1
 
         for transaction in user_transactions:
             if isinstance(transaction, dict):
@@ -332,8 +371,9 @@ def api_financial_data():
                         continue
 
         # Calculate averages based on last 30 days
-        daily_income_avg = recent_income / 30
-        daily_expense_avg = recent_expenses / 30
+        # Calculate averages based on last 30 days - WITH PROPER INITIALIZATION
+        daily_income_avg = recent_income / 30 if recent_income > 0 else 0
+        daily_expense_avg = recent_expenses / 30 if recent_expenses > 0 else 0
         daily_net_avg = (recent_income - recent_expenses) / 30
 
         # Use the count of recent unique dates for tracking_days
@@ -396,26 +436,27 @@ def api_financial_data():
                 })
 
         # Use total_savings for savings display
-        actual_savings = total_savings
-        
+        # Calculate net debt
+        outstanding_debt = total_debt
+
         print("=" * 50)
         print(f"✅ USER {user_id} CALCULATION:")
         print(f"   Balance: {balance}")
         print(f"   Total Income: {total_income}") 
         print(f"   Total Expenses: {total_expenses}")
-        print(f"   Total Savings: {actual_savings}")
+        print(f"   Total Savings: {total_savings}")
+        print(f"   Total Debt: {outstanding_debt}")  # This should be outstanding_debt
         print(f"   Daily Income Avg: {daily_income_avg:,.0f}₴")
         print(f"   Daily Expense Avg: {daily_expense_avg:,.0f}₴")
         print(f"   Transaction Count: {transaction_count}")
         print(f"   Recent Transactions: {len(recent_transactions)}")
         print("=" * 50)
-        
-        # NEW - Returning last 30 days totals
+
         response_data = {
             'balance': balance,
-            'income': recent_income,        # ← Last 30 days income
-            'spending': recent_expenses,    # ← Last 30 days spending
-            'savings': actual_savings,
+            'income': recent_income,
+            'spending': recent_expenses,
+            'savings': total_savings,
             'daily_income_avg': daily_income_avg,
             'daily_expense_avg': daily_expense_avg,
             'daily_net_avg': daily_net_avg,
@@ -424,7 +465,7 @@ def api_financial_data():
             'financial_health_emoji': health_emoji,
             'transactions': recent_transactions,
             'transaction_count': transaction_count,
-            # Optional: Keep all-time totals if needed for other features
+            'total_debt': outstanding_debt,  # Make sure this is outstanding_debt
             'all_time_income': total_income,
             'all_time_spending': total_expenses
         }
@@ -1594,6 +1635,12 @@ def serve_mini_app():
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        .transaction-date {
+            font-size: 12px;
+            color: #8e8e93;
+            margin-top: 2px;
+        }
         
         .transaction-amount {
             font-size: 16px;
@@ -1634,32 +1681,6 @@ def serve_mini_app():
             gap: 12px;
             margin-bottom: 20px;
         }
-
-        .transaction-date {
-            font-size: 12px;
-            color: #8e8e93;
-            margin-top: 2px;
-        }
-
-        #loadMoreBtn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: opacity 0.3s ease;
-        }
-
-        #loadMoreBtn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        #loadMoreBtn:hover:not(:disabled) {
-            opacity: 0.9;
-        }
         
         .stat-item {
             background: #f8f9fa;
@@ -1690,110 +1711,6 @@ def serve_mini_app():
         }
         
         .stat-neutral {
-            color: #007AFF;
-        }
-        
-        .category-breakdown {
-            margin-top: 20px;
-        }
-        
-        .category-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid #f2f2f7;
-        }
-        
-        .category-item:last-child {
-            border-bottom: none;
-        }
-        
-        .category-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .category-emoji {
-            font-size: 18px;
-            width: 24px;
-            text-align: center;
-        }
-        
-        .category-name {
-            font-size: 14px;
-            font-weight: 500;
-        }
-        
-        .category-amount {
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        /* Category Summary Styles */
-        .summary-section {
-            margin-bottom: 20px;
-        }
-
-        .summary-section:last-child {
-            margin-bottom: 0;
-        }
-
-        .summary-header {
-            font-size: 14px;
-            font-weight: 600;
-            color: #1d1d1f;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #f2f2f7;
-        }
-
-        .category-summary-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #f8f9fa;
-        }
-
-        .category-summary-item:last-child {
-            border-bottom: none;
-        }
-
-        .category-summary-info {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .category-summary-name {
-            font-size: 14px;
-            font-weight: 500;
-            color: #1d1d1f;
-        }
-
-        .debt-detail {
-            font-size: 11px;
-            color: #8e8e93;
-        }
-
-        .category-summary-amount {
-            font-size: 14px;
-            font-weight: 600;
-            flex-shrink: 0;
-            margin-left: 10px;
-        }
-
-        .category-summary-amount.positive {
-            color: #34c759;
-        }
-
-        .category-summary-amount.negative {
-            color: #ff3b30;
-        }
-
-        .category-summary-amount.neutral {
             color: #007AFF;
         }
         
@@ -1844,6 +1761,98 @@ def serve_mini_app():
             font-size: 18px;
             font-weight: bold;
         }
+
+        /* Summary Page Styles */
+        .summary-page {
+            padding-bottom: 20px;
+        }
+
+        .summary-section {
+            margin-bottom: 20px;
+        }
+
+        .summary-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .summary-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #f2f2f7;
+        }
+
+        .category-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .category-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .category-summary-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .debt-detail {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .category-summary-amount {
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+
+        .category-summary-amount.positive {
+            color: #34c759;
+        }
+
+        .category-summary-amount.negative {
+            color: #ff3b30;
+        }
+
+        .category-summary-amount.neutral {
+            color: #007AFF;
+        }
+
+        /* Empty state for summary */
+        .empty-summary {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8e8e93;
+        }
+
+        .empty-summary .emoji {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-summary .message {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .empty-summary .submessage {
+            font-size: 14px;
+            color: #8e8e93;
+        }
         
         .loading {
             text-align: center;
@@ -1856,6 +1865,26 @@ def serve_mini_app():
             padding: 20px;
             color: #ff3b30;
         }
+
+        #loadMoreBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.3s ease;
+        }
+
+        #loadMoreBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #loadMoreBtn:hover:not(:disabled) {
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
@@ -1864,6 +1893,7 @@ def serve_mini_app():
         <div class="nav-bar">
             <button class="nav-button active" data-page="balance">Balance</button>
             <button class="nav-button" data-page="statistics">Statistics</button>
+            <button class="nav-button" data-page="summary">Summary</button>
         </div>
         
         <!-- Balance Page -->
@@ -1915,8 +1945,8 @@ def serve_mini_app():
                         <div class="stat-label">Total Savings</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-value" id="transactionCount">0</div>
-                        <div class="stat-label">Transactions</div>
+                        <div class="stat-value stat-negative" id="totalDebt">0₴</div>
+                        <div class="stat-label">Outstanding Debt</div>
                     </div>
                 </div>
                 
@@ -1950,18 +1980,14 @@ def serve_mini_app():
                     <div class="health-display" id="statsHealthDisplay">⛺️ 0%</div>
                 </div>
             </div>
+        </div>
 
-            <div class="stats-card" id="categorySummary">
+        <!-- NEW Summary Page -->
+        <div class="page" id="summaryPage">
+            <div class="stats-card">
                 <div class="stats-header">Category Summary</div>
                 <div id="categorySummaryContent">
                     <div class="loading">Loading category data...</div>
-                </div>
-            </div>
-            
-            <div class="stats-card" id="categoryBreakdown" style="display: none;">
-                <div class="stats-header">Spending by Category</div>
-                <div class="category-breakdown" id="categoryList">
-                    <!-- Categories will be populated here -->
                 </div>
             </div>
         </div>
@@ -1974,7 +2000,7 @@ def serve_mini_app():
 
         let currentUserData = null;
 
-        // ========== ADD PAGINATION VARIABLES HERE ==========
+        // ========== PAGINATION VARIABLES ==========
         let currentTransactionPage = 1;
         let transactionsLoading = false;
         let hasMoreTransactions = true;
@@ -1995,12 +2021,19 @@ def serve_mini_app():
                     const pageId = this.getAttribute('data-page') + 'Page';
                     document.getElementById(pageId).classList.add('active');
                     
-                    // If switching to statistics page, load category summary
+                    const user = Telegram.WebApp.initDataUnsafe?.user;
+                    const user_id = user?.id;
+                    
+                    // Load appropriate data for each page
                     if (this.getAttribute('data-page') === 'statistics') {
-                        const user = Telegram.WebApp.initDataUnsafe?.user;
-                        const user_id = user?.id;
+                        console.log('🔄 Switching to Statistics page');
                         
-                        console.log('🔄 Switching to Statistics page, user_id:', user_id);
+                        if (currentUserData) {
+                            updateStatisticsPage(currentUserData);
+                        }
+                    }
+                    else if (this.getAttribute('data-page') === 'summary') {
+                        console.log('🔄 Switching to Summary page, user_id:', user_id);
                         
                         if (user_id) {
                             console.log('🚀 Loading category summary for user:', user_id);
@@ -2008,87 +2041,29 @@ def serve_mini_app():
                         } else {
                             console.log('❌ No user_id found for category summary');
                         }
-                        
-                        if (currentUserData) {
-                            updateStatisticsPage(currentUserData);
-                        }
                     }
                 });
             });
         }
 
-        // Manual test function - call this in browser console
-        function testCategorySummary() {
-            const user = Telegram.WebApp.initDataUnsafe?.user;
-            const user_id = user?.id;
-            
-            if (user_id) {
-                console.log('🧪 Manual test: Loading category summary for user:', user_id);
-                loadCategorySummary(user_id);
-            } else {
-                console.log('❌ No user_id found for manual test');
-            }
-        }
-
         // Load category summary data
-        // Load category summary data
-        // Debug function to check API responses
-        async function debugAPIs(user_id) {
-            console.log('🔍 DEBUG: Testing APIs for user:', user_id);
-            
-            try {
-                // Test transactions API
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
-                const transactionsData = await transactionsResponse.json();
-                
-                console.log('🔍 DEBUG - Transactions API response:', transactionsData);
-                
-                if (transactionsData.transactions) {
-                    console.log('🔍 DEBUG - Transaction types found:', 
-                        [...new Set(transactionsData.transactions.map(t => t.type))]);
-                    console.log('🔍 DEBUG - Transaction categories found:', 
-                        [...new Set(transactionsData.transactions.map(t => t.category))]);
-                    console.log('🔍 DEBUG - Sample transactions:', 
-                        transactionsData.transactions.slice(0, 5));
-                }
-                
-                // Test categories API
-                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
-                const categoriesData = await categoriesResponse.json();
-                console.log('🔍 DEBUG - Categories API response:', categoriesData);
-                
-            } catch (error) {
-                console.error('🔍 DEBUG - API test error:', error);
-            }
-        }
-
-        // Load category summary data - WITH EXTRA DEBUGGING
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // First, let's debug the transactions API
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
-                if (!transactionsResponse.ok) {
-                    throw new Error('Failed to load transactions');
-                }
-                const transactionsData = await transactionsResponse.json();
-                
-                console.log('🔍 Transactions API response:', transactionsData);
-                
-                // Debug savings specifically
-                const savingsDebugResponse = await fetch(`/api/debug-savings-transactions?user_id=${user_id}`);
-                if (savingsDebugResponse.ok) {
-                    const savingsDebug = await savingsDebugResponse.json();
-                    console.log('🔍 Savings debug:', savingsDebug);
-                }
-                
-                // Then load user categories
+                // First, load user categories
                 const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
                 if (!categoriesResponse.ok) {
                     throw new Error('Failed to load categories');
                 }
                 const categoriesData = await categoriesResponse.json();
+                
+                // Then load transactions
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                if (!transactionsResponse.ok) {
+                    throw new Error('Failed to load transactions');
+                }
+                const transactionsData = await transactionsResponse.json();
                 
                 const transactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
@@ -2096,7 +2071,6 @@ def serve_mini_app():
                 console.log('📊 Final data for rendering:');
                 console.log('Total transactions:', transactions.length);
                 console.log('Transaction types found:', [...new Set(transactions.map(t => t.type))]);
-                console.log('Savings transactions:', transactions.filter(t => t.type === 'savings'));
                 
                 // Render summary
                 renderCategorySummary(transactions, categories);
@@ -2114,8 +2088,10 @@ def serve_mini_app():
             
             if (!transactions || transactions.length === 0) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #8e8e93;">
-                        No transactions to summarize
+                    <div class="empty-summary">
+                        <div class="emoji">📊</div>
+                        <div class="message">No transactions yet</div>
+                        <div class="submessage">Start adding transactions to see your spending summary</div>
                     </div>
                 `;
                 return;
@@ -2255,7 +2231,6 @@ def serve_mini_app():
                 .sort((a, b) => b[1].savings - a[1].savings);
             
             console.log('🔍 Savings categories found:', savingsCategories);
-            console.log('🔍 All category data for savings:', Object.entries(categoryData).map(([cat, data]) => ({ category: cat, savings: data.savings })));
             
             if (savingsCategories.length > 0) {
                 summaryHTML += `
@@ -2339,8 +2314,6 @@ def serve_mini_app():
                     
                     console.log('✅ Financial data loaded');
                     
-                    // Load category summary for Statistics page
-                    loadCategorySummary(user_id);
                 } else {
                     showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
                 }
@@ -2419,70 +2392,50 @@ def serve_mini_app():
             if (data.spending !== undefined) {
                 document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
             }
-            
-            // Financial health removed from balance page - only show in statistics
-        }
-
-        // Temporary debug function
-        function debugTransactionDates(transactions) {
-            console.log('🕒 DATE DEBUG:');
-            transactions.forEach((transaction, index) => {
-                const rawTimestamp = transaction.timestamp || transaction.date;
-                if (rawTimestamp) {
-                    const date = new Date(rawTimestamp);
-                    console.log(`Transaction ${index}:`, {
-                        raw: rawTimestamp,
-                        toISOString: date.toISOString(),
-                        toUTCString: date.toUTCString(),
-                        toLocaleString: date.toLocaleString(),
-                        timezoneOffset: date.getTimezoneOffset(),
-                        hours: date.getHours(),
-                        localHours: date.getHours()
-                    });
-                }
-            });
         }
         
         function updateStatisticsPage(data) {
             // Update main statistics
             if (data.income !== undefined) {
-                document.getElementById('totalIncome').textContent = `+${data.income.toLocaleString()}₴`;
+                document.getElementById('totalIncome').textContent = `+${(data.income || 0).toLocaleString()}₴`;
             }
             if (data.spending !== undefined) {
-                document.getElementById('totalExpenses').textContent = `-${data.spending.toLocaleString()}₴`;
+                document.getElementById('totalExpenses').textContent = `${(data.spending || 0).toLocaleString()}₴`;
             }
             if (data.savings !== undefined) {
-                document.getElementById('totalSavings').textContent = `${data.savings.toLocaleString()}₴`;
+                document.getElementById('totalSavings').textContent = `${(data.savings || 0).toLocaleString()}₴`;
             }
-            if (data.transaction_count !== undefined) {
-                document.getElementById('transactionCount').textContent = data.transaction_count;
+            if (data.total_debt !== undefined) {
+                const debtElement = document.getElementById('totalDebt');
+                debtElement.textContent = `${(data.total_debt || 0).toLocaleString()}₴`;
+                debtElement.style.color = (data.total_debt || 0) > 0 ? '#ff3b30' : '#34c759';
             }
             
             // Update averages in statistics
             if (data.daily_income_avg !== undefined) {
-                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg || 0).toLocaleString()}₴`;
             }
             if (data.daily_expense_avg !== undefined) {
-                document.getElementById('statsDailyExpense').textContent = `-${Math.round(data.daily_expense_avg).toLocaleString()}₴`;
+                document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg || 0).toLocaleString()}₴`;
             }
             if (data.daily_net_avg !== undefined) {
                 const netAvgElement = document.getElementById('statsDailyNet');
-                netAvgElement.textContent = `${data.daily_net_avg >= 0 ? '+' : ''}${Math.round(data.daily_net_avg).toLocaleString()}₴`;
-                netAvgElement.style.color = data.daily_net_avg >= 0 ? '#34c759' : '#ff3b30';
+                const netAvg = data.daily_net_avg || 0;
+                netAvgElement.textContent = `${netAvg >= 0 ? '+' : ''}${Math.round(netAvg).toLocaleString()}₴`;
+                netAvgElement.style.color = netAvg >= 0 ? '#34c759' : '#ff3b30';
             }
             if (data.tracking_days !== undefined) {
-                document.getElementById('trackingDays').textContent = data.tracking_days;
+                document.getElementById('trackingDays').textContent = data.tracking_days || 0;
             }
             
             // Update financial health in statistics
             if (data.financial_health !== null && data.financial_health_emoji !== null) {
                 document.getElementById('statsHealthDisplay').textContent = 
-                    `${data.financial_health_emoji} ${data.financial_health}%`;
+                    `${data.financial_health_emoji} ${data.financial_health || 0}%`;
                 
                 const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
-                updateHealthIndicatorColor(data.financial_health, statsHealthIndicator);
+                updateHealthIndicatorColor(data.financial_health || 0, statsHealthIndicator);
             }
-            
         }
         
         function updateHealthIndicatorColor(score, element) {
@@ -2529,7 +2482,8 @@ def serve_mini_app():
                 // Format the date
                 let dateDisplay = '';
                 if (transaction.timestamp || transaction.date) {
-                    dateDisplay = formatTransactionDate(transaction.timestamp || transaction.date);
+                    const transactionDate = new Date(transaction.timestamp || transaction.date);
+                    dateDisplay = formatTransactionDate(transactionDate);
                 }
                 
                 transactionsHTML += `
@@ -2538,9 +2492,7 @@ def serve_mini_app():
                             <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
                             <div class="transaction-details">
                                 <div class="transaction-title">${displayName}</div>
-                                <div class="transaction-date" style="font-size: 12px; color: #8e8e93; margin-top: 2px;">
-                                    ${dateDisplay}
-                                </div>
+                                <div class="transaction-date">${dateDisplay}</div>
                             </div>
                         </div>
                         <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
@@ -2562,6 +2514,24 @@ def serve_mini_app():
             container.innerHTML = `<div class="error">${message}</div>`;
         }
 
+        // Helper function to format dates nicely
+        function formatTransactionDate(date) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            if (transactionDay.getTime() === today.getTime()) {
+                return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (transactionDay.getTime() === yesterday.getTime()) {
+                return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            } else {
+                return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Mini-app initialized');
             setupNavigation();
@@ -2579,53 +2549,15 @@ def serve_mini_app():
             });
         });
 
-        // Helper function to format dates nicely - PROPER TIMEZONE HANDLING
-        function formatTransactionDate(dateString) {
-            if (!dateString) return '';
-            
-            // Parse the date string properly
-            let date;
-            
-            // If it's already a Date object
-            if (dateString instanceof Date) {
-                date = dateString;
-            } 
-            // If it's a string with timezone info
-            else if (typeof dateString === 'string') {
-                // Check if it has timezone info (ends with Z or +00:00)
-                if (dateString.endsWith('Z') || dateString.includes('+')) {
-                    // It has timezone info, parse as UTC
-                    date = new Date(dateString);
-                } else {
-                    // No timezone info, assume it's local time and parse directly
-                    date = new Date(dateString);
-                }
-            } else {
-                return '';
+        // Refresh data every 30 seconds
+        setInterval(loadFinancialData, 30000);
+        
+        // Also refresh when the app becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadFinancialData();
             }
-            
-            // If invalid date, return empty
-            if (isNaN(date.getTime())) {
-                return '';
-            }
-            
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            
-            // Create dates for comparison in local timezone
-            const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            
-            if (transactionDay.getTime() === today.getTime()) {
-                return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else if (transactionDay.getTime() === yesterday.getTime()) {
-                return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else {
-                return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            }
-        }
-
+        });
     </script>
 </body>
 </html>"""

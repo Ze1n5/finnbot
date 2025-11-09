@@ -1968,7 +1968,7 @@ Net Savings: {net_savings:,.0f}₴"""
         return menu_config
     
     def show_menu_keyboard(self, chat_id, message_text=None):
-        """Explicitly show the menu keyboard in groups"""
+        """Explicitly show the menu keyboard with group optimization"""
         user_lang = self.get_user_language(chat_id)
         
         if not message_text:
@@ -1977,8 +1977,22 @@ Net Savings: {net_savings:,.0f}₴"""
             else:
                 message_text = "🏠 Main menu:"
         
-        print(f"🔍 DEBUG SHOW_MENU: Showing menu for chat {chat_id}")
-        return self.send_message(chat_id, message_text, reply_markup=self.get_main_menu(chat_id))
+        # Get chat info to determine if it's a group
+        try:
+            chat_info = requests.post(f"{BASE_URL}/getChat", json={"chat_id": chat_id}).json()
+            chat_type = chat_info.get("result", {}).get("type", "private")
+            is_group = chat_type in ["group", "supergroup"]
+        except:
+            is_group = chat_id < 0  # Fallback: negative IDs are groups
+        
+        print(f"🔍 DEBUG SHOW_MENU: Showing menu for chat {chat_id}, is_group: {is_group}")
+        
+        # Use selective keyboard for groups (only shows to user who interacted)
+        menu_config = self.get_main_menu(chat_id)
+        if is_group:
+            menu_config["selective"] = True
+        
+        return self.send_message(chat_id, message_text, reply_markup=menu_config)
 
     def send_menu_to_chat(self, chat_id, text, parse_mode=None):
         """Send menu to chat, handling both private and group chats"""
