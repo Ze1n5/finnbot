@@ -255,6 +255,68 @@ class SimpleFinnBot:
         final_score = max(0, min(100, final_score))
         
         return int(final_score)
+    
+    def handle_total_command(self, chat_id):
+        """Handle /total command - show totals for SPENDING categories only"""
+        print(f"🔍 Handling /total command for {chat_id}")
+        
+        user_transactions = self.get_user_transactions(chat_id)
+        if not user_transactions:
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                self.send_message(chat_id, "📭 Немає транзакцій для відображення.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                self.send_message(chat_id, "📭 No transactions to display.", reply_markup=self.get_main_menu(chat_id))
+            return
+        
+        # Calculate totals for SPENDING CATEGORIES ONLY (expense transactions)
+        category_totals = {}
+        total_spending = 0
+        
+        for transaction in user_transactions:
+            # Only process EXPENSE transactions
+            if transaction['type'] == 'expense':
+                category = transaction['category']
+                amount = transaction['amount']
+                
+                if category not in category_totals:
+                    category_totals[category] = 0
+                category_totals[category] += amount
+                total_spending += amount
+        
+        if not category_totals:
+            user_lang = self.get_user_language(chat_id)
+            if user_lang == 'uk':
+                self.send_message(chat_id, "💸 Немає витрат для відображення.", reply_markup=self.get_main_menu(chat_id))
+            else:
+                self.send_message(chat_id, "💸 No spending transactions to display.", reply_markup=self.get_main_menu(chat_id))
+            return
+        
+        # Sort categories by spending amount (descending)
+        sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+        
+        # Generate the message
+        user_lang = self.get_user_language(chat_id)
+        
+        if user_lang == 'uk':
+            total_text = "💸 *Загальні витрати по категоріях:*\n\n"
+            
+            for category, total in sorted_categories:
+                total_text += f"• *{category}:* {total:,.0f}₴\n"
+            
+            # Add overall spending summary
+            total_text += f"\n💰 *Загальні витрати:* {total_spending:,.0f}₴"
+            
+        else:
+            total_text = "💸 *Total Spending by Category:*\n\n"
+            
+            for category, total in sorted_categories:
+                total_text += f"• *{category}:* {total:,.0f}₴\n"
+            
+            # Add overall spending summary
+            total_text += f"\n💰 *Total Spending:* {total_spending:,.0f}₴"
+        
+        self.send_message(chat_id, total_text, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
 
     def get_financial_health_display(self, score):
         """Get emoji and display text for financial health score"""
@@ -2269,6 +2331,9 @@ Net Savings: {net_savings:,.0f}₴"""
         
         elif text == "🌍 Language":
             return self.handle_language_selection(chat_id)
+        elif text == "/total" or text.startswith("/total@"):
+            self.handle_total_command(chat_id)
+            return
         
         # Ukrainian menu buttons
         elif text == "📊 Фінансовий звіт":
