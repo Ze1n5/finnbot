@@ -883,8 +883,8 @@ Net Savings: {net_savings:,.0f}₴"""
             
             # Simple format: Number. Category: Description
             #              Amount Date Time
-            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
-            delete_text += f"    {amount_display}  {date_display}\n\n"
+            delete_text += f"`{current_number:2d}.` {amount_display} {transaction['category']}\n"
+            delete_text += f"    _{date_display}_\n\n"
             
             # Map display number to ORIGINAL index in user_transactions
             transaction_map[current_number] = original_index
