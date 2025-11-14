@@ -3843,26 +3843,7 @@ You're now ready to use Finn! 🚀
                     else:
                         message = f"✅ Expense saved!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
-                
-                # ===== STEP 6: Show menu after transaction in groups =====
-                # ===== STEP 6: Show menu after transaction in groups =====
-                chat_type = query["message"]["chat"].get("type", "private")
-                if chat_type in ["group", "supergroup"]:
-                    user_lang = self.get_user_language(chat_id)
-                    if user_lang == 'uk':
-                        menu_msg = "✅ Транзакцію збережено! Що далі?"
-                    else:
-                        menu_msg = "✅ Transaction saved! What's next?"
-                    
-                    self.show_menu_keyboard(chat_id, menu_msg)
-                else:
-                    # For private chats, the menu is already included in the confirmation message above
-                    pass
-                        
-                # Clean up pending
-                del self.pending[chat_id]
-                print(f"🔍 DEBUG: Cleared pending for user {chat_id}")
-                
+                                   
             else:
                 print(f"❌ No pending transaction found for user {chat_id}")
                 self.send_message(chat_id, "❌ Transaction expired. Please enter the transaction again.", reply_markup=self.get_main_menu(chat_id))
