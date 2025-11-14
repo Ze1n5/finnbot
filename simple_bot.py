@@ -3806,7 +3806,7 @@ You're now ready to use Finn! 🚀
                     if user_lang == 'uk':
                         confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
                     else:
-                        confirmation_msg = f"✅ Income saved! *+{amount:,.0f}{currency_symbol}* '{category}'"
+                        confirmation_msg = f"✅ Income saved!\n {amount:,.0f}{currency_symbol}: {category}"
                     self.send_message(chat_id, confirmation_msg, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings':
