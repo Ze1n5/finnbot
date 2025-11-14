@@ -2331,8 +2331,13 @@ Net Savings: {net_savings:,.0f}₴"""
         
         elif text == "🌍 Language":
             return self.handle_language_selection(chat_id)
+        
         elif text == "/total" or text.startswith("/total@"):
             self.handle_total_command(chat_id)
+            return
+        
+        elif text == "/delete" or text.startswith("/delete@"):
+            self.handle_delete_transaction(chat_id)
             return
         
         # Ukrainian menu buttons
@@ -3844,9 +3849,9 @@ You're now ready to use Finn! 🚀
                     
                 else:  # expense
                     if user_lang == 'uk':
-                        message = f"✅ Витрату збережено!\n -{amount:,.0f}{currency_symbol}\n: {category}"
+                        message = f"✅ Витрату збережено!\n -{amount:,.0f}{currency_symbol}: {category}"
                     else:
-                        message = f"✅ Expense saved!\n -{amount:,.0f}{currency_symbol}\n: {category}"
+                        message = f"✅ Expense saved!\n -{amount:,.0f}{currency_symbol}: {category}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
 
             else:
