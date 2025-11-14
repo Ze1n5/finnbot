@@ -3790,10 +3790,17 @@ You're now ready to use Finn! 🚀
                 
                 # Send appropriate confirmation message based on transaction type
                 # Send appropriate confirmation message based on transaction type
+                # Send appropriate confirmation message based on transaction type
                 if transaction_type == 'income':
-                    # Send savings recommendation
-                    savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
-                    self.send_message(chat_id, savings_msg, parse_mode='Markdown')
+                    # ===== MODIFICATION: Only send savings recommendation in private chats =====
+                    chat_type = query["message"]["chat"].get("type", "private")
+                    is_group = chat_type in ["group", "supergroup"]
+                    
+                    if not is_group:  # Only in private chats
+                        # Send savings recommendation
+                        savings_msg = self.calculate_savings_recommendation(chat_id, amount, text)
+                        self.send_message(chat_id, savings_msg, parse_mode='Markdown')
+                    # ===== END MODIFICATION =====
                     
                     # Send confirmation WITH MENU
                     if user_lang == 'uk':
