@@ -2220,7 +2220,7 @@ def serve_mini_app():
 
         // Navigation functionality
         // Navigation functionality
-        function setupNavigation() {
+         {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
             
@@ -2262,32 +2262,82 @@ def serve_mini_app():
                                 console.error('Error loading summary:', error);
                                 document.getElementById('categorySummaryContent').innerHTML = 
                                     `<div class="error">Error loading summary: ${error.message}</div>`;
+                    function setupNavigation() {
+                    const navButtons = document.querySelectorAll('.nav-button');
+                    const pages = document.querySelectorAll('.page');
+                    
+                    navButtons.forEach(button => {
+                        button.addEventListener('click', async function() {
+                            // Remove active class from all buttons and pages
+                            navButtons.forEach(btn => btn.classList.remove('active'));
+                            pages.forEach(page => page.classList.remove('active'));
+                            
+                            // Add active class to clicked button and corresponding page
+                            this.classList.add('active');
+                            const pageId = this.getAttribute('data-page') + 'Page';
+                            document.getElementById(pageId).classList.add('active');
+                            
+                            const user = Telegram.WebApp.initDataUnsafe?.user;
+                            const user_id = user?.id;
+                            
+                            // Load appropriate data for each page
+                            if (this.getAttribute('data-page') === 'statistics') {
+                                console.log('🔄 Switching to Statistics page');
+                                
+                                if (currentUserData) {
+                                    updateStatisticsPage(currentUserData);
+                                }
                             }
-                        } else {
-                            console.log('❌ No user_id found for category summary');
-                            document.getElementById('categorySummaryContent').innerHTML = 
-                                `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
-                        }
-                    }
-                });
-            });
-        }
+                            else if (this.getAttribute('data-page') === 'summary') {
+                                console.log('🔄 Switching to Summary page, user_id:', user_id);
+                                
+                                if (user_id) {
+                                    console.log('🚀 Loading category summary for user:', user_id);
+                                    try {
+                                        // First setup the filter (it will check if it already exists)
+                                        setupMonthFilter(user_id);
+                                        
+                                        // Then load the summary data
+                                        await loadCategorySummary(user_id);
+                                        
+                                    } catch (error) {
+                                        console.error('Error loading summary:', error);
+                                        const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                                        if (contentArea) {
+                                            contentArea.innerHTML = `<div class="error">Error loading summary: ${error.message}</div>`;
+                                        }
+                                    }
+                                } else {
+                                    console.log('❌ No user_id found for category summary');
+                                    const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                                    if (contentArea) {
+                                        contentArea.innerHTML = `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
+                                    }
+                                }
+                            }
+                        });
+                    });
+                }
+
+        // ========== SUMMARY PAGE FUNCTIONS ==========
+        let currentMonthFilter = 'last30';
+        let availableMonthsData = [];
 
         // Load category summary data
-        // Load category summary data for LAST 30 DAYS
-        // Load category summary data for LAST 30 DAYS
-        async function loadCategorySummary(user_id, shouldSetupFilter = true) {
+        async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // First, load user categories
+                // First, load monthly data for filter
+                await loadMonthlyData(user_id);
+                
+                // Then load categories and transactions
                 const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
                 if (!categoriesResponse.ok) {
                     throw new Error('Failed to load categories');
                 }
                 const categoriesData = await categoriesResponse.json();
                 
-                // Then load ALL transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
                 if (!transactionsResponse.ok) {
                     throw new Error('Failed to load transactions');
@@ -2297,90 +2347,416 @@ def serve_mini_app():
                 const allTransactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
                 
-                // Also load monthly data for filter (ONLY if we need to setup filter)
-                let availableMonths = [];
-                if (shouldSetupFilter) {
-                    try {
-                        const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
-                        if (monthlyResponse.ok) {
-                            const monthlyData = await monthlyResponse.json();
-                            availableMonths = monthlyData.monthly_data || [];
-                        }
-                    } catch (e) {
-                        console.log('Could not load monthly data for filter:', e);
+                // Filter transactions based on current filter
+                let filteredTransactions = [];
+                let dateRange = '';
+                
+                if (currentMonthFilter === 'last30') {
+                    // Last 30 days
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                    
+                    filteredTransactions = allTransactions.filter(transaction => {
+                        if (!transaction.timestamp && !transaction.date) return false;
+                        const transactionDate = new Date(transaction.timestamp || transaction.date);
+                        return transactionDate >= thirtyDaysAgo;
+                    });
+                    
+                    const today = new Date();
+                    const thirtyDaysAgoDisplay = new Date(today);
+                    thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
+                    dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                } else {
+                    // Specific month
+                    const selectedMonth = availableMonthsData.find(m => m.month_key === currentMonthFilter);
+                    if (selectedMonth) {
+                        filteredTransactions = allTransactions.filter(transaction => {
+                            if (!transaction.timestamp && !transaction.date) return false;
+                            const transactionDate = new Date(transaction.timestamp || transaction.date);
+                            const transactionMonthKey = transactionDate.toISOString().substring(0, 7);
+                            return transactionMonthKey === currentMonthFilter;
+                        });
+                        dateRange = selectedMonth.month_display;
                     }
                 }
                 
-                // Filter transactions for last 30 days
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                console.log(`📊 ${dateRange} data:`, filteredTransactions.length, 'transactions');
                 
-                const last30DaysTransactions = allTransactions.filter(transaction => {
-                    if (!transaction.timestamp && !transaction.date) return false;
-                    
-                    const transactionDate = new Date(transaction.timestamp || transaction.date);
-                    return transactionDate >= thirtyDaysAgo;
-                });
-                
-                console.log('📊 Last 30 days data:');
-                console.log('Total transactions:', allTransactions.length);
-                console.log('Last 30 days transactions:', last30DaysTransactions.length);
-                console.log('Transaction types found:', [...new Set(last30DaysTransactions.map(t => t.type))]);
-                
-                // Calculate date range for display
-                const today = new Date();
-                const thirtyDaysAgoDisplay = new Date(today);
-                thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
-                
-                const dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                
-                // Create the summary HTML structure
-                const container = document.getElementById('categorySummaryContent');
-                
-                // Save the current month filter if it exists
-                const currentMonthFilter = container.querySelector('#monthFilterButtons');
-                const monthFilterHTML = currentMonthFilter ? currentMonthFilter.outerHTML : '';
-                
-                // Create a temporary div to hold the summary content
-                const summaryContainer = document.createElement('div');
-                summaryContainer.id = 'categorySummaryData';
-                
-                // Generate the summary content
-                summaryContainer.innerHTML = generateSummaryContent(last30DaysTransactions, categories, dateRange);
-                
-                // Clear the container and add month filter (if available) + summary
-                container.innerHTML = '';
-                
-                if (monthFilterHTML) {
-                    // Create month filter wrapper
-                    const monthFilterWrapper = document.createElement('div');
-                    monthFilterWrapper.style.marginBottom = '20px';
-                    monthFilterWrapper.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
-                            <div style="font-size: 12px; color: #8e8e93;">${availableMonths.length} months available</div>
-                        </div>
-                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
-                            ${monthFilterHTML}
-                        </div>
-                    `;
-                    container.appendChild(monthFilterWrapper);
-                }
-                
-                container.appendChild(summaryContainer);
-                
-                // Re-attach event handlers
-                if (shouldSetupFilter) {
-                    setTimeout(() => {
-                        attachMonthFilterHandlers(user_id, availableMonths);
-                    }, 50);
-                }
+                // Render the summary
+                renderCategorySummary(filteredTransactions, categories, dateRange);
                 
             } catch (error) {
                 console.error('❌ Error loading category summary:', error);
-                document.getElementById('categorySummaryContent').innerHTML = 
-                    `<div class="error">Error loading category data: ${error.message}</div>`;
+                const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                if (contentArea) {
+                    contentArea.innerHTML = `<div class="error">Error loading category data: ${error.message}</div>`;
+                }
             }
+        }
+
+        // Load monthly data
+        async function loadMonthlyData(user_id) {
+            try {
+                const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
+                if (monthlyResponse.ok) {
+                    const monthlyData = await monthlyResponse.json();
+                    availableMonthsData = monthlyData.monthly_data || [];
+                    console.log('📅 Loaded monthly data:', availableMonthsData.length, 'months');
+                }
+            } catch (e) {
+                console.log('Could not load monthly data:', e);
+                availableMonthsData = [];
+            }
+        }
+
+        // Setup month filter - this only needs to be called once
+        function setupMonthFilter(user_id) {
+            const container = document.getElementById('categorySummaryContent');
+            
+            // Check if filter already exists
+            if (container.querySelector('#monthFilterContainer')) {
+                console.log('Month filter already exists, updating active state');
+                updateMonthFilterActiveState();
+                return;
+            }
+            
+            console.log('Creating month filter for', availableMonthsData.length, 'months');
+            
+            // Create month filter HTML
+            const filterHTML = `
+                <div id="monthFilterContainer" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                        <div style="font-size: 12px; color: #8e8e93;">${availableMonthsData.length} months available</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
+                        <button class="month-filter-btn ${currentMonthFilter === 'last30' ? 'active' : ''}" data-month="last30" style="
+                            padding: 8px 16px;
+                            ${currentMonthFilter === 'last30' ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            white-space: nowrap;
+                            flex-shrink: 0;
+                            transition: all 0.2s ease;
+                        ">
+                            Last 30 Days
+                        </button>
+                        ${availableMonthsData.map(month => `
+                            <button class="month-filter-btn ${currentMonthFilter === month.month_key ? 'active' : ''}" data-month="${month.month_key}" style="
+                                padding: 8px 16px;
+                                ${currentMonthFilter === month.month_key ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
+                                border-radius: 12px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                cursor: pointer;
+                                white-space: nowrap;
+                                flex-shrink: 0;
+                                transition: all 0.2s ease;
+                            ">
+                                ${month.month_display}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+                <div id="summaryContentArea">
+                    <div class="loading">Loading summary data...</div>
+                </div>
+            `;
+            
+            container.innerHTML = filterHTML;
+            
+            // Add event listeners to filter buttons
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const selectedMonth = this.getAttribute('data-month');
+                    if (selectedMonth === currentMonthFilter) return;
+                    
+                    console.log('Month filter clicked:', selectedMonth);
+                    currentMonthFilter = selectedMonth;
+                    
+                    // Update active state
+                    updateMonthFilterActiveState();
+                    
+                    // Get user_id and reload summary
+                    const user = Telegram.WebApp.initDataUnsafe?.user;
+                    const user_id = user?.id;
+                    
+                    if (user_id) {
+                        loadCategorySummary(user_id);
+                    }
+                });
+            });
+        }
+
+        // Update active state on month filter buttons
+        function updateMonthFilterActiveState() {
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                const buttonMonth = button.getAttribute('data-month');
+                
+                if (buttonMonth === currentMonthFilter) {
+                    button.classList.add('active');
+                    button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    button.style.color = 'white';
+                    button.style.border = 'none';
+                } else {
+                    button.classList.remove('active');
+                    button.style.background = 'white';
+                    button.style.color = '#1d1d1f';
+                    button.style.border = '1px solid #e9ecef';
+                }
+            });
+        }
+
+        // Render category summary - only updates the content area, not the filter
+        function renderCategorySummary(transactions, userCategories, dateRange) {
+            const contentArea = document.getElementById('summaryContentArea');
+            
+            if (!contentArea) {
+                console.error('Content area not found!');
+                return;
+            }
+            
+            if (!transactions || transactions.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="empty-summary">
+                        <div class="emoji">📊</div>
+                        <div class="message">No transactions in ${dateRange.toLowerCase()}</div>
+                        <div class="submessage">Add some transactions to see your summary</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group transactions by category and type
+            const categoryData = {};
+            
+            // Initialize with user categories
+            userCategories.forEach(category => {
+                categoryData[category] = {
+                    income: 0,
+                    expense: 0,
+                    savings: 0,
+                    debt: 0,
+                    debt_return: 0,
+                    savings_withdraw: 0
+                };
+            });
+            
+            // Calculate section totals
+            let totalSpending = 0;
+            let totalIncome = 0;
+            let totalSavings = 0;
+            let totalDebt = 0;
+            let totalDebtReturn = 0;
+            
+            // Process all transactions
+            transactions.forEach(transaction => {
+                const category = transaction.category || 'Other';
+                const type = transaction.type || 'expense';
+                const amount = parseFloat(transaction.amount) || 0;
+                
+                // Initialize category if it doesn't exist
+                if (!categoryData[category]) {
+                    categoryData[category] = {
+                        income: 0,
+                        expense: 0,
+                        savings: 0,
+                        debt: 0,
+                        debt_return: 0,
+                        savings_withdraw: 0
+                    };
+                }
+                
+                // Handle different transaction types
+                if (type === 'savings') {
+                    categoryData[category].savings += Math.abs(amount);
+                    totalSavings += Math.abs(amount);
+                }
+                else if (type === 'income') {
+                    categoryData[category].income += amount;
+                    totalIncome += amount;
+                }
+                else if (type === 'expense') {
+                    categoryData[category].expense += Math.abs(amount);
+                    totalSpending += Math.abs(amount);
+                }
+                else if (type === 'debt') {
+                    categoryData[category].debt += amount;
+                    totalDebt += amount;
+                }
+                else if (type === 'debt_return') {
+                    categoryData[category].debt_return += Math.abs(amount);
+                    totalDebtReturn += Math.abs(amount);
+                }
+                else if (type === 'savings_withdraw') {
+                    categoryData[category].savings_withdraw += amount;
+                    totalSavings -= amount;
+                }
+            });
+            
+            // Create summary HTML
+            let summaryHTML = '';
+            
+            // Add date range header
+            summaryHTML += `
+                <div style="text-align: center; margin-bottom: 20px; padding: 12px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="font-size: 14px; color: #8e8e93; margin-bottom: 4px;">📅 Time Period</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #1d1d1f;">${dateRange}</div>
+                </div>
+            `;
+            
+            // Spending Categories
+            const spendingCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.expense > 0)
+                .sort((a, b) => b[1].expense - a[1].expense);
+            
+            if (spendingCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #ff3b30;">
+                                -${totalSpending.toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${spendingCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Income Categories
+            const incomeCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.income > 0)
+                .sort((a, b) => b[1].income - a[1].income);
+            
+            if (incomeCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #34c759;">
+                                +${totalIncome.toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${incomeCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Savings Categories
+            const savingsCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.savings > 0)
+                .sort((a, b) => b[1].savings - a[1].savings);
+            
+            if (savingsCategories.length > 0) {
+                const savingsColor = totalSavings >= 0 ? '#007AFF' : '#ff3b30';
+                const savingsSign = totalSavings >= 0 ? '' : '-';
+                
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: ${savingsColor};">
+                                ${savingsSign}${Math.abs(totalSavings).toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${savingsCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount neutral">${data.savings.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Debt Categories
+            const debtCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.debt > 0 || data.debt_return > 0)
+                .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
+            
+            if (debtCategories.length > 0) {
+                const netDebtTotal = totalDebt - totalDebtReturn;
+                const debtColor = netDebtTotal >= 0 ? '#ff3b30' : '#34c759';
+                const debtSign = netDebtTotal >= 0 ? '-' : '+';
+                
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: ${debtColor};">
+                                ${debtSign}${Math.abs(netDebtTotal).toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${debtCategories.map(([category, data]) => {
+                            const netDebt = data.debt - data.debt_return;
+                            return `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                    ${data.debt_return > 0 ? `<span class="debt-detail">(Returned: ${data.debt_return.toLocaleString()}₴)</span>` : ''}
+                                </div>
+                                <div class="category-summary-amount ${netDebt >= 0 ? 'negative' : 'positive'}">
+                                    ${netDebt >= 0 ? '-' : '+'}${Math.abs(netDebt).toLocaleString()}₴
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+                `;
+            }
+            
+            // Add overall summary
+            const overallBalance = totalIncome - totalSpending - totalSavings + (totalDebt - totalDebtReturn);
+            const overallColor = overallBalance >= 0 ? '#34c759' : '#ff3b30';
+            const overallSign = overallBalance >= 0 ? '+' : '';
+            
+            summaryHTML += `
+                <div class="stats-card" style="margin-top: 20px;">
+                    <div class="stats-header">📊 ${dateRange} Summary</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #34c759;">+${totalIncome.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Income</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ff3b30;">-${totalSpending.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Spending</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #007AFF;">${totalSavings >= 0 ? '' : '-'}${Math.abs(totalSavings).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Savings</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: ${totalDebt - totalDebtReturn >= 0 ? '#ff3b30' : '#34c759'};">${totalDebt - totalDebtReturn >= 0 ? '-' : '+'}${Math.abs(totalDebt - totalDebtReturn).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Debt</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 16px; padding: 12px; background: ${overallColor}10; border-radius: 12px; border: 1px solid ${overallColor}30;">
+                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Net Financial Position</div>
+                        <div style="font-size: 20px; font-weight: 600; color: ${overallColor};">${overallSign}${overallBalance.toLocaleString()}₴</div>
+                    </div>
+                </div>
+            `;
+            
+            contentArea.innerHTML = summaryHTML;
         }
 
         // Helper function to generate summary content without month filter
