@@ -1457,6 +1457,130 @@ def api_user_categories():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to load categories'}), 500
+    
+@app.route('/api/monthly-report', methods=['GET'])
+def api_monthly_report():
+    """Get month-by-month financial report"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        print(f"📅 Loading monthly report for user {user_id}...")
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get all transactions for this user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        
+        if not user_transactions:
+            return jsonify({'monthly_data': [], 'message': 'No transactions found'})
+        
+        # Group transactions by month
+        monthly_data = {}
+        
+        for transaction in user_transactions:
+            if 'date' not in transaction:
+                continue
+                
+            try:
+                # Parse the transaction date
+                transaction_date = None
+                if 'T' in transaction['date']:
+                    date_str = transaction['date'].split('T')[0]
+                    transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+                else:
+                    date_str = transaction['date'].split(' ')[0]
+                    transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+                
+                # Create month key (YYYY-MM)
+                month_key = transaction_date.strftime('%Y-%m')
+                month_display = transaction_date.strftime('%B %Y')  # "January 2024"
+                
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {
+                        'month_key': month_key,
+                        'month_display': month_display,
+                        'year': transaction_date.year,
+                        'month_number': transaction_date.month,
+                        'income': 0,
+                        'expenses': 0,
+                        'savings': 0,
+                        'debt': 0,
+                        'debt_return': 0,
+                        'transaction_count': 0,
+                        'balance_change': 0
+                    }
+                
+                # Add transaction to month totals
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                
+                monthly_data[month_key]['transaction_count'] += 1
+                
+                if trans_type == 'income':
+                    monthly_data[month_key]['income'] += amount
+                    monthly_data[month_key]['balance_change'] += amount
+                elif trans_type == 'expense':
+                    monthly_data[month_key]['expenses'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount
+                elif trans_type == 'savings':
+                    monthly_data[month_key]['savings'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount  # Money moved to savings
+                elif trans_type == 'debt':
+                    monthly_data[month_key]['debt'] += amount
+                    monthly_data[month_key]['balance_change'] += amount  # Money received as debt
+                elif trans_type == 'debt_return':
+                    monthly_data[month_key]['debt_return'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount  # Money paid back
+                elif trans_type == 'savings_withdraw':
+                    monthly_data[month_key]['savings'] -= amount
+                    monthly_data[month_key]['balance_change'] += amount  # Money taken from savings
+                    
+            except Exception as e:
+                print(f"⚠️ Error processing transaction date: {e}")
+                continue
+        
+        # Convert to list sorted by month (newest first)
+        monthly_list = sorted(
+            monthly_data.values(), 
+            key=lambda x: (x['year'], x['month_number']), 
+            reverse=True
+        )
+        
+        # Calculate net values and format for display
+        for month in monthly_list:
+            # Calculate net savings (deposits - withdrawals)
+            month['net_savings'] = month['savings']
+            month['net_debt'] = month['debt'] - month['debt_return']
+            
+            # Calculate net flow for the month
+            month['net_flow'] = month['income'] - month['expenses'] - month['net_savings']
+            
+            # Format amounts with currency symbol
+            month['income_formatted'] = f"{month['income']:,.0f}₴"
+            month['expenses_formatted'] = f"{month['expenses']:,.0f}₴"
+            month['savings_formatted'] = f"{month['savings']:,.0f}₴"
+            month['net_flow_formatted'] = f"{month['net_flow']:,.0f}₴"
+            month['net_flow_color'] = 'positive' if month['net_flow'] >= 0 else 'negative'
+            
+            # Calculate savings rate
+            month['savings_rate'] = (month['savings'] / month['income'] * 100) if month['income'] > 0 else 0
+        
+        print(f"📊 Monthly report generated with {len(monthly_list)} months of data")
+        
+        return jsonify({
+            'monthly_data': monthly_list,
+            'total_months': len(monthly_list),
+            'message': 'Monthly report generated successfully'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error generating monthly report: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to generate monthly report'}), 500
 
 @app.route('/mini-app')
 def serve_mini_app():
@@ -1757,6 +1881,39 @@ def serve_mini_app():
             color: white;
         }
 
+        /* Month Filter Styles */
+        .month-filter-btn {
+            transition: all 0.3s ease;
+        }
+
+        .month-filter-btn:hover:not(.active) {
+            background: #f8f9fa !important;
+            border-color: #dee2e6 !important;
+        }
+
+        .month-filter-btn.active {
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Scrollbar for month filter */
+        ::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
         .health-display {
             font-size: 18px;
             font-weight: bold;
@@ -1782,6 +1939,62 @@ def serve_mini_app():
             margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid #f2f2f7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .summary-header span {
+            font-size: 14px;
+            margin-left: 8px;
+        }
+
+        .category-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .category-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .category-summary-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .debt-detail {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .category-summary-amount {
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+
+        .category-summary-amount.positive {
+            color: #34c759;
+        }
+
+        .category-summary-amount.negative {
+            color: #ff3b30;
+        }
+
+        .category-summary-amount.neutral {
+            color: #007AFF;
         }
 
         .category-summary-item {
@@ -2006,12 +2219,13 @@ def serve_mini_app():
         let hasMoreTransactions = true;
 
         // Navigation functionality
+        // Navigation functionality
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
             
             navButtons.forEach(button => {
-                button.addEventListener('click', function() {
+                button.addEventListener('click', async function() {
                     // Remove active class from all buttons and pages
                     navButtons.forEach(btn => btn.classList.remove('active'));
                     pages.forEach(page => page.classList.remove('active'));
@@ -2037,9 +2251,22 @@ def serve_mini_app():
                         
                         if (user_id) {
                             console.log('🚀 Loading category summary for user:', user_id);
-                            loadCategorySummary(user_id);
+                            try {
+                                await loadCategorySummary(user_id);
+                                
+                                // Set up month filter after loading initial data
+                                setTimeout(() => {
+                                    setupMonthFilter(user_id);
+                                }, 100);
+                            } catch (error) {
+                                console.error('Error loading summary:', error);
+                                document.getElementById('categorySummaryContent').innerHTML = 
+                                    `<div class="error">Error loading summary: ${error.message}</div>`;
+                            }
                         } else {
                             console.log('❌ No user_id found for category summary');
+                            document.getElementById('categorySummaryContent').innerHTML = 
+                                `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
                         }
                     }
                 });
@@ -2047,6 +2274,7 @@ def serve_mini_app():
         }
 
         // Load category summary data
+        // Load category summary data for LAST 30 DAYS
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
@@ -2058,22 +2286,41 @@ def serve_mini_app():
                 }
                 const categoriesData = await categoriesResponse.json();
                 
-                // Then load transactions
+                // Then load ALL transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
                 if (!transactionsResponse.ok) {
                     throw new Error('Failed to load transactions');
                 }
                 const transactionsData = await transactionsResponse.json();
                 
-                const transactions = transactionsData.transactions || [];
+                const allTransactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
                 
-                console.log('📊 Final data for rendering:');
-                console.log('Total transactions:', transactions.length);
-                console.log('Transaction types found:', [...new Set(transactions.map(t => t.type))]);
+                // Filter transactions for last 30 days
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                 
-                // Render summary
-                renderCategorySummary(transactions, categories);
+                const last30DaysTransactions = allTransactions.filter(transaction => {
+                    if (!transaction.timestamp && !transaction.date) return false;
+                    
+                    const transactionDate = new Date(transaction.timestamp || transaction.date);
+                    return transactionDate >= thirtyDaysAgo;
+                });
+                
+                console.log('📊 Last 30 days data:');
+                console.log('Total transactions:', allTransactions.length);
+                console.log('Last 30 days transactions:', last30DaysTransactions.length);
+                console.log('Transaction types found:', [...new Set(last30DaysTransactions.map(t => t.type))]);
+                
+                // Calculate date range for display
+                const today = new Date();
+                const thirtyDaysAgoDisplay = new Date(today);
+                thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
+                
+                const dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                
+                // Render summary with last 30 days data
+                renderCategorySummary(last30DaysTransactions, categories, dateRange);
                 
             } catch (error) {
                 console.error('❌ Error loading category summary:', error);
@@ -2082,23 +2329,180 @@ def serve_mini_app():
             }
         }
 
+        // Load category summary for a specific month
+        async function loadMonthSummary(user_id, monthKey, availableMonths) {
+            try {
+                console.log(`📅 Loading month ${monthKey} summary for user:`, user_id);
+                
+                // Find the selected month from available months
+                const selectedMonth = availableMonths.find(m => m.month_key === monthKey);
+                if (!selectedMonth) {
+                    throw new Error('Month not found');
+                }
+                
+                // First, load user categories
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                if (!categoriesResponse.ok) {
+                    throw new Error('Failed to load categories');
+                }
+                const categoriesData = await categoriesResponse.json();
+                
+                // Then load ALL transactions
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                if (!transactionsResponse.ok) {
+                    throw new Error('Failed to load transactions');
+                }
+                const transactionsData = await transactionsResponse.json();
+                
+                const allTransactions = transactionsData.transactions || [];
+                const categories = categoriesData.categories || [];
+                
+                // Filter transactions for the selected month
+                const selectedMonthTransactions = allTransactions.filter(transaction => {
+                    if (!transaction.timestamp && !transaction.date) return false;
+                    
+                    const transactionDate = new Date(transaction.timestamp || transaction.date);
+                    const transactionMonthKey = transactionDate.toISOString().substring(0, 7); // YYYY-MM
+                    
+                    return transactionMonthKey === monthKey;
+                });
+                
+                console.log(`📊 ${selectedMonth.month_display} data:`);
+                console.log('Total transactions:', selectedMonthTransactions.length);
+                console.log('Transaction types found:', [...new Set(selectedMonthTransactions.map(t => t.type))]);
+                
+                // Render summary for the selected month
+                renderCategorySummary(selectedMonthTransactions, categories, selectedMonth.month_display);
+                
+            } catch (error) {
+                console.error('❌ Error loading month summary:', error);
+                document.getElementById('categorySummaryContent').innerHTML = 
+                    `<div class="error">Error loading month data: ${error.message}</div>`;
+            }
+        }
+
+        // Add month filter functionality
+        async function setupMonthFilter(user_id) {
+            try {
+                // Load monthly data from API
+                const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
+                if (!monthlyResponse.ok) {
+                    throw new Error('Failed to load monthly data');
+                }
+                
+                const monthlyData = await monthlyResponse.json();
+                const months = monthlyData.monthly_data || [];
+                
+                if (months.length === 0) {
+                    console.log('No monthly data available');
+                    return;
+                }
+                
+                console.log('📅 Available months:', months);
+                
+                // Create month filter dropdown
+                const container = document.getElementById('categorySummaryContent');
+                const currentHTML = container.innerHTML;
+                
+                // Create month filter HTML
+                const monthFilterHTML = `
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                            <div style="font-size: 12px; color: #8e8e93;">${months.length} months available</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
+                            <button class="month-filter-btn active" data-month="last30" style="
+                                padding: 8px 16px;
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                color: white;
+                                border: none;
+                                border-radius: 12px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                cursor: pointer;
+                                white-space: nowrap;
+                                flex-shrink: 0;
+                            ">
+                                Last 30 Days
+                            </button>
+                            ${months.map(month => `
+                                <button class="month-filter-btn" data-month="${month.month_key}" style="
+                                    padding: 8px 16px;
+                                    background: white;
+                                    color: #1d1d1f;
+                                    border: 1px solid #e9ecef;
+                                    border-radius: 12px;
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                    cursor: pointer;
+                                    white-space: nowrap;
+                                    flex-shrink: 0;
+                                ">
+                                    ${month.month_display}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                
+                // Insert month filter at the top
+                container.innerHTML = monthFilterHTML + currentHTML;
+                
+                // Add click handlers for month filter buttons
+                document.querySelectorAll('.month-filter-btn').forEach(button => {
+                    button.addEventListener('click', async function() {
+                        // Remove active class from all buttons
+                        document.querySelectorAll('.month-filter-btn').forEach(btn => {
+                            btn.classList.remove('active');
+                            btn.style.background = 'white';
+                            btn.style.color = '#1d1d1f';
+                            btn.style.border = '1px solid #e9ecef';
+                        });
+                        
+                        // Add active class to clicked button
+                        this.classList.add('active');
+                        this.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                        this.style.color = 'white';
+                        this.style.border = 'none';
+                        
+                        const selectedMonth = this.getAttribute('data-month');
+                        
+                        if (selectedMonth === 'last30') {
+                            // Reload last 30 days data
+                            await loadCategorySummary(user_id);
+                        } else {
+                            // Load specific month data
+                            await loadMonthSummary(user_id, selectedMonth, months);
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Error setting up month filter:', error);
+            }
+        }
+
         // Render category summary - FIXED FOR SAVINGS
-        function renderCategorySummary(transactions, userCategories) {
+        // Render category summary with totals at the top of each section - FIXED FOR SAVINGS
+        // Render category summary with totals at the top of each section - FOR LAST 30 DAYS
+        function renderCategorySummary(transactions, userCategories, dateRange = 'Last 30 days') {
             const container = document.getElementById('categorySummaryContent');
             
             if (!transactions || transactions.length === 0) {
                 container.innerHTML = `
                     <div class="empty-summary">
                         <div class="emoji">📊</div>
-                        <div class="message">No transactions yet</div>
-                        <div class="submessage">Start adding transactions to see your spending summary</div>
+                        <div class="message">No transactions in the last 30 days</div>
+                        <div class="submessage">Add some transactions to see your summary</div>
                     </div>
                 `;
                 return;
             }
             
-            console.log('🔍 DEBUG - All transactions for summary:', transactions);
+            console.log('🔍 DEBUG - Last 30 days transactions for summary:', transactions);
             console.log('🔍 DEBUG - User categories:', userCategories);
+            console.log('🔍 DEBUG - Date range:', dateRange);
             
             // Group transactions by category and type
             const categoryData = {};
@@ -2115,18 +2519,18 @@ def serve_mini_app():
                 };
             });
             
-            // Process all transactions
+            // Calculate section totals for LAST 30 DAYS
+            let totalSpending = 0;
+            let totalIncome = 0;
+            let totalSavings = 0;
+            let totalDebt = 0;
+            let totalDebtReturn = 0;
+            
+            // Process all transactions (already filtered to last 30 days)
             transactions.forEach(transaction => {
                 const category = transaction.category || 'Other';
                 const type = transaction.type || 'expense';
                 const amount = parseFloat(transaction.amount) || 0;
-                
-                console.log(`📝 Processing transaction:`, {
-                    category: category,
-                    type: type,
-                    amount: amount,
-                    description: transaction.description
-                });
                 
                 // Initialize category if it doesn't exist
                 if (!categoryData[category]) {
@@ -2140,47 +2544,66 @@ def serve_mini_app():
                     };
                 }
                 
-                // Handle different transaction types - FIXED FOR SAVINGS
+                // Handle different transaction types
                 if (type === 'savings') {
                     categoryData[category].savings += Math.abs(amount);
-                    console.log(`💰 Added to SAVINGS: ${amount} for ${category}`);
+                    totalSavings += Math.abs(amount);
                 }
                 else if (type === 'income') {
                     categoryData[category].income += amount;
+                    totalIncome += amount;
                 }
                 else if (type === 'expense') {
                     categoryData[category].expense += Math.abs(amount);
+                    totalSpending += Math.abs(amount);
                 }
                 else if (type === 'debt') {
                     categoryData[category].debt += amount;
+                    totalDebt += amount;
                 }
                 else if (type === 'debt_return') {
                     categoryData[category].debt_return += Math.abs(amount);
+                    totalDebtReturn += Math.abs(amount);
                 }
                 else if (type === 'savings_withdraw') {
                     categoryData[category].savings_withdraw += amount;
-                }
-                else {
-                    console.log(`❓ Unknown transaction type: ${type}`);
+                    totalSavings -= amount; // Withdrawal reduces total savings
                 }
             });
             
-            console.log('🔍 DEBUG - Final category data:', categoryData);
+            console.log('💰 Last 30 days section totals:', {
+                totalSpending: totalSpending,
+                totalIncome: totalIncome,
+                totalSavings: totalSavings,
+                totalDebt: totalDebt,
+                totalDebtReturn: totalDebtReturn
+            });
             
             // Create summary HTML
             let summaryHTML = '';
+            
+            // Add date range header
+            summaryHTML += `
+                <div style="text-align: center; margin-bottom: 20px; padding: 12px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="font-size: 14px; color: #8e8e93; margin-bottom: 4px;">📅 Time Period</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #1d1d1f;">${dateRange}</div>
+                </div>
+            `;
             
             // Spending Categories (expense type)
             const spendingCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.expense > 0)
                 .sort((a, b) => b[1].expense - a[1].expense);
             
-            console.log('🔍 Spending categories found:', spendingCategories);
-            
             if (spendingCategories.length > 0) {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🛒 Spending</div>
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #ff3b30;">
+                                -${totalSpending.toLocaleString()}₴
+                            </span>
+                        </div>
                         ${spendingCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2194,9 +2617,14 @@ def serve_mini_app():
             } else {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🛒 Spending</div>
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No spending transactions found
+                            No spending in the last 30 days
                         </div>
                     </div>
                 `;
@@ -2207,12 +2635,15 @@ def serve_mini_app():
                 .filter(([category, data]) => data.income > 0)
                 .sort((a, b) => b[1].income - a[1].income);
             
-            console.log('🔍 Income categories found:', incomeCategories);
-            
             if (incomeCategories.length > 0) {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">💰 Income</div>
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #34c759;">
+                                +${totalIncome.toLocaleString()}₴
+                            </span>
+                        </div>
                         ${incomeCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2223,19 +2654,39 @@ def serve_mini_app():
                         `).join('')}
                     </div>
                 `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No income in the last 30 days
+                        </div>
+                    </div>
+                `;
             }
             
-            // Savings Categories - FIXED: Now properly checking for savings transactions
+            // Savings Categories
             const savingsCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.savings > 0)
                 .sort((a, b) => b[1].savings - a[1].savings);
             
-            console.log('🔍 Savings categories found:', savingsCategories);
-            
             if (savingsCategories.length > 0) {
+                const savingsColor = totalSavings >= 0 ? '#007AFF' : '#ff3b30';
+                const savingsSign = totalSavings >= 0 ? '' : '-';
+                
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🏦 Savings</div>
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: ${savingsColor};">
+                                ${savingsSign}${Math.abs(totalSavings).toLocaleString()}₴
+                            </span>
+                        </div>
                         ${savingsCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2249,9 +2700,14 @@ def serve_mini_app():
             } else {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🏦 Savings</div>
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No savings transactions found
+                            No savings in the last 30 days
                         </div>
                     </div>
                 `;
@@ -2263,9 +2719,18 @@ def serve_mini_app():
                 .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
             
             if (debtCategories.length > 0) {
+                const netDebtTotal = totalDebt - totalDebtReturn;
+                const debtColor = netDebtTotal >= 0 ? '#ff3b30' : '#34c759';
+                const debtSign = netDebtTotal >= 0 ? '-' : '+';
+                
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">💳 Debt</div>
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: ${debtColor};">
+                                ${debtSign}${Math.abs(netDebtTotal).toLocaleString()}₴
+                            </span>
+                        </div>
                         ${debtCategories.map(([category, data]) => {
                             const netDebt = data.debt - data.debt_return;
                             return `
@@ -2281,7 +2746,54 @@ def serve_mini_app():
                         `}).join('')}
                     </div>
                 `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No debt activity in the last 30 days
+                        </div>
+                    </div>
+                `;
             }
+            
+            // Add a final summary card with overall totals for LAST 30 DAYS
+            const overallBalance = totalIncome - totalSpending - totalSavings + (totalDebt - totalDebtReturn);
+            const overallColor = overallBalance >= 0 ? '#34c759' : '#ff3b30';
+            const overallSign = overallBalance >= 0 ? '+' : '';
+            
+            summaryHTML += `
+                <div class="stats-card" style="margin-top: 20px;">
+                    <div class="stats-header">📊 Last 30 Days Summary</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #34c759;">+${totalIncome.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Income</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ff3b30;">-${totalSpending.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Spending</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #007AFF;">${totalSavings >= 0 ? '' : '-'}${Math.abs(totalSavings).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Savings</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: ${totalDebt - totalDebtReturn >= 0 ? '#ff3b30' : '#34c759'};">${totalDebt - totalDebtReturn >= 0 ? '-' : '+'}${Math.abs(totalDebt - totalDebtReturn).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Debt</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 16px; padding: 12px; background: ${overallColor}10; border-radius: 12px; border: 1px solid ${overallColor}30;">
+                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Net Financial Position (30 days)</div>
+                        <div style="font-size: 20px; font-weight: 600; color: ${overallColor};">${overallSign}${overallBalance.toLocaleString()}₴</div>
+                    </div>
+                </div>
+            `;
             
             container.innerHTML = summaryHTML;
         }
