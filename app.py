@@ -1782,6 +1782,62 @@ def serve_mini_app():
             margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid #f2f2f7;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .summary-header span {
+            font-size: 14px;
+            margin-left: 8px;
+        }
+
+        .category-summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .category-summary-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-summary-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .category-summary-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+        }
+
+        .debt-detail {
+            font-size: 11px;
+            color: #8e8e93;
+        }
+
+        .category-summary-amount {
+            font-size: 14px;
+            font-weight: 600;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+
+        .category-summary-amount.positive {
+            color: #34c759;
+        }
+
+        .category-summary-amount.negative {
+            color: #ff3b30;
+        }
+
+        .category-summary-amount.neutral {
+            color: #007AFF;
         }
 
         .category-summary-item {
@@ -2083,6 +2139,7 @@ def serve_mini_app():
         }
 
         // Render category summary - FIXED FOR SAVINGS
+        // Render category summary with totals at the top of each section - FIXED FOR SAVINGS
         function renderCategorySummary(transactions, userCategories) {
             const container = document.getElementById('categorySummaryContent');
             
@@ -2115,6 +2172,13 @@ def serve_mini_app():
                 };
             });
             
+            // Calculate section totals
+            let totalSpending = 0;
+            let totalIncome = 0;
+            let totalSavings = 0;
+            let totalDebt = 0;
+            let totalDebtReturn = 0;
+            
             // Process all transactions
             transactions.forEach(transaction => {
                 const category = transaction.category || 'Other';
@@ -2143,22 +2207,28 @@ def serve_mini_app():
                 // Handle different transaction types - FIXED FOR SAVINGS
                 if (type === 'savings') {
                     categoryData[category].savings += Math.abs(amount);
+                    totalSavings += Math.abs(amount);
                     console.log(`💰 Added to SAVINGS: ${amount} for ${category}`);
                 }
                 else if (type === 'income') {
                     categoryData[category].income += amount;
+                    totalIncome += amount;
                 }
                 else if (type === 'expense') {
                     categoryData[category].expense += Math.abs(amount);
+                    totalSpending += Math.abs(amount);
                 }
                 else if (type === 'debt') {
                     categoryData[category].debt += amount;
+                    totalDebt += amount;
                 }
                 else if (type === 'debt_return') {
                     categoryData[category].debt_return += Math.abs(amount);
+                    totalDebtReturn += Math.abs(amount);
                 }
                 else if (type === 'savings_withdraw') {
                     categoryData[category].savings_withdraw += amount;
+                    totalSavings -= amount; // Withdrawal reduces total savings
                 }
                 else {
                     console.log(`❓ Unknown transaction type: ${type}`);
@@ -2166,6 +2236,13 @@ def serve_mini_app():
             });
             
             console.log('🔍 DEBUG - Final category data:', categoryData);
+            console.log('💰 Section totals:', {
+                totalSpending: totalSpending,
+                totalIncome: totalIncome,
+                totalSavings: totalSavings,
+                totalDebt: totalDebt,
+                totalDebtReturn: totalDebtReturn
+            });
             
             // Create summary HTML
             let summaryHTML = '';
@@ -2180,7 +2257,12 @@ def serve_mini_app():
             if (spendingCategories.length > 0) {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🛒 Spending</div>
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #ff3b30;">
+                                -${totalSpending.toLocaleString()}₴
+                            </span>
+                        </div>
                         ${spendingCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2194,7 +2276,12 @@ def serve_mini_app():
             } else {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🛒 Spending</div>
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
                             No spending transactions found
                         </div>
@@ -2212,7 +2299,12 @@ def serve_mini_app():
             if (incomeCategories.length > 0) {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">💰 Income</div>
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #34c759;">
+                                +${totalIncome.toLocaleString()}₴
+                            </span>
+                        </div>
                         ${incomeCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2221,6 +2313,20 @@ def serve_mini_app():
                                 <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
+                    </div>
+                `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No income transactions found
+                        </div>
                     </div>
                 `;
             }
@@ -2233,9 +2339,17 @@ def serve_mini_app():
             console.log('🔍 Savings categories found:', savingsCategories);
             
             if (savingsCategories.length > 0) {
+                const savingsColor = totalSavings >= 0 ? '#007AFF' : '#ff3b30';
+                const savingsSign = totalSavings >= 0 ? '' : '-';
+                
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🏦 Savings</div>
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: ${savingsColor};">
+                                ${savingsSign}${Math.abs(totalSavings).toLocaleString()}₴
+                            </span>
+                        </div>
                         ${savingsCategories.map(([category, data]) => `
                             <div class="category-summary-item">
                                 <div class="category-summary-info">
@@ -2249,7 +2363,12 @@ def serve_mini_app():
             } else {
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">🏦 Savings</div>
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
                         <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
                             No savings transactions found
                         </div>
@@ -2263,9 +2382,18 @@ def serve_mini_app():
                 .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
             
             if (debtCategories.length > 0) {
+                const netDebtTotal = totalDebt - totalDebtReturn;
+                const debtColor = netDebtTotal >= 0 ? '#ff3b30' : '#34c759';
+                const debtSign = netDebtTotal >= 0 ? '-' : '+';
+                
                 summaryHTML += `
                     <div class="summary-section">
-                        <div class="summary-header">💳 Debt</div>
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: ${debtColor};">
+                                ${debtSign}${Math.abs(netDebtTotal).toLocaleString()}₴
+                            </span>
+                        </div>
                         ${debtCategories.map(([category, data]) => {
                             const netDebt = data.debt - data.debt_return;
                             return `
@@ -2281,7 +2409,54 @@ def serve_mini_app():
                         `}).join('')}
                     </div>
                 `;
+            } else {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: #8e8e93;">
+                                0₴
+                            </span>
+                        </div>
+                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
+                            No debt transactions found
+                        </div>
+                    </div>
+                `;
             }
+            
+            // Add a final summary card with overall totals
+            const overallBalance = totalIncome - totalSpending - totalSavings + (totalDebt - totalDebtReturn);
+            const overallColor = overallBalance >= 0 ? '#34c759' : '#ff3b30';
+            const overallSign = overallBalance >= 0 ? '+' : '';
+            
+            summaryHTML += `
+                <div class="stats-card" style="margin-top: 20px;">
+                    <div class="stats-header">📊 Overall Summary</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #34c759;">+${totalIncome.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Income</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ff3b30;">-${totalSpending.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Spending</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #007AFF;">${totalSavings >= 0 ? '' : '-'}${Math.abs(totalSavings).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Savings</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: ${totalDebt - totalDebtReturn >= 0 ? '#ff3b30' : '#34c759'};">${totalDebt - totalDebtReturn >= 0 ? '-' : '+'}${Math.abs(totalDebt - totalDebtReturn).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Debt</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 16px; padding: 12px; background: ${overallColor}10; border-radius: 12px; border: 1px solid ${overallColor}30;">
+                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Overall Financial Position</div>
+                        <div style="font-size: 20px; font-weight: 600; color: ${overallColor};">${overallSign}${overallBalance.toLocaleString()}₴</div>
+                    </div>
+                </div>
+            `;
             
             container.innerHTML = summaryHTML;
         }

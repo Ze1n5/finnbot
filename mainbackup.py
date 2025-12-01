@@ -883,8 +883,8 @@ Net Savings: {net_savings:,.0f}₴"""
             
             # Simple format: Number. Category: Description
             #              Amount Date Time
-            delete_text += f"`{current_number:2d}.` {transaction['category']}: {description}\n"
-            delete_text += f"    {amount_display}  {date_display}\n\n"
+            delete_text += f"`{current_number:2d}.` {amount_display} {transaction['category']}\n"
+            delete_text += f"    _{date_display}_\n\n"
             
             # Map display number to ORIGINAL index in user_transactions
             transaction_map[current_number] = original_index
@@ -2331,8 +2331,13 @@ Net Savings: {net_savings:,.0f}₴"""
         
         elif text == "🌍 Language":
             return self.handle_language_selection(chat_id)
+        
         elif text == "/total" or text.startswith("/total@"):
             self.handle_total_command(chat_id)
+            return
+        
+        elif text == "/delete" or text.startswith("/delete@"):
+            self.handle_delete_transaction(chat_id)
             return
         
         # Ukrainian menu buttons
@@ -3771,9 +3776,14 @@ You're now ready to use Finn! 🚀
                     self.update_503020_totals(chat_id, amount, bucket)
 
                 # Check for 50/30/20 limit crossings
-                limit_messages = self.check_503020_limits(chat_id)
-                for message in limit_messages:
-                    self.send_message(chat_id, message, parse_mode='Markdown')
+                # Check for 50/30/20 limit crossings - ONLY in private chats
+                chat_type = query["message"]["chat"].get("type", "private")
+                is_group = chat_type in ["group", "supergroup"]
+
+                if not is_group:  # Only send 50/30/20 limit messages in private chats
+                    limit_messages = self.check_503020_limits(chat_id)
+                    for message in limit_messages:
+                        self.send_message(chat_id, message, parse_mode='Markdown')
                 
                 # ===== DELETE THE CATEGORY SELECTION MESSAGE FIRST =====
                 try:
@@ -3804,44 +3814,44 @@ You're now ready to use Finn! 🚀
                     
                     # Send confirmation WITH MENU
                     if user_lang == 'uk':
-                        confirmation_msg = f"✅ Дохід збережено!\n💰 +{amount:,.0f}{currency_symbol}\n🏷️ {category}"
+                        confirmation_msg = f"✅ Дохід збережено!\n +{amount:,.0f}{currency_symbol}\n: {category}"
                     else:
                         confirmation_msg = f"✅ Income saved!\n {amount:,.0f}{currency_symbol}: {category}"
                     self.send_message(chat_id, confirmation_msg, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings':
                     if user_lang == 'uk':
-                        message = f"✅ Заощадження збережено!\n💰 ++{amount:,.0f}{currency_symbol}"
+                        message = f"✅ Заощадження збережено!\n ++{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Savings saved!\n💰 ++{amount:,.0f}{currency_symbol}"
+                        message = f"✅ Savings saved!\n ++{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt':        
                     if user_lang == 'uk':
-                        message = f"✅ Борг збережено!\n💰 -{amount:,.0f}{currency_symbol}"
+                        message = f"✅ Борг збережено!\n -{amount:,.0f}{currency_symbol}"
                     else:
-                        message = f"✅ Debt saved!\n💰 -{amount:,.0f}{currency_symbol}"
+                        message = f"✅ Debt saved!\n -{amount:,.0f}{currency_symbol}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'debt_return':
                     if user_lang == 'uk':
-                        message = f"✅ Борг повернено!\n💰 +-{amount:,.0f}₴"
+                        message = f"✅ Борг повернено!\n +-{amount:,.0f}₴"
                     else:
-                        message = f"✅ Debt returned!\n💰 +-{amount:,.0f}₴"
+                        message = f"✅ Debt returned!\n +-{amount:,.0f}₴"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 elif transaction_type == 'savings_withdraw':
                     if user_lang == 'uk':
-                        message = f"✅ Заощадження знято!\n💰 -+{amount:,.0f}₴"
+                        message = f"✅ Заощадження знято!\n -+{amount:,.0f}₴"
                     else:
                         message = f"✅ Savings withdrawn!\n💰 -+{amount:,.0f}₴"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
                     
                 else:  # expense
                     if user_lang == 'uk':
-                        message = f"✅ Витрату збережено!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
+                        message = f"✅ Витрату збережено!\n -{amount:,.0f}{currency_symbol}: {category}"
                     else:
-                        message = f"✅ Expense saved!\n💰 -{amount:,.0f}{currency_symbol}\n🏷️ {category}"
+                        message = f"✅ Expense saved!\n -{amount:,.0f}{currency_symbol}: {category}"
                     self.send_message(chat_id, message, reply_markup=self.get_main_menu(chat_id))
 
             else:
