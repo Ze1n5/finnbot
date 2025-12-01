@@ -1457,6 +1457,130 @@ def api_user_categories():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to load categories'}), 500
+    
+@app.route('/api/monthly-report', methods=['GET'])
+def api_monthly_report():
+    """Get month-by-month financial report"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        print(f"📅 Loading monthly report for user {user_id}...")
+        
+        if not bot_instance:
+            return jsonify({'error': 'Bot not initialized'}), 500
+        
+        # Get all transactions for this user
+        user_transactions = bot_instance.transactions.get(user_id, [])
+        
+        if not user_transactions:
+            return jsonify({'monthly_data': [], 'message': 'No transactions found'})
+        
+        # Group transactions by month
+        monthly_data = {}
+        
+        for transaction in user_transactions:
+            if 'date' not in transaction:
+                continue
+                
+            try:
+                # Parse the transaction date
+                transaction_date = None
+                if 'T' in transaction['date']:
+                    date_str = transaction['date'].split('T')[0]
+                    transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+                else:
+                    date_str = transaction['date'].split(' ')[0]
+                    transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+                
+                # Create month key (YYYY-MM)
+                month_key = transaction_date.strftime('%Y-%m')
+                month_display = transaction_date.strftime('%B %Y')  # "January 2024"
+                
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {
+                        'month_key': month_key,
+                        'month_display': month_display,
+                        'year': transaction_date.year,
+                        'month_number': transaction_date.month,
+                        'income': 0,
+                        'expenses': 0,
+                        'savings': 0,
+                        'debt': 0,
+                        'debt_return': 0,
+                        'transaction_count': 0,
+                        'balance_change': 0
+                    }
+                
+                # Add transaction to month totals
+                amount = float(transaction.get('amount', 0))
+                trans_type = transaction.get('type', 'expense')
+                
+                monthly_data[month_key]['transaction_count'] += 1
+                
+                if trans_type == 'income':
+                    monthly_data[month_key]['income'] += amount
+                    monthly_data[month_key]['balance_change'] += amount
+                elif trans_type == 'expense':
+                    monthly_data[month_key]['expenses'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount
+                elif trans_type == 'savings':
+                    monthly_data[month_key]['savings'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount  # Money moved to savings
+                elif trans_type == 'debt':
+                    monthly_data[month_key]['debt'] += amount
+                    monthly_data[month_key]['balance_change'] += amount  # Money received as debt
+                elif trans_type == 'debt_return':
+                    monthly_data[month_key]['debt_return'] += amount
+                    monthly_data[month_key]['balance_change'] -= amount  # Money paid back
+                elif trans_type == 'savings_withdraw':
+                    monthly_data[month_key]['savings'] -= amount
+                    monthly_data[month_key]['balance_change'] += amount  # Money taken from savings
+                    
+            except Exception as e:
+                print(f"⚠️ Error processing transaction date: {e}")
+                continue
+        
+        # Convert to list sorted by month (newest first)
+        monthly_list = sorted(
+            monthly_data.values(), 
+            key=lambda x: (x['year'], x['month_number']), 
+            reverse=True
+        )
+        
+        # Calculate net values and format for display
+        for month in monthly_list:
+            # Calculate net savings (deposits - withdrawals)
+            month['net_savings'] = month['savings']
+            month['net_debt'] = month['debt'] - month['debt_return']
+            
+            # Calculate net flow for the month
+            month['net_flow'] = month['income'] - month['expenses'] - month['net_savings']
+            
+            # Format amounts with currency symbol
+            month['income_formatted'] = f"{month['income']:,.0f}₴"
+            month['expenses_formatted'] = f"{month['expenses']:,.0f}₴"
+            month['savings_formatted'] = f"{month['savings']:,.0f}₴"
+            month['net_flow_formatted'] = f"{month['net_flow']:,.0f}₴"
+            month['net_flow_color'] = 'positive' if month['net_flow'] >= 0 else 'negative'
+            
+            # Calculate savings rate
+            month['savings_rate'] = (month['savings'] / month['income'] * 100) if month['income'] > 0 else 0
+        
+        print(f"📊 Monthly report generated with {len(monthly_list)} months of data")
+        
+        return jsonify({
+            'monthly_data': monthly_list,
+            'total_months': len(monthly_list),
+            'message': 'Monthly report generated successfully'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error generating monthly report: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to generate monthly report'}), 500
 
 @app.route('/mini-app')
 def serve_mini_app():
@@ -2095,12 +2219,13 @@ def serve_mini_app():
         let hasMoreTransactions = true;
 
         // Navigation functionality
+        // Navigation functionality
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
             
             navButtons.forEach(button => {
-                button.addEventListener('click', function() {
+                button.addEventListener('click', async function() {
                     // Remove active class from all buttons and pages
                     navButtons.forEach(btn => btn.classList.remove('active'));
                     pages.forEach(page => page.classList.remove('active'));
@@ -2126,14 +2251,22 @@ def serve_mini_app():
                         
                         if (user_id) {
                             console.log('🚀 Loading category summary for user:', user_id);
-                            await loadCategorySummary(user_id);
-                            
-                            // Set up month filter after loading initial data
-                            setTimeout(() => {
-                                setupMonthFilter(user_id);
-                            }, 100);
+                            try {
+                                await loadCategorySummary(user_id);
+                                
+                                // Set up month filter after loading initial data
+                                setTimeout(() => {
+                                    setupMonthFilter(user_id);
+                                }, 100);
+                            } catch (error) {
+                                console.error('Error loading summary:', error);
+                                document.getElementById('categorySummaryContent').innerHTML = 
+                                    `<div class="error">Error loading summary: ${error.message}</div>`;
+                            }
                         } else {
                             console.log('❌ No user_id found for category summary');
+                            document.getElementById('categorySummaryContent').innerHTML = 
+                                `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
                         }
                     }
                 });
