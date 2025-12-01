@@ -2275,7 +2275,8 @@ def serve_mini_app():
 
         // Load category summary data
         // Load category summary data for LAST 30 DAYS
-        async function loadCategorySummary(user_id) {
+        // Load category summary data for LAST 30 DAYS
+        async function loadCategorySummary(user_id, shouldSetupFilter = true) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
@@ -2295,6 +2296,20 @@ def serve_mini_app():
                 
                 const allTransactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
+                
+                // Also load monthly data for filter (ONLY if we need to setup filter)
+                let availableMonths = [];
+                if (shouldSetupFilter) {
+                    try {
+                        const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
+                        if (monthlyResponse.ok) {
+                            const monthlyData = await monthlyResponse.json();
+                            availableMonths = monthlyData.monthly_data || [];
+                        }
+                    } catch (e) {
+                        console.log('Could not load monthly data for filter:', e);
+                    }
+                }
                 
                 // Filter transactions for last 30 days
                 const thirtyDaysAgo = new Date();
@@ -2322,6 +2337,13 @@ def serve_mini_app():
                 // Render summary with last 30 days data
                 renderCategorySummary(last30DaysTransactions, categories, dateRange);
                 
+                // RE-ADD THE MONTH FILTER AFTER RENDERING (only if shouldSetupFilter is true)
+                if (shouldSetupFilter) {
+                    setTimeout(() => {
+                        setupMonthFilterAfterRender(user_id, 'last30', availableMonths);
+                    }, 50);
+                }
+                
             } catch (error) {
                 console.error('❌ Error loading category summary:', error);
                 document.getElementById('categorySummaryContent').innerHTML = 
@@ -2329,6 +2351,28 @@ def serve_mini_app():
             }
         }
 
+        // Update active state on month filter buttons
+        function updateMonthFilterActiveState(selectedMonthKey, availableMonths) {
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                const buttonMonth = button.getAttribute('data-month');
+                
+                // Remove active class from all buttons
+                button.classList.remove('active');
+                button.style.background = 'white';
+                button.style.color = '#1d1d1f';
+                button.style.border = '1px solid #e9ecef';
+                
+                // Add active class to selected button
+                if (buttonMonth === selectedMonthKey) {
+                    button.classList.add('active');
+                    button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    button.style.color = 'white';
+                    button.style.border = 'none';
+                }
+            });
+        }
+
+        // Load category summary for a specific month
         // Load category summary for a specific month
         // Load category summary for a specific month
         async function loadMonthSummary(user_id, monthKey, availableMonths) {
@@ -2375,9 +2419,9 @@ def serve_mini_app():
                 // Render summary for the selected month
                 renderCategorySummary(selectedMonthTransactions, categories, selectedMonth.month_display);
                 
-                // RE-ADD THE MONTH FILTER AFTER RENDERING
+                // Update active state on month filter buttons
                 setTimeout(() => {
-                    setupMonthFilterAfterRender(user_id, monthKey, availableMonths);
+                    updateMonthFilterActiveState(monthKey, availableMonths);
                 }, 50);
                 
             } catch (error) {
@@ -2387,17 +2431,84 @@ def serve_mini_app():
             }
         }
 
+        // Attach event handlers to month filter buttons
+        function attachMonthFilterHandlers(user_id, availableMonths) {
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                // Remove any existing click handlers
+                button.replaceWith(button.cloneNode(true));
+            });
+            
+            // Re-select all buttons (including newly cloned ones)
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                button.addEventListener('click', async function() {
+                    const clickedMonth = this.getAttribute('data-month');
+                    
+                    console.log(`Month filter clicked: ${clickedMonth}`);
+                    
+                    if (clickedMonth === 'last30') {
+                        // Reload last 30 days data WITHOUT re-setting up the filter
+                        // (we'll handle the filter update separately)
+                        await loadCategorySummary(user_id, false);
+                        
+                        // Update active state on buttons
+                        document.querySelectorAll('.month-filter-btn').forEach(btn => {
+                            const btnMonth = btn.getAttribute('data-month');
+                            btn.classList.remove('active');
+                            btn.style.background = 'white';
+                            btn.style.color = '#1d1d1f';
+                            btn.style.border = '1px solid #e9ecef';
+                            
+                            if (btnMonth === 'last30') {
+                                btn.classList.add('active');
+                                btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                                btn.style.color = 'white';
+                                btn.style.border = 'none';
+                            }
+                        });
+                    } else {
+                        // Load specific month data
+                        await loadMonthSummary(user_id, clickedMonth, availableMonths);
+                    }
+                });
+            });
+        }
+
+        // Re-add month filter after rendering summary
         // Re-add month filter after rendering summary
         async function setupMonthFilterAfterRender(user_id, selectedMonthKey, availableMonths) {
             try {
-                if (!availableMonths || availableMonths.length === 0) {
-                    console.log('No monthly data available');
-                    return;
-                }
-                
                 // Get current summary content
                 const container = document.getElementById('categorySummaryContent');
                 const currentHTML = container.innerHTML;
+                
+                // Check if we already have a month filter at the top
+                const hasMonthFilter = container.querySelector('.month-filter-btn') !== null;
+                
+                if (hasMonthFilter) {
+                    console.log('Month filter already exists, updating active state');
+                    // Update active state on existing buttons
+                    document.querySelectorAll('.month-filter-btn').forEach(button => {
+                        const buttonMonth = button.getAttribute('data-month');
+                        
+                        // Remove active class from all buttons
+                        button.classList.remove('active');
+                        button.style.background = 'white';
+                        button.style.color = '#1d1d1f';
+                        button.style.border = '1px solid #e9ecef';
+                        
+                        // Add active class to selected button
+                        if (buttonMonth === selectedMonthKey) {
+                            button.classList.add('active');
+                            button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                            button.style.color = 'white';
+                            button.style.border = 'none';
+                        }
+                    });
+                    return; // Exit early since we already have the filter
+                }
+                
+                // If no filter exists, create it
+                console.log('Creating new month filter');
                 
                 // Create month filter HTML
                 const monthFilterHTML = `
@@ -2406,7 +2517,7 @@ def serve_mini_app():
                             <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
                             <div style="font-size: 12px; color: #8e8e93;">${availableMonths.length} months available</div>
                         </div>
-                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
+                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
                             <button class="month-filter-btn ${selectedMonthKey === 'last30' ? 'active' : ''}" data-month="last30" style="
                                 padding: 8px 16px;
                                 ${selectedMonthKey === 'last30' ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
@@ -2441,108 +2552,7 @@ def serve_mini_app():
                 container.innerHTML = monthFilterHTML + currentHTML;
                 
                 // Add click handlers for month filter buttons
-                document.querySelectorAll('.month-filter-btn').forEach(button => {
-                    button.addEventListener('click', async function() {
-                        const clickedMonth = this.getAttribute('data-month');
-                        
-                        if (clickedMonth === 'last30') {
-                            // Reload last 30 days data
-                            await loadCategorySummary(user_id);
-                        } else {
-                            // Load specific month data
-                            await loadMonthSummary(user_id, clickedMonth, availableMonths);
-                        }
-                    });
-                });
-                
-            } catch (error) {
-                console.error('Error setting up month filter:', error);
-            }
-        }
-
-        // Add month filter functionality
-        // Add month filter functionality (initial setup)
-        async function setupMonthFilter(user_id) {
-            try {
-                // Load monthly data from API
-                const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
-                if (!monthlyResponse.ok) {
-                    throw new Error('Failed to load monthly data');
-                }
-                
-                const monthlyData = await monthlyResponse.json();
-                const months = monthlyData.monthly_data || [];
-                
-                if (months.length === 0) {
-                    console.log('No monthly data available');
-                    return;
-                }
-                
-                console.log('📅 Available months:', months);
-                
-                // Get current summary content
-                const container = document.getElementById('categorySummaryContent');
-                const currentHTML = container.innerHTML;
-                
-                // Create month filter HTML
-                const monthFilterHTML = `
-                    <div style="margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
-                            <div style="font-size: 12px; color: #8e8e93;">${months.length} months available</div>
-                        </div>
-                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
-                            <button class="month-filter-btn active" data-month="last30" style="
-                                padding: 8px 16px;
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                color: white;
-                                border: none;
-                                border-radius: 12px;
-                                font-size: 12px;
-                                font-weight: 500;
-                                cursor: pointer;
-                                white-space: nowrap;
-                                flex-shrink: 0;
-                            ">
-                                Last 30 Days
-                            </button>
-                            ${months.map(month => `
-                                <button class="month-filter-btn" data-month="${month.month_key}" style="
-                                    padding: 8px 16px;
-                                    background: white;
-                                    color: #1d1d1f;
-                                    border: 1px solid #e9ecef;
-                                    border-radius: 12px;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    cursor: pointer;
-                                    white-space: nowrap;
-                                    flex-shrink: 0;
-                                ">
-                                    ${month.month_display}
-                                </button>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-                
-                // Insert month filter at the top
-                container.innerHTML = monthFilterHTML + currentHTML;
-                
-                // Add click handlers for month filter buttons
-                document.querySelectorAll('.month-filter-btn').forEach(button => {
-                    button.addEventListener('click', async function() {
-                        const clickedMonth = this.getAttribute('data-month');
-                        
-                        if (clickedMonth === 'last30') {
-                            // Reload last 30 days data
-                            await loadCategorySummary(user_id);
-                        } else {
-                            // Load specific month data
-                            await loadMonthSummary(user_id, clickedMonth, months);
-                        }
-                    });
-                });
+                attachMonthFilterHandlers(user_id, availableMonths);
                 
             } catch (error) {
                 console.error('Error setting up month filter:', error);
