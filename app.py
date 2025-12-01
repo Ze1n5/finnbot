@@ -2334,13 +2334,45 @@ def serve_mini_app():
                 
                 const dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
                 
-                // Render summary with last 30 days data
-                renderCategorySummary(last30DaysTransactions, categories, dateRange);
+                // Create the summary HTML structure
+                const container = document.getElementById('categorySummaryContent');
                 
-                // RE-ADD THE MONTH FILTER AFTER RENDERING (only if shouldSetupFilter is true)
+                // Save the current month filter if it exists
+                const currentMonthFilter = container.querySelector('#monthFilterButtons');
+                const monthFilterHTML = currentMonthFilter ? currentMonthFilter.outerHTML : '';
+                
+                // Create a temporary div to hold the summary content
+                const summaryContainer = document.createElement('div');
+                summaryContainer.id = 'categorySummaryData';
+                
+                // Generate the summary content
+                summaryContainer.innerHTML = generateSummaryContent(last30DaysTransactions, categories, dateRange);
+                
+                // Clear the container and add month filter (if available) + summary
+                container.innerHTML = '';
+                
+                if (monthFilterHTML) {
+                    // Create month filter wrapper
+                    const monthFilterWrapper = document.createElement('div');
+                    monthFilterWrapper.style.marginBottom = '20px';
+                    monthFilterWrapper.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                            <div style="font-size: 12px; color: #8e8e93;">${availableMonths.length} months available</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
+                            ${monthFilterHTML}
+                        </div>
+                    `;
+                    container.appendChild(monthFilterWrapper);
+                }
+                
+                container.appendChild(summaryContainer);
+                
+                // Re-attach event handlers
                 if (shouldSetupFilter) {
                     setTimeout(() => {
-                        setupMonthFilterAfterRender(user_id, 'last30', availableMonths);
+                        attachMonthFilterHandlers(user_id, availableMonths);
                     }, 50);
                 }
                 
@@ -2349,6 +2381,37 @@ def serve_mini_app():
                 document.getElementById('categorySummaryContent').innerHTML = 
                     `<div class="error">Error loading category data: ${error.message}</div>`;
             }
+        }
+
+        // Helper function to generate summary content without month filter
+        function generateSummaryContent(transactions, userCategories, dateRange) {
+            if (!transactions || transactions.length === 0) {
+                return `
+                    <div class="empty-summary">
+                        <div class="emoji">📊</div>
+                        <div class="message">No transactions in the last 30 days</div>
+                        <div class="submessage">Add some transactions to see your summary</div>
+                    </div>
+                `;
+            }
+            
+            // ... rest of your existing summary generation code from renderCategorySummary
+            // Copy the content generation logic from renderCategorySummary function here
+            // but remove the container assignment and just return the HTML string
+            
+            let summaryHTML = '';
+            
+            // Add date range header
+            summaryHTML += `
+                <div style="text-align: center; margin-bottom: 20px; padding: 12px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="font-size: 14px; color: #8e8e93; margin-bottom: 4px;">📅 Time Period</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #1d1d1f;">${dateRange}</div>
+                </div>
+            `;
+            
+            // ... continue with the rest of your existing renderCategorySummary code
+            
+            return summaryHTML;
         }
 
         // Update active state on month filter buttons
@@ -2412,17 +2475,43 @@ def serve_mini_app():
                     return transactionMonthKey === monthKey;
                 });
                 
-                console.log(`📊 ${selectedMonth.month_display} data:`);
-                console.log('Total transactions:', selectedMonthTransactions.length);
-                console.log('Transaction types found:', [...new Set(selectedMonthTransactions.map(t => t.type))]);
+                // Generate summary content for the selected month
+                const container = document.getElementById('categorySummaryContent');
+                const currentMonthFilter = container.querySelector('#monthFilterButtons');
+                const monthFilterHTML = currentMonthFilter ? currentMonthFilter.outerHTML : '';
                 
-                // Render summary for the selected month
-                renderCategorySummary(selectedMonthTransactions, categories, selectedMonth.month_display);
+                const summaryContainer = document.createElement('div');
+                summaryContainer.id = 'categorySummaryData';
+                
+                // Use the same generateSummaryContent function
+                summaryContainer.innerHTML = generateSummaryContent(
+                    selectedMonthTransactions, 
+                    categories, 
+                    selectedMonth.month_display
+                );
+                
+                // Clear and rebuild with preserved month filter
+                container.innerHTML = '';
+                
+                if (monthFilterHTML) {
+                    const monthFilterWrapper = document.createElement('div');
+                    monthFilterWrapper.style.marginBottom = '20px';
+                    monthFilterWrapper.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                            <div style="font-size: 12px; color: #8e8e93;">${availableMonths.length} months available</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
+                            ${monthFilterHTML}
+                        </div>
+                    `;
+                    container.appendChild(monthFilterWrapper);
+                }
+                
+                container.appendChild(summaryContainer);
                 
                 // Update active state on month filter buttons
-                setTimeout(() => {
-                    updateMonthFilterActiveState(monthKey, availableMonths);
-                }, 50);
+                updateMonthFilterActiveState(monthKey, availableMonths);
                 
             } catch (error) {
                 console.error('❌ Error loading month summary:', error);
