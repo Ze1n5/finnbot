@@ -311,6 +311,33 @@ def api_financial_data():
                     total_savings -= amount
                 
                 transaction_count += 1
+
+            # In your api_financial_data() function, after calculating totals, add:
+            # Get adjustments for this user
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    cur.execute('''
+                        SELECT initial_income, initial_savings, initial_debt, balance_offset
+                        FROM user_balance_adjustments 
+                        WHERE user_id = %s
+                    ''', (user_id,))
+                    
+                    adj_row = cur.fetchone()
+                    if adj_row:
+                        # Apply adjustments to your totals
+                        total_income += float(adj_row[0])  # Add initial income
+                        total_savings += float(adj_row[1])  # Add initial savings
+                        outstanding_debt += float(adj_row[2])  # Add initial debt
+                        balance += float(adj_row[3])  # Add balance offset
+                        
+                        # Also adjust recent_income if needed
+                        recent_income += float(adj_row[0]) / 12  # Spread initial income over months
+                except Exception as e:
+                    print(f"⚠️ Error applying adjustments: {e}")
+                finally:
+                    conn.close()
         
         from datetime import datetime, timedelta
 
@@ -680,6 +707,210 @@ def remove_emoji_constraints():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/api/get-adjustment-history', methods=['GET'])
+def get_adjustment_history():
+    """Get adjustment history for a user"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        limit = request.args.get('limit', 50, type=int)
+        
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cur = conn.cursor()
+        
+        cur.execute('''
+            SELECT adjustment_type, amount, previous_value, new_value, 
+                   note, created_at
+            FROM balance_adjustment_history 
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        ''', (user_id, limit))
+        
+        rows = cur.fetchall()
+        conn.close()
+        
+        history = []
+        for row in rows:
+            history.append({
+                'type': row[0],
+                'amount': float(row[1]),
+                'previous_value': float(row[2]) if row[2] is not None else None,
+                'new_value': float(row[3]) if row[3] is not None else None,
+                'note': row[4],
+                'created_at': row[5].isoformat() if row[5] else None
+            })
+        
+        return jsonify({
+            'history': history,
+            'count': len(history)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting adjustment history: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/set-adjustment', methods=['POST'])
+def set_adjustment():
+    """Update a balance adjustment for a user"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        adjustment_type = data.get('type')  # 'income', 'savings', 'debt', or 'balance'
+        amount = data.get('amount')
+        note = data.get('note', '')
+        
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        if not adjustment_type:
+            return jsonify({'error': 'type is required'}), 400
+        if amount is None:
+            return jsonify({'error': 'amount is required'}), 400
+        
+        # Validate adjustment type
+        valid_types = ['income', 'savings', 'debt', 'balance']
+        if adjustment_type not in valid_types:
+            return jsonify({'error': f'type must be one of: {valid_types}'}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cur = conn.cursor()
+        
+        # Get current values for history
+        cur.execute('''
+            SELECT initial_income, initial_savings, initial_debt, balance_offset
+            FROM user_balance_adjustments 
+            WHERE user_id = %s
+        ''', (user_id,))
+        
+        row = cur.fetchone()
+        
+        if not row:
+            # Create initial entry with zeros
+            cur.execute('''
+                INSERT INTO user_balance_adjustments (user_id)
+                VALUES (%s)
+                RETURNING initial_income, initial_savings, initial_debt, balance_offset
+            ''', (user_id,))
+            row = cur.fetchone()
+        
+        # Map column names to adjustment types
+        column_map = {
+            'income': 'initial_income',
+            'savings': 'initial_savings',
+            'debt': 'initial_debt',
+            'balance': 'balance_offset'
+        }
+        
+        column_name = column_map[adjustment_type]
+        previous_value = float(row[['income', 'savings', 'debt', 'balance'].index(adjustment_type)])
+        
+        # Update the adjustment
+        cur.execute(f'''
+            UPDATE user_balance_adjustments 
+            SET {column_name} = %s, last_updated = CURRENT_TIMESTAMP
+            WHERE user_id = %s
+            RETURNING {column_name}
+        ''', (amount, user_id))
+        
+        new_value = float(cur.fetchone()[0])
+        
+        # Add to history
+        cur.execute('''
+            INSERT INTO balance_adjustment_history 
+            (user_id, adjustment_type, amount, previous_value, new_value, note)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (user_id, adjustment_type, amount, previous_value, new_value, note))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{adjustment_type.capitalize()} adjusted successfully',
+            'previous_value': previous_value,
+            'new_value': new_value,
+            'type': adjustment_type
+        })
+        
+    except Exception as e:
+        print(f"❌ Error setting adjustment: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/get-adjustments', methods=['GET'])
+def get_adjustments():
+    """Get current balance adjustments for a user"""
+    try:
+        user_id = request.args.get('user_id', type=int)
+        if not user_id:
+            return jsonify({'error': 'user_id parameter is required'}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cur = conn.cursor()
+        
+        # Get current adjustments (create if doesn't exist)
+        cur.execute('''
+            SELECT initial_income, initial_savings, initial_debt, balance_offset,
+                   last_updated, created_at
+            FROM user_balance_adjustments 
+            WHERE user_id = %s
+        ''', (user_id,))
+        
+        row = cur.fetchone()
+        
+        if row:
+            adjustments = {
+                'initial_income': float(row[0]),
+                'initial_savings': float(row[1]),
+                'initial_debt': float(row[2]),
+                'balance_offset': float(row[3]),
+                'last_updated': row[4].isoformat() if row[4] else None,
+                'created_at': row[5].isoformat() if row[5] else None,
+                'exists': True
+            }
+        else:
+            # Create default entry
+            cur.execute('''
+                INSERT INTO user_balance_adjustments (user_id)
+                VALUES (%s)
+                RETURNING initial_income, initial_savings, initial_debt, 
+                         balance_offset, last_updated, created_at
+            ''', (user_id,))
+            
+            row = cur.fetchone()
+            adjustments = {
+                'initial_income': float(row[0]),
+                'initial_savings': float(row[1]),
+                'initial_debt': float(row[2]),
+                'balance_offset': float(row[3]),
+                'last_updated': row[4].isoformat() if row[4] else None,
+                'created_at': row[5].isoformat() if row[5] else None,
+                'exists': True
+            }
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify(adjustments)
+        
+    except Exception as e:
+        print(f"❌ Error getting adjustments: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
     
 @app.route('/api/complete-database-reset')
 def complete_database_reset():

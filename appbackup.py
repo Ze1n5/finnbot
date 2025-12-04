@@ -2207,19 +2207,22 @@ def serve_mini_app():
     </div>
 
     <script>
-        // Initialize Telegram WebApp
-        Telegram.WebApp.ready();
-        Telegram.WebApp.expand();
+    // Initialize Telegram WebApp
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
 
-        let currentUserData = null;
+    let currentUserData = null;
 
-        // ========== PAGINATION VARIABLES ==========
-        let currentTransactionPage = 1;
-        let transactionsLoading = false;
-        let hasMoreTransactions = true;
+    // ========== PAGINATION VARIABLES ==========
+    let currentTransactionPage = 1;
+    let transactionsLoading = false;
+    let hasMoreTransactions = true;
 
-        // Navigation functionality
-        // Navigation functionality
+    // ========== SUMMARY PAGE VARIABLES ==========
+    let currentMonthFilter = 'last30';
+    let availableMonthsData = [];
+
+    // Navigation functionality
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
@@ -2252,41 +2255,50 @@ def serve_mini_app():
                         if (user_id) {
                             console.log('🚀 Loading category summary for user:', user_id);
                             try {
+                                // FIRST: Load monthly data to populate the filter
+                                await loadMonthlyData(user_id);
+                                
+                                // SECOND: Setup the filter with the loaded data
+                                setupMonthFilter(user_id);
+                                
+                                // THIRD: Load the summary data
                                 await loadCategorySummary(user_id);
                                 
-                                // Set up month filter after loading initial data
-                                setTimeout(() => {
-                                    setupMonthFilter(user_id);
-                                }, 100);
                             } catch (error) {
                                 console.error('Error loading summary:', error);
-                                document.getElementById('categorySummaryContent').innerHTML = 
-                                    `<div class="error">Error loading summary: ${error.message}</div>`;
+                                const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                                if (contentArea) {
+                                    contentArea.innerHTML = `<div class="error">Error loading summary: ${error.message}</div>`;
+                                }
                             }
                         } else {
                             console.log('❌ No user_id found for category summary');
-                            document.getElementById('categorySummaryContent').innerHTML = 
-                                `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
+                            const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                            if (contentArea) {
+                                contentArea.innerHTML = `<div class="error">Cannot identify user. Please open via Telegram.</div>`;
+                            }
                         }
                     }
                 });
             });
         }
 
-        // Load category summary data
-        // Load category summary data for LAST 30 DAYS
+        // ========== SUMMARY PAGE FUNCTIONS ==========
+                // Load category summary data
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // First, load user categories
+                // Don't load monthly data here - it's already loaded in setupNavigation
+                // await loadMonthlyData(user_id);
+                
+                // Then load categories and transactions
                 const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
                 if (!categoriesResponse.ok) {
                     throw new Error('Failed to load categories');
                 }
                 const categoriesData = await categoriesResponse.json();
                 
-                // Then load ALL transactions
                 const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
                 if (!transactionsResponse.ok) {
                     throw new Error('Failed to load transactions');
@@ -2296,213 +2308,183 @@ def serve_mini_app():
                 const allTransactions = transactionsData.transactions || [];
                 const categories = categoriesData.categories || [];
                 
-                // Filter transactions for last 30 days
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                // Filter transactions based on current filter
+                let filteredTransactions = [];
+                let dateRange = '';
                 
-                const last30DaysTransactions = allTransactions.filter(transaction => {
-                    if (!transaction.timestamp && !transaction.date) return false;
+                if (currentMonthFilter === 'last30') {
+                    // Last 30 days
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                     
-                    const transactionDate = new Date(transaction.timestamp || transaction.date);
-                    return transactionDate >= thirtyDaysAgo;
-                });
+                    filteredTransactions = allTransactions.filter(transaction => {
+                        if (!transaction.timestamp && !transaction.date) return false;
+                        const transactionDate = new Date(transaction.timestamp || transaction.date);
+                        return transactionDate >= thirtyDaysAgo;
+                    });
+                    
+                    const today = new Date();
+                    const thirtyDaysAgoDisplay = new Date(today);
+                    thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
+                    dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                } else {
+                    // Specific month
+                    const selectedMonth = availableMonthsData.find(m => m.month_key === currentMonthFilter);
+                    if (selectedMonth) {
+                        filteredTransactions = allTransactions.filter(transaction => {
+                            if (!transaction.timestamp && !transaction.date) return false;
+                            const transactionDate = new Date(transaction.timestamp || transaction.date);
+                            const transactionMonthKey = transactionDate.toISOString().substring(0, 7);
+                            return transactionMonthKey === currentMonthFilter;
+                        });
+                        dateRange = selectedMonth.month_display;
+                    }
+                }
                 
-                console.log('📊 Last 30 days data:');
-                console.log('Total transactions:', allTransactions.length);
-                console.log('Last 30 days transactions:', last30DaysTransactions.length);
-                console.log('Transaction types found:', [...new Set(last30DaysTransactions.map(t => t.type))]);
+                console.log(`📊 ${dateRange} data:`, filteredTransactions.length, 'transactions');
+                console.log('Available months for filter:', availableMonthsData.length);
                 
-                // Calculate date range for display
-                const today = new Date();
-                const thirtyDaysAgoDisplay = new Date(today);
-                thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
-                
-                const dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                
-                // Render summary with last 30 days data
-                renderCategorySummary(last30DaysTransactions, categories, dateRange);
+                // Render the summary
+                renderCategorySummary(filteredTransactions, categories, dateRange);
                 
             } catch (error) {
                 console.error('❌ Error loading category summary:', error);
-                document.getElementById('categorySummaryContent').innerHTML = 
-                    `<div class="error">Error loading category data: ${error.message}</div>`;
+                const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                if (contentArea) {
+                    contentArea.innerHTML = `<div class="error">Error loading category data: ${error.message}</div>`;
+                }
             }
         }
 
-        // Load category summary for a specific month
-        async function loadMonthSummary(user_id, monthKey, availableMonths) {
+        // Load monthly data
+        async function loadMonthlyData(user_id) {
             try {
-                console.log(`📅 Loading month ${monthKey} summary for user:`, user_id);
-                
-                // Find the selected month from available months
-                const selectedMonth = availableMonths.find(m => m.month_key === monthKey);
-                if (!selectedMonth) {
-                    throw new Error('Month not found');
-                }
-                
-                // First, load user categories
-                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
-                if (!categoriesResponse.ok) {
-                    throw new Error('Failed to load categories');
-                }
-                const categoriesData = await categoriesResponse.json();
-                
-                // Then load ALL transactions
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
-                if (!transactionsResponse.ok) {
-                    throw new Error('Failed to load transactions');
-                }
-                const transactionsData = await transactionsResponse.json();
-                
-                const allTransactions = transactionsData.transactions || [];
-                const categories = categoriesData.categories || [];
-                
-                // Filter transactions for the selected month
-                const selectedMonthTransactions = allTransactions.filter(transaction => {
-                    if (!transaction.timestamp && !transaction.date) return false;
-                    
-                    const transactionDate = new Date(transaction.timestamp || transaction.date);
-                    const transactionMonthKey = transactionDate.toISOString().substring(0, 7); // YYYY-MM
-                    
-                    return transactionMonthKey === monthKey;
-                });
-                
-                console.log(`📊 ${selectedMonth.month_display} data:`);
-                console.log('Total transactions:', selectedMonthTransactions.length);
-                console.log('Transaction types found:', [...new Set(selectedMonthTransactions.map(t => t.type))]);
-                
-                // Render summary for the selected month
-                renderCategorySummary(selectedMonthTransactions, categories, selectedMonth.month_display);
-                
-            } catch (error) {
-                console.error('❌ Error loading month summary:', error);
-                document.getElementById('categorySummaryContent').innerHTML = 
-                    `<div class="error">Error loading month data: ${error.message}</div>`;
-            }
-        }
-
-        // Add month filter functionality
-        async function setupMonthFilter(user_id) {
-            try {
-                // Load monthly data from API
                 const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
-                if (!monthlyResponse.ok) {
-                    throw new Error('Failed to load monthly data');
+                if (monthlyResponse.ok) {
+                    const monthlyData = await monthlyResponse.json();
+                    availableMonthsData = monthlyData.monthly_data || [];
+                    console.log('📅 Loaded monthly data:', availableMonthsData.length, 'months');
                 }
-                
-                const monthlyData = await monthlyResponse.json();
-                const months = monthlyData.monthly_data || [];
-                
-                if (months.length === 0) {
-                    console.log('No monthly data available');
-                    return;
-                }
-                
-                console.log('📅 Available months:', months);
-                
-                // Create month filter dropdown
-                const container = document.getElementById('categorySummaryContent');
-                const currentHTML = container.innerHTML;
-                
-                // Create month filter HTML
-                const monthFilterHTML = `
-                    <div style="margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
-                            <div style="font-size: 12px; color: #8e8e93;">${months.length} months available</div>
-                        </div>
-                        <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;">
-                            <button class="month-filter-btn active" data-month="last30" style="
+            } catch (e) {
+                console.log('Could not load monthly data:', e);
+                availableMonthsData = [];
+            }
+        }
+
+        // Setup month filter - this only needs to be called once
+        function setupMonthFilter(user_id) {
+            const container = document.getElementById('categorySummaryContent');
+            
+            // Check if filter already exists
+            if (container.querySelector('#monthFilterContainer')) {
+                console.log('Month filter already exists, updating active state');
+                updateMonthFilterActiveState();
+                return;
+            }
+            
+            console.log('Creating month filter for', availableMonthsData.length, 'months');
+            
+            // Create month filter HTML
+            const filterHTML = `
+                <div id="monthFilterContainer" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                        <div style="font-size: 12px; color: #8e8e93;">${availableMonthsData.length} months available</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
+                        <button class="month-filter-btn ${currentMonthFilter === 'last30' ? 'active' : ''}" data-month="last30" style="
+                            padding: 8px 16px;
+                            ${currentMonthFilter === 'last30' ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            white-space: nowrap;
+                            flex-shrink: 0;
+                            transition: all 0.2s ease;
+                        ">
+                            Last 30 Days
+                        </button>
+                        ${availableMonthsData.map(month => `
+                            <button class="month-filter-btn ${currentMonthFilter === month.month_key ? 'active' : ''}" data-month="${month.month_key}" style="
                                 padding: 8px 16px;
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                color: white;
-                                border: none;
+                                ${currentMonthFilter === month.month_key ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
                                 border-radius: 12px;
                                 font-size: 12px;
                                 font-weight: 500;
                                 cursor: pointer;
                                 white-space: nowrap;
                                 flex-shrink: 0;
+                                transition: all 0.2s ease;
                             ">
-                                Last 30 Days
+                                ${month.month_display}
                             </button>
-                            ${months.map(month => `
-                                <button class="month-filter-btn" data-month="${month.month_key}" style="
-                                    padding: 8px 16px;
-                                    background: white;
-                                    color: #1d1d1f;
-                                    border: 1px solid #e9ecef;
-                                    border-radius: 12px;
-                                    font-size: 12px;
-                                    font-weight: 500;
-                                    cursor: pointer;
-                                    white-space: nowrap;
-                                    flex-shrink: 0;
-                                ">
-                                    ${month.month_display}
-                                </button>
-                            `).join('')}
-                        </div>
+                        `).join('')}
                     </div>
-                `;
-                
-                // Insert month filter at the top
-                container.innerHTML = monthFilterHTML + currentHTML;
-                
-                // Add click handlers for month filter buttons
-                document.querySelectorAll('.month-filter-btn').forEach(button => {
-                    button.addEventListener('click', async function() {
-                        // Remove active class from all buttons
-                        document.querySelectorAll('.month-filter-btn').forEach(btn => {
-                            btn.classList.remove('active');
-                            btn.style.background = 'white';
-                            btn.style.color = '#1d1d1f';
-                            btn.style.border = '1px solid #e9ecef';
-                        });
-                        
-                        // Add active class to clicked button
-                        this.classList.add('active');
-                        this.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                        this.style.color = 'white';
-                        this.style.border = 'none';
-                        
-                        const selectedMonth = this.getAttribute('data-month');
-                        
-                        if (selectedMonth === 'last30') {
-                            // Reload last 30 days data
-                            await loadCategorySummary(user_id);
-                        } else {
-                            // Load specific month data
-                            await loadMonthSummary(user_id, selectedMonth, months);
-                        }
-                    });
+                </div>
+                <div id="summaryContentArea">
+                    <div class="loading">Loading summary data...</div>
+                </div>
+            `;
+            
+            container.innerHTML = filterHTML;
+            
+            // Add event listeners to filter buttons
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const selectedMonth = this.getAttribute('data-month');
+                    if (selectedMonth === currentMonthFilter) return;
+                    
+                    console.log('Month filter clicked:', selectedMonth);
+                    currentMonthFilter = selectedMonth;
+                    
+                    // Update active state
+                    updateMonthFilterActiveState();
+                    
+                    // Reload summary
+                    loadCategorySummary(user_id);
                 });
-                
-            } catch (error) {
-                console.error('Error setting up month filter:', error);
-            }
+            });
         }
 
-        // Render category summary - FIXED FOR SAVINGS
-        // Render category summary with totals at the top of each section - FIXED FOR SAVINGS
-        // Render category summary with totals at the top of each section - FOR LAST 30 DAYS
-        function renderCategorySummary(transactions, userCategories, dateRange = 'Last 30 days') {
-            const container = document.getElementById('categorySummaryContent');
+        // Update active state on month filter buttons
+        function updateMonthFilterActiveState() {
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                const buttonMonth = button.getAttribute('data-month');
+                
+                if (buttonMonth === currentMonthFilter) {
+                    button.classList.add('active');
+                    button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    button.style.color = 'white';
+                    button.style.border = 'none';
+                } else {
+                    button.classList.remove('active');
+                    button.style.background = 'white';
+                    button.style.color = '#1d1d1f';
+                    button.style.border = '1px solid #e9ecef';
+                }
+            });
+        }
+
+        // Render category summary - only updates the content area, not the filter
+        function renderCategorySummary(transactions, userCategories, dateRange) {
+            const contentArea = document.getElementById('summaryContentArea');
+            
+            if (!contentArea) {
+                console.error('Content area not found!');
+                return;
+            }
             
             if (!transactions || transactions.length === 0) {
-                container.innerHTML = `
+                contentArea.innerHTML = `
                     <div class="empty-summary">
                         <div class="emoji">📊</div>
-                        <div class="message">No transactions in the last 30 days</div>
+                        <div class="message">No transactions in ${dateRange.toLowerCase()}</div>
                         <div class="submessage">Add some transactions to see your summary</div>
                     </div>
                 `;
                 return;
             }
-            
-            console.log('🔍 DEBUG - Last 30 days transactions for summary:', transactions);
-            console.log('🔍 DEBUG - User categories:', userCategories);
-            console.log('🔍 DEBUG - Date range:', dateRange);
             
             // Group transactions by category and type
             const categoryData = {};
@@ -2519,14 +2501,14 @@ def serve_mini_app():
                 };
             });
             
-            // Calculate section totals for LAST 30 DAYS
+            // Calculate section totals
             let totalSpending = 0;
             let totalIncome = 0;
             let totalSavings = 0;
             let totalDebt = 0;
             let totalDebtReturn = 0;
             
-            // Process all transactions (already filtered to last 30 days)
+            // Process all transactions
             transactions.forEach(transaction => {
                 const category = transaction.category || 'Other';
                 const type = transaction.type || 'expense';
@@ -2567,16 +2549,8 @@ def serve_mini_app():
                 }
                 else if (type === 'savings_withdraw') {
                     categoryData[category].savings_withdraw += amount;
-                    totalSavings -= amount; // Withdrawal reduces total savings
+                    totalSavings -= amount;
                 }
-            });
-            
-            console.log('💰 Last 30 days section totals:', {
-                totalSpending: totalSpending,
-                totalIncome: totalIncome,
-                totalSavings: totalSavings,
-                totalDebt: totalDebt,
-                totalDebtReturn: totalDebtReturn
             });
             
             // Create summary HTML
@@ -2590,7 +2564,7 @@ def serve_mini_app():
                 </div>
             `;
             
-            // Spending Categories (expense type)
+            // Spending Categories
             const spendingCategories = Object.entries(categoryData)
                 .filter(([category, data]) => data.expense > 0)
                 .sort((a, b) => b[1].expense - a[1].expense);
@@ -2612,20 +2586,6 @@ def serve_mini_app():
                                 <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
-                    </div>
-                `;
-            } else {
-                summaryHTML += `
-                    <div class="summary-section">
-                        <div class="summary-header">
-                            🛒 Spending
-                            <span style="float: right; font-weight: 600; color: #8e8e93;">
-                                0₴
-                            </span>
-                        </div>
-                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No spending in the last 30 days
-                        </div>
                     </div>
                 `;
             }
@@ -2652,20 +2612,6 @@ def serve_mini_app():
                                 <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
-                    </div>
-                `;
-            } else {
-                summaryHTML += `
-                    <div class="summary-section">
-                        <div class="summary-header">
-                            💰 Income
-                            <span style="float: right; font-weight: 600; color: #8e8e93;">
-                                0₴
-                            </span>
-                        </div>
-                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No income in the last 30 days
-                        </div>
                     </div>
                 `;
             }
@@ -2695,20 +2641,6 @@ def serve_mini_app():
                                 <div class="category-summary-amount neutral">${data.savings.toLocaleString()}₴</div>
                             </div>
                         `).join('')}
-                    </div>
-                `;
-            } else {
-                summaryHTML += `
-                    <div class="summary-section">
-                        <div class="summary-header">
-                            🏦 Savings
-                            <span style="float: right; font-weight: 600; color: #8e8e93;">
-                                0₴
-                            </span>
-                        </div>
-                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No savings in the last 30 days
-                        </div>
                     </div>
                 `;
             }
@@ -2746,30 +2678,16 @@ def serve_mini_app():
                         `}).join('')}
                     </div>
                 `;
-            } else {
-                summaryHTML += `
-                    <div class="summary-section">
-                        <div class="summary-header">
-                            💳 Debt
-                            <span style="float: right; font-weight: 600; color: #8e8e93;">
-                                0₴
-                            </span>
-                        </div>
-                        <div style="text-align: center; padding: 10px; color: #8e8e93; font-size: 12px;">
-                            No debt activity in the last 30 days
-                        </div>
-                    </div>
-                `;
             }
             
-            // Add a final summary card with overall totals for LAST 30 DAYS
+            // Add overall summary
             const overallBalance = totalIncome - totalSpending - totalSavings + (totalDebt - totalDebtReturn);
             const overallColor = overallBalance >= 0 ? '#34c759' : '#ff3b30';
             const overallSign = overallBalance >= 0 ? '+' : '';
             
             summaryHTML += `
                 <div class="stats-card" style="margin-top: 20px;">
-                    <div class="stats-header">📊 Last 30 Days Summary</div>
+                    <div class="stats-header">📊 ${dateRange} Summary</div>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <div class="stat-value" style="color: #34c759;">+${totalIncome.toLocaleString()}₴</div>
@@ -2789,288 +2707,727 @@ def serve_mini_app():
                         </div>
                     </div>
                     <div style="text-align: center; margin-top: 16px; padding: 12px; background: ${overallColor}10; border-radius: 12px; border: 1px solid ${overallColor}30;">
-                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Net Financial Position (30 days)</div>
+                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Net Financial Position</div>
                         <div style="font-size: 20px; font-weight: 600; color: ${overallColor};">${overallSign}${overallBalance.toLocaleString()}₴</div>
                     </div>
                 </div>
             `;
             
-            container.innerHTML = summaryHTML;
+            contentArea.innerHTML = summaryHTML;
         }
 
-        // Load financial data and transactions
-        async function loadFinancialData() {
+        // ========== SUMMARY PAGE FUNCTIONS ==========
+        // Load category summary data
+        async function loadCategorySummary(user_id) {
             try {
-                // Reset pagination when loading fresh data
-                currentTransactionPage = 1;
-                hasMoreTransactions = true;
+                console.log('🔍 Loading category summary for user:', user_id);
                 
-                const user = Telegram.WebApp.initDataUnsafe?.user;
-                const user_id = user?.id;
+                // First, load monthly data for filter
+                await loadMonthlyData(user_id);
                 
-                if (!user_id) {
-                    showError('Cannot identify user. Please open via Telegram.');
-                    return;
+                // Then load categories and transactions
+                const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
+                if (!categoriesResponse.ok) {
+                    throw new Error('Failed to load categories');
                 }
-
-                const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
-                const financeData = await financeResponse.json();
+                const categoriesData = await categoriesResponse.json();
                 
-                if (financeResponse.ok) {
-                    currentUserData = financeData;
-                    updateBalancePage(financeData);
-                    updateStatisticsPage(financeData);
-                    
-                    // Load first page of transactions
-                    await loadTransactionsPage(user_id, 1);
-                    
-                    console.log('✅ Financial data loaded');
-                    
-                } else {
-                    showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
+                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&limit=1000`);
+                if (!transactionsResponse.ok) {
+                    throw new Error('Failed to load transactions');
                 }
-                
-            } catch (error) {
-                console.error('Error loading data:', error);
-                showError('Network error - please check your connection');
-            }
-        }
-
-        async function loadTransactionsPage(user_id, page, append = false) {
-            if (transactionsLoading) return;
-            
-            transactionsLoading = true;
-            
-            try {
-                const limit = 10; // Load 10 transactions per page
-                const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&page=${page}&limit=${limit}`);
                 const transactionsData = await transactionsResponse.json();
                 
-                if (transactionsResponse.ok) {
-                    const transactions = transactionsData.transactions || [];
-                    hasMoreTransactions = transactionsData.has_more;
+                const allTransactions = transactionsData.transactions || [];
+                const categories = categoriesData.categories || [];
+                
+                // Filter transactions based on current filter
+                let filteredTransactions = [];
+                let dateRange = '';
+                
+                if (currentMonthFilter === 'last30') {
+                    // Last 30 days
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                     
-                    if (append) {
-                        // Append to existing transactions
-                        const existingTransactions = document.getElementById('transactionsContainer').children;
-                        const currentTransactions = Array.from(existingTransactions).filter(el => 
-                            !el.classList.contains('loading-message')
-                        );
-                        
-                        // Remove "No transactions" message if it exists
-                        const noTransactionsMsg = document.querySelector('.no-transactions-message');
-                        if (noTransactionsMsg) {
-                            noTransactionsMsg.remove();
-                        }
-                        
-                        renderTransactions(transactions, true);
-                    } else {
-                        // Replace transactions
-                        renderTransactions(transactions, false);
-                    }
+                    filteredTransactions = allTransactions.filter(transaction => {
+                        if (!transaction.timestamp && !transaction.date) return false;
+                        const transactionDate = new Date(transaction.timestamp || transaction.date);
+                        return transactionDate >= thirtyDaysAgo;
+                    });
                     
-                    // Show/hide load more button
-                    const loadMoreContainer = document.getElementById('loadMoreContainer');
-                    if (hasMoreTransactions) {
-                        loadMoreContainer.style.display = 'block';
-                    } else {
-                        loadMoreContainer.style.display = 'none';
-                    }
-                    
+                    const today = new Date();
+                    const thirtyDaysAgoDisplay = new Date(today);
+                    thirtyDaysAgoDisplay.setDate(today.getDate() - 30);
+                    dateRange = `${thirtyDaysAgoDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
                 } else {
-                    showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
+                    // Specific month
+                    const selectedMonth = availableMonthsData.find(m => m.month_key === currentMonthFilter);
+                    if (selectedMonth) {
+                        filteredTransactions = allTransactions.filter(transaction => {
+                            if (!transaction.timestamp && !transaction.date) return false;
+                            const transactionDate = new Date(transaction.timestamp || transaction.date);
+                            const transactionMonthKey = transactionDate.toISOString().substring(0, 7);
+                            return transactionMonthKey === currentMonthFilter;
+                        });
+                        dateRange = selectedMonth.month_display;
+                    }
                 }
+                
+                console.log(`📊 ${dateRange} data:`, filteredTransactions.length, 'transactions');
+                
+                // Render the summary
+                renderCategorySummary(filteredTransactions, categories, dateRange);
                 
             } catch (error) {
-                console.error('Error loading transactions:', error);
-                showError('Failed to load transactions');
-            } finally {
-                transactionsLoading = false;
-            }
-        }
-        
-        function updateBalancePage(data) {
-            // Update balance
-            const balanceElement = document.getElementById('balanceAmount');
-            if (data.balance !== undefined) {
-                balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
-                balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
-            }
-            
-            // Update income and expenses
-            if (data.income !== undefined) {
-                document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
-            }
-            if (data.spending !== undefined) {
-                document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
-            }
-        }
-        
-        function updateStatisticsPage(data) {
-            // Update main statistics
-            if (data.income !== undefined) {
-                document.getElementById('totalIncome').textContent = `+${(data.income || 0).toLocaleString()}₴`;
-            }
-            if (data.spending !== undefined) {
-                document.getElementById('totalExpenses').textContent = `${(data.spending || 0).toLocaleString()}₴`;
-            }
-            if (data.savings !== undefined) {
-                document.getElementById('totalSavings').textContent = `${(data.savings || 0).toLocaleString()}₴`;
-            }
-            if (data.total_debt !== undefined) {
-                const debtElement = document.getElementById('totalDebt');
-                debtElement.textContent = `${(data.total_debt || 0).toLocaleString()}₴`;
-                debtElement.style.color = (data.total_debt || 0) > 0 ? '#ff3b30' : '#34c759';
-            }
-            
-            // Update averages in statistics
-            if (data.daily_income_avg !== undefined) {
-                document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg || 0).toLocaleString()}₴`;
-            }
-            if (data.daily_expense_avg !== undefined) {
-                document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg || 0).toLocaleString()}₴`;
-            }
-            if (data.daily_net_avg !== undefined) {
-                const netAvgElement = document.getElementById('statsDailyNet');
-                const netAvg = data.daily_net_avg || 0;
-                netAvgElement.textContent = `${netAvg >= 0 ? '+' : ''}${Math.round(netAvg).toLocaleString()}₴`;
-                netAvgElement.style.color = netAvg >= 0 ? '#34c759' : '#ff3b30';
-            }
-            if (data.tracking_days !== undefined) {
-                document.getElementById('trackingDays').textContent = data.tracking_days || 0;
-            }
-            
-            // Update financial health in statistics
-            if (data.financial_health !== null && data.financial_health_emoji !== null) {
-                document.getElementById('statsHealthDisplay').textContent = 
-                    `${data.financial_health_emoji} ${data.financial_health || 0}%`;
-                
-                const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
-                updateHealthIndicatorColor(data.financial_health || 0, statsHealthIndicator);
-            }
-        }
-        
-        function updateHealthIndicatorColor(score, element) {
-            if (score >= 80) {
-                element.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
-            } else if (score >= 60) {
-                element.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
-            } else if (score >= 40) {
-                element.style.background = 'linear-gradient(135deg, #FF5722 0%, #D84315 100%)';
-            } else {
-                element.style.background = 'linear-gradient(135deg, #F44336 0%, #C62828 100%)';
-            }
-        }
-        
-        function renderTransactions(transactions, append = false) {
-            const container = document.getElementById('transactionsContainer');
-            
-            if (!transactions || transactions.length === 0) {
-                if (!append) {
-                    container.innerHTML = `
-                        <div class="transaction no-transactions-message">
-                            <div class="transaction-info">
-                                <div class="transaction-emoji">📭</div>
-                                <div class="transaction-details">
-                                    <div class="transaction-title">No transactions yet</div>
-                                    <div class="transaction-category">Start adding transactions in the bot</div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                console.error('❌ Error loading category summary:', error);
+                const contentArea = document.getElementById('summaryContentArea') || document.getElementById('categorySummaryContent');
+                if (contentArea) {
+                    contentArea.innerHTML = `<div class="error">Error loading category data: ${error.message}</div>`;
                 }
+            }
+        }
+
+                // Load monthly data
+        async function loadMonthlyData(user_id) {
+            try {
+                console.log('📅 Loading monthly data for user:', user_id);
+                const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
+                if (monthlyResponse.ok) {
+                    const monthlyData = await monthlyResponse.json();
+                    availableMonthsData = monthlyData.monthly_data || [];
+                    console.log('📅 Loaded monthly data:', availableMonthsData.length, 'months');
+                    console.log('Month names:', availableMonthsData.map(m => m.month_display));
+                } else {
+                    console.error('Failed to load monthly data:', monthlyResponse.status);
+                    availableMonthsData = [];
+                }
+            } catch (e) {
+                console.log('Could not load monthly data:', e);
+                availableMonthsData = [];
+            }
+        }
+
+        // Setup month filter - this only needs to be called once
+        function setupMonthFilter(user_id) {
+            const container = document.getElementById('categorySummaryContent');
+            
+            // Check if filter already exists
+            if (container.querySelector('#monthFilterContainer')) {
+                console.log('Month filter already exists, updating active state');
+                updateMonthFilterActiveState();
                 return;
             }
             
-            let transactionsHTML = '';
+            console.log('Creating month filter for', availableMonthsData.length, 'months');
             
+            // Create month filter HTML
+            const filterHTML = `
+                <div id="monthFilterContainer" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="font-size: 14px; font-weight: 500; color: #1d1d1f;">Filter by Month</div>
+                        <div style="font-size: 12px; color: #8e8e93;">${availableMonthsData.length} months available</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;" id="monthFilterButtons">
+                        <button class="month-filter-btn ${currentMonthFilter === 'last30' ? 'active' : ''}" data-month="last30" style="
+                            padding: 8px 16px;
+                            ${currentMonthFilter === 'last30' ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
+                            border-radius: 12px;
+                            font-size: 12px;
+                            font-weight: 500;
+                            cursor: pointer;
+                            white-space: nowrap;
+                            flex-shrink: 0;
+                            transition: all 0.2s ease;
+                        ">
+                            Last 30 Days
+                        </button>
+                        ${availableMonthsData.map(month => `
+                            <button class="month-filter-btn ${currentMonthFilter === month.month_key ? 'active' : ''}" data-month="${month.month_key}" style="
+                                padding: 8px 16px;
+                                ${currentMonthFilter === month.month_key ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;' : 'background: white; color: #1d1d1f; border: 1px solid #e9ecef;'}
+                                border-radius: 12px;
+                                font-size: 12px;
+                                font-weight: 500;
+                                cursor: pointer;
+                                white-space: nowrap;
+                                flex-shrink: 0;
+                                transition: all 0.2s ease;
+                            ">
+                                ${month.month_display}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+                <div id="summaryContentArea">
+                    <div class="loading">Loading summary data...</div>
+                </div>
+            `;
+            
+            container.innerHTML = filterHTML;
+            
+            // Add event listeners to filter buttons
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const selectedMonth = this.getAttribute('data-month');
+                    if (selectedMonth === currentMonthFilter) return;
+                    
+                    console.log('Month filter clicked:', selectedMonth);
+                    currentMonthFilter = selectedMonth;
+                    
+                    // Update active state
+                    updateMonthFilterActiveState();
+                    
+                    // Reload summary
+                    loadCategorySummary(user_id);
+                });
+            });
+        }
+
+        // Update active state on month filter buttons
+        function updateMonthFilterActiveState() {
+            document.querySelectorAll('.month-filter-btn').forEach(button => {
+                const buttonMonth = button.getAttribute('data-month');
+                
+                if (buttonMonth === currentMonthFilter) {
+                    button.classList.add('active');
+                    button.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    button.style.color = 'white';
+                    button.style.border = 'none';
+                } else {
+                    button.classList.remove('active');
+                    button.style.background = 'white';
+                    button.style.color = '#1d1d1f';
+                    button.style.border = '1px solid #e9ecef';
+                }
+            });
+        }
+
+        // Render category summary - only updates the content area, not the filter
+        function renderCategorySummary(transactions, userCategories, dateRange) {
+            const contentArea = document.getElementById('summaryContentArea');
+            
+            if (!contentArea) {
+                console.error('Content area not found!');
+                return;
+            }
+            
+            if (!transactions || transactions.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="empty-summary">
+                        <div class="emoji">📊</div>
+                        <div class="message">No transactions in ${dateRange.toLowerCase()}</div>
+                        <div class="submessage">Add some transactions to see your summary</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Group transactions by category and type
+            const categoryData = {};
+            
+            // Initialize with user categories
+            userCategories.forEach(category => {
+                categoryData[category] = {
+                    income: 0,
+                    expense: 0,
+                    savings: 0,
+                    debt: 0,
+                    debt_return: 0,
+                    savings_withdraw: 0
+                };
+            });
+            
+            // Calculate section totals
+            let totalSpending = 0;
+            let totalIncome = 0;
+            let totalSavings = 0;
+            let totalDebt = 0;
+            let totalDebtReturn = 0;
+            
+            // Process all transactions
             transactions.forEach(transaction => {
-                const amount = transaction.amount;
-                const isPositive = amount >= 0;
-                const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
+                const category = transaction.category || 'Other';
+                const type = transaction.type || 'expense';
+                const amount = parseFloat(transaction.amount) || 0;
                 
-                const displayName = transaction.name || transaction.category || 'Transaction';
-                
-                // Format the date
-                let dateDisplay = '';
-                if (transaction.timestamp || transaction.date) {
-                    const transactionDate = new Date(transaction.timestamp || transaction.date);
-                    dateDisplay = formatTransactionDate(transactionDate);
+                // Initialize category if it doesn't exist
+                if (!categoryData[category]) {
+                    categoryData[category] = {
+                        income: 0,
+                        expense: 0,
+                        savings: 0,
+                        debt: 0,
+                        debt_return: 0,
+                        savings_withdraw: 0
+                    };
                 }
                 
-                transactionsHTML += `
-                    <div class="transaction">
-                        <div class="transaction-info">
-                            <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
-                            <div class="transaction-details">
-                                <div class="transaction-title">${displayName}</div>
-                                <div class="transaction-date">${dateDisplay}</div>
-                            </div>
+                // Handle different transaction types
+                if (type === 'savings') {
+                    categoryData[category].savings += Math.abs(amount);
+                    totalSavings += Math.abs(amount);
+                }
+                else if (type === 'income') {
+                    categoryData[category].income += amount;
+                    totalIncome += amount;
+                }
+                else if (type === 'expense') {
+                    categoryData[category].expense += Math.abs(amount);
+                    totalSpending += Math.abs(amount);
+                }
+                else if (type === 'debt') {
+                    categoryData[category].debt += amount;
+                    totalDebt += amount;
+                }
+                else if (type === 'debt_return') {
+                    categoryData[category].debt_return += Math.abs(amount);
+                    totalDebtReturn += Math.abs(amount);
+                }
+                else if (type === 'savings_withdraw') {
+                    categoryData[category].savings_withdraw += amount;
+                    totalSavings -= amount;
+                }
+            });
+            
+            // Create summary HTML
+            let summaryHTML = '';
+            
+            // Add date range header
+            summaryHTML += `
+                <div style="text-align: center; margin-bottom: 20px; padding: 12px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="font-size: 14px; color: #8e8e93; margin-bottom: 4px;">📅 Time Period</div>
+                    <div style="font-size: 16px; font-weight: 600; color: #1d1d1f;">${dateRange}</div>
+                </div>
+            `;
+            
+            // Spending Categories
+            const spendingCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.expense > 0)
+                .sort((a, b) => b[1].expense - a[1].expense);
+            
+            if (spendingCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            🛒 Spending
+                            <span style="float: right; font-weight: 600; color: #ff3b30;">
+                                -${totalSpending.toLocaleString()}₴
+                            </span>
                         </div>
-                        <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
-                            ${amountDisplay}
+                        ${spendingCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount negative">-${data.expense.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Income Categories
+            const incomeCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.income > 0)
+                .sort((a, b) => b[1].income - a[1].income);
+            
+            if (incomeCategories.length > 0) {
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💰 Income
+                            <span style="float: right; font-weight: 600; color: #34c759;">
+                                +${totalIncome.toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${incomeCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount positive">+${data.income.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Savings Categories
+            const savingsCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.savings > 0)
+                .sort((a, b) => b[1].savings - a[1].savings);
+            
+            if (savingsCategories.length > 0) {
+                const savingsColor = totalSavings >= 0 ? '#007AFF' : '#ff3b30';
+                const savingsSign = totalSavings >= 0 ? '' : '-';
+                
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            🏦 Savings
+                            <span style="float: right; font-weight: 600; color: ${savingsColor};">
+                                ${savingsSign}${Math.abs(totalSavings).toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${savingsCategories.map(([category, data]) => `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                </div>
+                                <div class="category-summary-amount neutral">${data.savings.toLocaleString()}₴</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            // Debt Categories
+            const debtCategories = Object.entries(categoryData)
+                .filter(([category, data]) => data.debt > 0 || data.debt_return > 0)
+                .sort((a, b) => (b[1].debt + b[1].debt_return) - (a[1].debt + a[1].debt_return));
+            
+            if (debtCategories.length > 0) {
+                const netDebtTotal = totalDebt - totalDebtReturn;
+                const debtColor = netDebtTotal >= 0 ? '#ff3b30' : '#34c759';
+                const debtSign = netDebtTotal >= 0 ? '-' : '+';
+                
+                summaryHTML += `
+                    <div class="summary-section">
+                        <div class="summary-header">
+                            💳 Debt
+                            <span style="float: right; font-weight: 600; color: ${debtColor};">
+                                ${debtSign}${Math.abs(netDebtTotal).toLocaleString()}₴
+                            </span>
+                        </div>
+                        ${debtCategories.map(([category, data]) => {
+                            const netDebt = data.debt - data.debt_return;
+                            return `
+                            <div class="category-summary-item">
+                                <div class="category-summary-info">
+                                    <span class="category-summary-name">${category}</span>
+                                    ${data.debt_return > 0 ? `<span class="debt-detail">(Returned: ${data.debt_return.toLocaleString()}₴)</span>` : ''}
+                                </div>
+                                <div class="category-summary-amount ${netDebt >= 0 ? 'negative' : 'positive'}">
+                                    ${netDebt >= 0 ? '-' : '+'}${Math.abs(netDebt).toLocaleString()}₴
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
+                `;
+            }
+            
+            // Add overall summary
+            const overallBalance = totalIncome - totalSpending - totalSavings + (totalDebt - totalDebtReturn);
+            const overallColor = overallBalance >= 0 ? '#34c759' : '#ff3b30';
+            const overallSign = overallBalance >= 0 ? '+' : '';
+            
+            summaryHTML += `
+                <div class="stats-card" style="margin-top: 20px;">
+                    <div class="stats-header">📊 ${dateRange} Summary</div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #34c759;">+${totalIncome.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Income</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #ff3b30;">-${totalSpending.toLocaleString()}₴</div>
+                            <div class="stat-label">Total Spending</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: #007AFF;">${totalSavings >= 0 ? '' : '-'}${Math.abs(totalSavings).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Savings</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" style="color: ${totalDebt - totalDebtReturn >= 0 ? '#ff3b30' : '#34c759'};">${totalDebt - totalDebtReturn >= 0 ? '-' : '+'}${Math.abs(totalDebt - totalDebtReturn).toLocaleString()}₴</div>
+                            <div class="stat-label">Net Debt</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; margin-top: 16px; padding: 12px; background: ${overallColor}10; border-radius: 12px; border: 1px solid ${overallColor}30;">
+                        <div style="font-size: 12px; color: #8e8e93; margin-bottom: 4px;">Net Financial Position</div>
+                        <div style="font-size: 20px; font-weight: 600; color: ${overallColor};">${overallSign}${overallBalance.toLocaleString()}₴</div>
+                    </div>
+                </div>
+            `;
+            
+            contentArea.innerHTML = summaryHTML;
+        }
+
+    // ========== BALANCE & STATISTICS PAGE FUNCTIONS ==========
+    // Load financial data and transactions
+    async function loadFinancialData() {
+        try {
+            // Reset pagination when loading fresh data
+            currentTransactionPage = 1;
+            hasMoreTransactions = true;
+            
+            const user = Telegram.WebApp.initDataUnsafe?.user;
+            const user_id = user?.id;
+            
+            if (!user_id) {
+                showError('Cannot identify user. Please open via Telegram.');
+                return;
+            }
+
+            const financeResponse = await fetch(`/api/financial-data?user_id=${user_id}`);
+            const financeData = await financeResponse.json();
+            
+            if (financeResponse.ok) {
+                currentUserData = financeData;
+                updateBalancePage(financeData);
+                updateStatisticsPage(financeData);
+                
+                // Load first page of transactions
+                await loadTransactionsPage(user_id, 1);
+                
+                console.log('✅ Financial data loaded');
+                
+            } else {
+                showError('Failed to load financial data: ' + (financeData.error || 'Unknown error'));
+            }
+            
+        } catch (error) {
+            console.error('Error loading data:', error);
+            showError('Network error - please check your connection');
+        }
+    }
+
+    async function loadTransactionsPage(user_id, page, append = false) {
+        if (transactionsLoading) return;
+        
+        transactionsLoading = true;
+        
+        try {
+            const limit = 10; // Load 10 transactions per page
+            const transactionsResponse = await fetch(`/api/transactions?user_id=${user_id}&page=${page}&limit=${limit}`);
+            const transactionsData = await transactionsResponse.json();
+            
+            if (transactionsResponse.ok) {
+                const transactions = transactionsData.transactions || [];
+                hasMoreTransactions = transactionsData.has_more;
+                
+                if (append) {
+                    // Append to existing transactions
+                    const existingTransactions = document.getElementById('transactionsContainer').children;
+                    const currentTransactions = Array.from(existingTransactions).filter(el => 
+                        !el.classList.contains('loading-message')
+                    );
+                    
+                    // Remove "No transactions" message if it exists
+                    const noTransactionsMsg = document.querySelector('.no-transactions-message');
+                    if (noTransactionsMsg) {
+                        noTransactionsMsg.remove();
+                    }
+                    
+                    renderTransactions(transactions, true);
+                } else {
+                    // Replace transactions
+                    renderTransactions(transactions, false);
+                }
+                
+                // Show/hide load more button
+                const loadMoreContainer = document.getElementById('loadMoreContainer');
+                if (hasMoreTransactions) {
+                    loadMoreContainer.style.display = 'block';
+                } else {
+                    loadMoreContainer.style.display = 'none';
+                }
+                
+            } else {
+                showError('Failed to load transactions: ' + (transactionsData.error || 'Unknown error'));
+            }
+            
+        } catch (error) {
+            console.error('Error loading transactions:', error);
+            showError('Failed to load transactions');
+        } finally {
+            transactionsLoading = false;
+        }
+    }
+    
+    function updateBalancePage(data) {
+        // Update balance
+        const balanceElement = document.getElementById('balanceAmount');
+        if (data.balance !== undefined) {
+            balanceElement.textContent = `${data.balance >= 0 ? '+' : ''}${data.balance.toLocaleString()}₴`;
+            balanceElement.style.color = data.balance >= 0 ? '#34c759' : '#ff3b30';
+        }
+        
+        // Update income and expenses
+        if (data.income !== undefined) {
+            document.getElementById('incomeAmount').textContent = `+${data.income.toLocaleString()}₴`;
+        }
+        if (data.spending !== undefined) {
+            document.getElementById('expenseAmount').textContent = `-${data.spending.toLocaleString()}₴`;
+        }
+    }
+    
+    function updateStatisticsPage(data) {
+        // Update main statistics
+        if (data.income !== undefined) {
+            document.getElementById('totalIncome').textContent = `+${(data.income || 0).toLocaleString()}₴`;
+        }
+        if (data.spending !== undefined) {
+            document.getElementById('totalExpenses').textContent = `${(data.spending || 0).toLocaleString()}₴`;
+        }
+        if (data.savings !== undefined) {
+            document.getElementById('totalSavings').textContent = `${(data.savings || 0).toLocaleString()}₴`;
+        }
+        if (data.total_debt !== undefined) {
+            const debtElement = document.getElementById('totalDebt');
+            debtElement.textContent = `${(data.total_debt || 0).toLocaleString()}₴`;
+            debtElement.style.color = (data.total_debt || 0) > 0 ? '#ff3b30' : '#34c759';
+        }
+        
+        // Update averages in statistics
+        if (data.daily_income_avg !== undefined) {
+            document.getElementById('statsDailyIncome').textContent = `+${Math.round(data.daily_income_avg || 0).toLocaleString()}₴`;
+        }
+        if (data.daily_expense_avg !== undefined) {
+            document.getElementById('statsDailyExpense').textContent = `${Math.round(data.daily_expense_avg || 0).toLocaleString()}₴`;
+        }
+        if (data.daily_net_avg !== undefined) {
+            const netAvgElement = document.getElementById('statsDailyNet');
+            const netAvg = data.daily_net_avg || 0;
+            netAvgElement.textContent = `${netAvg >= 0 ? '+' : ''}${Math.round(netAvg).toLocaleString()}₴`;
+            netAvgElement.style.color = netAvg >= 0 ? '#34c759' : '#ff3b30';
+        }
+        if (data.tracking_days !== undefined) {
+            document.getElementById('trackingDays').textContent = data.tracking_days || 0;
+        }
+        
+        // Update financial health in statistics
+        if (data.financial_health !== null && data.financial_health_emoji !== null) {
+            document.getElementById('statsHealthDisplay').textContent = 
+                `${data.financial_health_emoji} ${data.financial_health || 0}%`;
+            
+            const statsHealthIndicator = document.querySelector('#statisticsPage .health-indicator');
+            updateHealthIndicatorColor(data.financial_health || 0, statsHealthIndicator);
+        }
+    }
+    
+    function updateHealthIndicatorColor(score, element) {
+        if (score >= 80) {
+            element.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
+        } else if (score >= 60) {
+            element.style.background = 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)';
+        } else if (score >= 40) {
+            element.style.background = 'linear-gradient(135deg, #FF5722 0%, #D84315 100%)';
+        } else {
+            element.style.background = 'linear-gradient(135deg, #F44336 0%, #C62828 100%)';
+        }
+    }
+    
+    function renderTransactions(transactions, append = false) {
+        const container = document.getElementById('transactionsContainer');
+        
+        if (!transactions || transactions.length === 0) {
+            if (!append) {
+                container.innerHTML = `
+                    <div class="transaction no-transactions-message">
+                        <div class="transaction-info">
+                            <div class="transaction-emoji">📭</div>
+                            <div class="transaction-details">
+                                <div class="transaction-title">No transactions yet</div>
+                                <div class="transaction-category">Start adding transactions in the bot</div>
+                            </div>
                         </div>
                     </div>
                 `;
-            });
-            
-            if (append) {
-                container.innerHTML += transactionsHTML;
-            } else {
-                container.innerHTML = transactionsHTML;
             }
+            return;
         }
-
-        function showError(message) {
-            const container = document.getElementById('transactionsContainer');
-            container.innerHTML = `<div class="error">${message}</div>`;
-        }
-
-        // Helper function to format dates nicely
-        function formatTransactionDate(date) {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            
-            const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            
-            if (transactionDay.getTime() === today.getTime()) {
-                return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else if (transactionDay.getTime() === yesterday.getTime()) {
-                return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            } else {
-                return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Mini-app initialized');
-            setupNavigation();
-            loadFinancialData();
-            
-            // Add load more button event listener
-            document.getElementById('loadMoreBtn').addEventListener('click', function() {
-                const user = Telegram.WebApp.initDataUnsafe?.user;
-                const user_id = user?.id;
-                
-                if (user_id && hasMoreTransactions && !transactionsLoading) {
-                    currentTransactionPage++;
-                    loadTransactionsPage(user_id, currentTransactionPage, true);
-                }
-            });
-        });
-
-        // Refresh data every 30 seconds
-        setInterval(loadFinancialData, 30000);
         
-        // Also refresh when the app becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                loadFinancialData();
+        let transactionsHTML = '';
+        
+        transactions.forEach(transaction => {
+            const amount = transaction.amount;
+            const isPositive = amount >= 0;
+            const amountDisplay = `${isPositive ? '+' : ''}${Math.abs(amount).toLocaleString()}₴`;
+            
+            const displayName = transaction.name || transaction.category || 'Transaction';
+            
+            // Format the date
+            let dateDisplay = '';
+            if (transaction.timestamp || transaction.date) {
+                const transactionDate = new Date(transaction.timestamp || transaction.date);
+                dateDisplay = formatTransactionDate(transactionDate);
+            }
+            
+            transactionsHTML += `
+                <div class="transaction">
+                    <div class="transaction-info">
+                        <div class="transaction-emoji">${transaction.emoji || '💰'}</div>
+                        <div class="transaction-details">
+                            <div class="transaction-title">${displayName}</div>
+                            <div class="transaction-date">${dateDisplay}</div>
+                        </div>
+                    </div>
+                    <div class="transaction-amount ${isPositive ? 'amount-positive' : 'amount-negative'}">
+                        ${amountDisplay}
+                    </div>
+                </div>
+            `;
+        });
+        
+        if (append) {
+            container.innerHTML += transactionsHTML;
+        } else {
+            container.innerHTML = transactionsHTML;
+        }
+    }
+
+    function showError(message) {
+        const container = document.getElementById('transactionsContainer');
+        container.innerHTML = `<div class="error">${message}</div>`;
+    }
+
+    // Helper function to format dates nicely
+    function formatTransactionDate(date) {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        const transactionDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        
+        if (transactionDay.getTime() === today.getTime()) {
+            return `Today, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+        } else if (transactionDay.getTime() === yesterday.getTime()) {
+            return `Yesterday, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+        } else {
+            return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+    }
+
+    // ========== INITIALIZATION ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Mini-app initialized');
+        setupNavigation();
+        loadFinancialData();
+        
+        // Add load more button event listener
+        document.getElementById('loadMoreBtn').addEventListener('click', function() {
+            const user = Telegram.WebApp.initDataUnsafe?.user;
+            const user_id = user?.id;
+            
+            if (user_id && hasMoreTransactions && !transactionsLoading) {
+                currentTransactionPage++;
+                loadTransactionsPage(user_id, currentTransactionPage, true);
             }
         });
-    </script>
+    });
+
+    // Refresh data every 30 seconds
+    setInterval(loadFinancialData, 30000);
+    
+    // Also refresh when the app becomes visible
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            loadFinancialData();
+        }
+    });
+</script>
 </body>
 </html>"""
 

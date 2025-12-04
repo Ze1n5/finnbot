@@ -256,6 +256,227 @@ class SimpleFinnBot:
         
         return int(final_score)
     
+    def save_adjustment(self, user_id, adj_type, amount):
+        """Save adjustment to database"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                return False, "No database connection"
+            
+            cur = conn.cursor()
+            
+            # Create adjustments table if it doesn't exist
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS adjustments (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    type VARCHAR(20) NOT NULL,
+                    amount DECIMAL(12,2) NOT NULL,
+                    previous_value DECIMAL(12,2),
+                    new_value DECIMAL(12,2),
+                    note TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Get current value if exists
+            cur.execute("""
+                SELECT amount FROM adjustments 
+                WHERE user_id = %s AND type = %s 
+                ORDER BY created_at DESC LIMIT 1
+            """, (user_id, adj_type))
+            
+            previous_result = cur.fetchone()
+            previous_value = previous_result[0] if previous_result else 0
+            
+            # Calculate new value
+            new_value = amount
+            
+            # Insert adjustment
+            cur.execute("""
+                INSERT INTO adjustments (user_id, type, amount, previous_value, new_value, note)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (user_id, adj_type, amount, previous_value, new_value, f"Adjusted via Telegram bot"))
+            
+            conn.commit()
+            conn.close()
+            
+            return True, f"Adjustment saved successfully"
+            
+        except Exception as e:
+            print(f"Error saving adjustment: {e}")
+            return False, f"Failed to save adjustment: {str(e)}"
+
+    def show_current_adjustments(self, chat_id, message_id=None):
+        """Show current adjustment values"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                message = "❌ No database connection" if self.get_user_language(chat_id) != 'uk' else "❌ Немає з'єднання з базою даних"
+                self.send_message(chat_id, message)
+                return
+            
+            cur = conn.cursor()
+            
+            # Get latest adjustment for each type
+            adjustments = {}
+            for adj_type in ['income', 'savings', 'debt', 'balance']:
+                cur.execute("""
+                    SELECT amount, created_at FROM adjustments 
+                    WHERE user_id = %s AND type = %s 
+                    ORDER BY created_at DESC LIMIT 1
+                """, (chat_id, adj_type))
+                
+                result = cur.fetchone()
+                if result:
+                    adjustments[adj_type] = {
+                        'amount': result[0],
+                        'created_at': result[1]
+                    }
+            
+            conn.close()
+            
+            # Format message
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                message = "📊 *Поточні налаштування балансу*\n\n"
+                type_names = {
+                    'income': "Загальний дохід",
+                    'savings': "Загальні заощадження", 
+                    'debt': "Заборгованість",
+                    'balance': "Коригування балансу"
+                }
+            else:
+                message = "📊 *Current Balance Adjustments*\n\n"
+                type_names = {
+                    'income': "Total Income",
+                    'savings': "Total Savings",
+                    'debt': "Outstanding Debt", 
+                    'balance': "Balance Offset"
+                }
+            
+            for adj_type, data in adjustments.items():
+                message += f"• **{type_names[adj_type]}**: `{data['amount']:,.2f}₴`\n"
+                message += f"   *Останнє оновлення:* {data['created_at'].strftime('%Y-%m-%d %H:%M')}\n\n"
+            
+            if not adjustments:
+                message += "📭 Немає збережених налаштувань" if user_lang == 'uk' else "📭 No adjustments saved yet"
+            
+            message += "\nВикористовуйте меню налаштувань для зміни цих значень." if user_lang == 'uk' else "\nUse the adjustment menu to modify these values."
+            
+            keyboard = {"inline_keyboard": [[
+                {"text": "← Назад до меню" if user_lang == 'uk' else "← Back to Menu", "callback_data": "back_to_adjust_menu"}
+            ]]}
+            
+            if message_id:
+                self.edit_message(chat_id, message_id, message, keyboard)
+            else:
+                self.send_message(chat_id, message, keyboard, parse_mode='Markdown')
+            
+        except Exception as e:
+            print(f"Error showing adjustments: {e}")
+            error_msg = "❌ Не вдалося завантажити налаштування. Спробуйте ще раз." if self.get_user_language(chat_id) == 'uk' else "❌ Could not load adjustments. Please try again."
+            self.send_message(chat_id, error_msg)
+
+    def show_adjustment_history(self, chat_id, message_id=None):
+        """Show adjustment history"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                message = "❌ No database connection" if self.get_user_language(chat_id) != 'uk' else "❌ Немає з'єднання з базою даних"
+                self.send_message(chat_id, message)
+                return
+            
+            cur = conn.cursor()
+            
+            # Get last 10 adjustments
+            cur.execute("""
+                SELECT type, amount, previous_value, new_value, created_at, note
+                FROM adjustments 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 10
+            """, (chat_id,))
+            
+            history = cur.fetchall()
+            conn.close()
+            
+            user_lang = self.get_user_language(chat_id)
+            
+            if user_lang == 'uk':
+                message = "📜 *Останні 10 налаштувань*\n\n"
+                type_names = {
+                    'income': 'Дохід',
+                    'savings': 'Заощадження', 
+                    'debt': 'Борг',
+                    'balance': 'Баланс'
+                }
+                if not history:
+                    message += "Ще не було налаштувань."
+            else:
+                message = "📜 *Last 10 Adjustments*\n\n"
+                type_names = {
+                    'income': 'Income',
+                    'savings': 'Savings',
+                    'debt': 'Debt', 
+                    'balance': 'Balance'
+                }
+                if not history:
+                    message += "No adjustments made yet."
+            
+            for item in history:
+                adj_type, amount, prev_val, new_val, created_at, note = item
+                emoji = {
+                    'income': '📈',
+                    'savings': '🏦', 
+                    'debt': '💳',
+                    'balance': '⚡'
+                }.get(adj_type, '⚖️')
+                
+                message += f"{emoji} *{type_names.get(adj_type, adj_type.upper())}*\n"
+                message += f"   Сума: `{amount:,.2f}₴`\n"
+                if prev_val is not None:
+                    message += f"   З: `{prev_val:,.2f}₴` → До: `{new_val:,.2f}₴`\n"
+                message += f"   *Коли:* {created_at.strftime('%Y-%m-%d %H:%M')}\n"
+                if note:
+                    message += f"   *Примітка:* {note}\n"
+                message += "\n"
+            
+            keyboard = {"inline_keyboard": [[
+                {"text": "← Назад до меню" if user_lang == 'uk' else "← Back to Menu", "callback_data": "back_to_adjust_menu"}
+            ]]}
+            
+            if message_id:
+                self.edit_message(chat_id, message_id, message, keyboard)
+            else:
+                self.send_message(chat_id, message, keyboard, parse_mode='Markdown')
+            
+        except Exception as e:
+            print(f"Error showing history: {e}")
+            error_msg = "❌ Не вдалося завантажити історію. Спробуйте ще раз." if self.get_user_language(chat_id) == 'uk' else "❌ Could not load history. Please try again."
+            self.send_message(chat_id, error_msg)
+
+    def edit_message(self, chat_id, message_id, text, keyboard=None, parse_mode='Markdown'):
+        """Edit an existing message"""
+        try:
+            data = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": parse_mode
+            }
+            
+            if keyboard:
+                data["reply_markup"] = json.dumps(keyboard)
+            
+            response = requests.post(f"{BASE_URL}/editMessageText", json=data, timeout=10)
+            return response
+            
+        except Exception as e:
+            print(f"Error editing message: {e}")
+            return None
+    
     def handle_total_command(self, chat_id):
         """Handle /total command - show totals for SPENDING categories only"""
         print(f"🔍 Handling /total command for {chat_id}")
@@ -335,6 +556,35 @@ class SimpleFinnBot:
             emoji = "🏰"
         
         return emoji, f"{score}%"
+    
+    def get_adjustment_totals(self, user_id):
+        """Get total adjustments for user"""
+        try:
+            conn = self.get_db_connection()
+            if not conn:
+                return {}
+            
+            cur = conn.cursor()
+            
+            # Get latest adjustment for each type
+            totals = {}
+            for adj_type in ['income', 'savings', 'debt', 'balance']:
+                cur.execute("""
+                    SELECT new_value FROM adjustments 
+                    WHERE user_id = %s AND type = %s 
+                    ORDER BY created_at DESC LIMIT 1
+                """, (user_id, adj_type))
+                
+                result = cur.fetchone()
+                if result:
+                    totals[adj_type] = float(result[0])
+            
+            conn.close()
+            return totals
+            
+        except Exception as e:
+            print(f"Error getting adjustment totals: {e}")
+            return {}
 
     def handle_financial_summary(self, chat_id):
         """Handle Financial Summary button"""
@@ -342,6 +592,7 @@ class SimpleFinnBot:
         
         # Calculate financial health ONCE at the beginning
         health_score = self.calculate_financial_health(chat_id)
+        adjustments = self.get_adjustment_totals(chat_id)
         health_emoji, health_display = self.get_financial_health_display(health_score)
         
         user_transactions = self.get_user_transactions(chat_id)
@@ -360,6 +611,9 @@ class SimpleFinnBot:
         savings_withdrawn = 0
         debt_incurred = 0
         debt_returned = 0
+        income += adjustments.get('income', 0)
+        net_savings += adjustments.get('savings', 0)
+        net_debt += adjustments.get('debt', 0)
         
         # Track dates for averages
         income_dates = set()
@@ -821,6 +1075,41 @@ Net Savings: {net_savings:,.0f}₴"""
             delete_text += "💡 *Type a number to delete*"
         
         return delete_text
+    
+    def handle_back_to_menu(update, context):
+        """Handle back to menu callback"""
+        query = update.callback_query
+        query.answer()
+        
+        # Re-show the adjustment menu
+        keyboard = [
+            [
+                InlineKeyboardButton("📈 Total Income", callback_data="adjust_income"),
+                InlineKeyboardButton("🏦 Total Savings", callback_data="adjust_savings"),
+            ],
+            [
+                InlineKeyboardButton("💳 Outstanding Debt", callback_data="adjust_debt"),
+                InlineKeyboardButton("⚡ Current Balance", callback_data="adjust_balance"),
+            ],
+            [
+                InlineKeyboardButton("📋 View Current", callback_data="view_adjustments"),
+                InlineKeyboardButton("📜 View History", callback_data="view_history"),
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        query.edit_message_text(
+            "⚖️ *Balance Adjustment Menu*\n\n"
+            "Choose what you want to adjust:\n"
+            "• 📈 **Total Income**: Set baseline income amount\n"
+            "• 🏦 **Total Savings**: Set current savings balance\n"
+            "• 💳 **Outstanding Debt**: Set current debt amount\n"
+            "• ⚡ **Current Balance**: Direct balance adjustment\n\n"
+            "Adjustments don't create transactions - they set your starting position.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
     def handle_delete_transaction(self, chat_id):
         """Handle Delete Transaction button"""
@@ -900,6 +1189,290 @@ Net Savings: {net_savings:,.0f}₴"""
             delete_text = self.create_simplified_delete_list(chat_id, transaction_map)
         
         self.send_message(chat_id, delete_text, parse_mode='Markdown')
+
+    def handle_adjust_menu(self, chat_id):
+        """Show adjustment menu"""
+        user_lang = self.get_user_language(chat_id)
+        
+        if user_lang == 'uk':
+            message = """⚖️ *Меню налаштування балансу*
+
+    Виберіть, що ви хочете налаштувати:
+    • 📈 **Загальний дохід**: Встановити базову суму доходу
+    • 🏦 **Загальні заощадження**: Встановити поточний баланс заощаджень
+    • 💳 **Заборгованість**: Встановити поточну суму боргу
+    • ⚡ **Поточний баланс**: Пряме коригування балансу
+
+    Налаштування не створюють транзакцій - вони встановлюють вашу стартову позицію."""
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": "📈 Загальний дохід", "callback_data": "adjust_income"},
+                        {"text": "🏦 Загальні заощадження", "callback_data": "adjust_savings"}
+                    ],
+                    [
+                        {"text": "💳 Заборгованість", "callback_data": "adjust_debt"},
+                        {"text": "⚡ Поточний баланс", "callback_data": "adjust_balance"}
+                    ],
+                    [
+                        {"text": "📋 Переглянути поточні", "callback_data": "view_adjustments"},
+                        {"text": "📜 Історія коригувань", "callback_data": "view_history"}
+                    ]
+                ]
+            }
+        else:
+            message = """⚖️ *Balance Adjustment Menu*
+
+    Choose what you want to adjust:
+    • 📈 **Total Income**: Set baseline income amount
+    • 🏦 **Total Savings**: Set current savings balance
+    • 💳 **Outstanding Debt**: Set current debt amount
+    • ⚡ **Current Balance**: Direct balance adjustment
+
+    Adjustments don't create transactions - they set your starting position."""
+            
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": "📈 Total Income", "callback_data": "adjust_income"},
+                        {"text": "🏦 Total Savings", "callback_data": "adjust_savings"}
+                    ],
+                    [
+                        {"text": "💳 Outstanding Debt", "callback_data": "adjust_debt"},
+                        {"text": "⚡ Current Balance", "callback_data": "adjust_balance"}
+                    ],
+                    [
+                        {"text": "📋 View Current", "callback_data": "view_adjustments"},
+                        {"text": "📜 View History", "callback_data": "view_history"}
+                    ]
+                ]
+            }
+        
+        self.send_message(chat_id, message, keyboard=keyboard, parse_mode='Markdown')
+
+    # Add this to your command handlers in simple_bot.py
+    def handle_adjust_callback(update, context):
+        """Handle adjustment callback queries"""
+        query = update.callback_query
+        query.answer()
+        
+        user_id = update.effective_user.id
+        callback_data = query.data
+        
+        if callback_data.startswith("adjust_"):
+            # User selected an adjustment type
+            adj_type = callback_data.replace("adjust_", "")
+            
+            # Store the adjustment type in user data
+            context.user_data['adjustment_type'] = adj_type
+            context.user_data['adjustment_step'] = 'awaiting_amount'
+            
+            # Ask for amount
+            type_names = {
+                'income': "Total Income",
+                'savings': "Total Savings", 
+                'debt': "Outstanding Debt",
+                'balance': "Current Balance"
+            }
+            
+            query.edit_message_text(
+                f"⚖️ *Adjust {type_names[adj_type]}*\n\n"
+                f"Please send the amount for {type_names[adj_type].lower()}:\n"
+                f"Example: `70000` or `1500.50`\n\n"
+                f"*Note:* This sets the baseline amount, not a transaction.",
+                parse_mode='Markdown'
+            )
+        
+        elif callback_data == "view_adjustments":
+            # Show current adjustments
+            show_current_adjustments(update, context)
+        
+        elif callback_data == "view_history":
+            # Show adjustment history
+            show_adjustment_history(update, context)
+
+    def show_current_adjustments(update, context):
+        """Show current adjustment values"""
+        query = update.callback_query
+        user_id = update.effective_user.id
+        
+        try:
+            # Call your API to get current adjustments
+            import requests
+            response = requests.get(f"http://localhost:8080/api/get-adjustments?user_id={user_id}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                message = (
+                    "📊 *Current Balance Adjustments*\n\n"
+                    f"📈 **Total Income**: `{data.get('initial_income', 0):,.2f}₴`\n"
+                    f"🏦 **Total Savings**: `{data.get('initial_savings', 0):,.2f}₴`\n"
+                    f"💳 **Outstanding Debt**: `{data.get('initial_debt', 0):,.2f}₴`\n"
+                    f"⚡ **Balance Offset**: `{data.get('balance_offset', 0):,.2f}₴`\n\n"
+                    f"*Last updated:* {data.get('last_updated', 'Never')}\n\n"
+                    "Use the adjustment menu to modify these values."
+                )
+                
+                # Add back button
+                keyboard = [[InlineKeyboardButton("← Back to Menu", callback_data="back_to_adjust_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+            else:
+                query.edit_message_text("❌ Could not load adjustments. Please try again.")
+        
+        except Exception as e:
+            print(f"Error showing adjustments: {e}")
+            query.edit_message_text("❌ Error loading adjustments.")
+
+    def show_adjustment_history(update, context):
+        """Show adjustment history"""
+        query = update.callback_query
+        user_id = update.effective_user.id
+        
+        try:
+            import requests
+            response = requests.get(f"http://localhost:8080/api/get-adjustment-history?user_id={user_id}&limit=10")
+            
+            if response.status_code == 200:
+                data = response.json()
+                history = data.get('history', [])
+                
+                if not history:
+                    message = "📜 *Adjustment History*\n\nNo adjustments made yet."
+                else:
+                    message = "📜 *Last 10 Adjustments*\n\n"
+                    for item in history:
+                        emoji = {
+                            'income': '📈',
+                            'savings': '🏦',
+                            'debt': '💳',
+                            'balance': '⚡'
+                        }.get(item['type'], '⚖️')
+                        
+                        message += (
+                            f"{emoji} *{item['type'].upper()}*: "
+                            f"`{item['amount']:,.2f}₴`\n"
+                            f"   From: `{item.get('previous_value', 0):,.2f}₴` → "
+                            f"To: `{item.get('new_value', 0):,.2f}₴`\n"
+                            f"   *When:* {item.get('created_at', '')}\n"
+                        )
+                        if item.get('note'):
+                            message += f"   *Note:* {item['note']}\n"
+                        message += "\n"
+                
+                # Add back button
+                keyboard = [[InlineKeyboardButton("← Back to Menu", callback_data="back_to_adjust_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+            else:
+                query.edit_message_text("❌ Could not load history. Please try again.")
+        
+        except Exception as e:
+            print(f"Error showing history: {e}")
+            query.edit_message_text("❌ Error loading history.")
+
+    def handle_adjustment_amount(update, context):
+        """Handle amount input for adjustments"""
+        user_id = update.effective_user.id
+        
+        # Check if user is in adjustment mode
+        if 'adjustment_step' not in context.user_data or context.user_data['adjustment_step'] != 'awaiting_amount':
+            return
+        
+        amount_text = update.message.text.strip()
+        
+        try:
+            # Parse amount (remove currency symbols, commas, etc.)
+            amount = float(re.sub(r'[^\d\.]', '', amount_text))
+            
+            adj_type = context.user_data.get('adjustment_type')
+            
+            # Call API to save adjustment
+            import requests
+            payload = {
+                'user_id': user_id,
+                'type': adj_type,
+                'amount': amount,
+                'note': f"Adjusted via Telegram bot"
+            }
+            
+            response = requests.post("http://localhost:8080/api/set-adjustment", json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                type_names = {
+                    'income': "Total Income",
+                    'savings': "Total Savings",
+                    'debt': "Outstanding Debt",
+                    'balance': "Current Balance"
+                }
+                
+                update.message.reply_text(
+                    f"✅ *Adjustment Successful!*\n\n"
+                    f"📊 **{type_names[adj_type]}**\n"
+                    f"Previous: `{result.get('previous_value', 0):,.2f}₴`\n"
+                    f"New: `{result.get('new_value', 0):,.2f}₴`\n\n"
+                    f"Your financial reports will now include this adjustment.",
+                    parse_mode='Markdown'
+                )
+                
+                # Clear adjustment state
+                context.user_data.pop('adjustment_step', None)
+                context.user_data.pop('adjustment_type', None)
+                
+            else:
+                update.message.reply_text(
+                    "❌ Failed to save adjustment. Please try again or contact support."
+                )
+        
+        except ValueError:
+            update.message.reply_text(
+                "❌ Invalid amount. Please send a valid number.\n"
+                "Example: `70000` or `1500.50`",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            print(f"Error processing adjustment: {e}")
+            update.message.reply_text("❌ An error occurred. Please try again.")
+
+    def handle_adjust_command(update, context):
+        """Handle /adjust command - show adjustment menu"""
+        user_id = update.effective_user.id
+        
+        # Create inline keyboard with adjustment options
+        keyboard = [
+            [
+                InlineKeyboardButton("📈 Total Income", callback_data="adjust_income"),
+                InlineKeyboardButton("🏦 Total Savings", callback_data="adjust_savings"),
+            ],
+            [
+                InlineKeyboardButton("💳 Outstanding Debt", callback_data="adjust_debt"),
+                InlineKeyboardButton("⚡ Current Balance", callback_data="adjust_balance"),
+            ],
+            [
+                InlineKeyboardButton("📋 View Current", callback_data="view_adjustments"),
+                InlineKeyboardButton("📜 View History", callback_data="view_history"),
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        update.message.reply_text(
+            "⚖️ *Balance Adjustment Menu*\n\n"
+            "Choose what you want to adjust:\n"
+            "• 📈 **Total Income**: Set baseline income amount\n"
+            "• 🏦 **Total Savings**: Set current savings balance\n"
+            "• 💳 **Outstanding Debt**: Set current debt amount\n"
+            "• ⚡ **Current Balance**: Direct balance adjustment\n\n"
+            "Adjustments don't create transactions - they set your starting position.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
 
     def handle_manage_categories(self, chat_id):
         """Handle Manage Categories button"""
@@ -1298,6 +1871,7 @@ Net Savings: {net_savings:,.0f}₴"""
                 print(line.strip())
         # Income categories (shared for all users)
         self._transactions = {}
+        self.pending_adjustments = {}
         self.income_categories = {
             "Salary": ["salary", "paycheck", "wages", "income", "pay"],
             "Business": ["business", "freelance", "contract", "gig", "side", "hustle", "project", "consulting"]
@@ -2274,7 +2848,61 @@ Net Savings: {net_savings:,.0f}₴"""
         """Process message from webhook"""
         chat_id = msg["chat"]["id"]
         text = msg.get("text", "")
-        chat_type = msg["chat"].get("type", "private")
+        
+        # ========== ADD ADJUSTMENT COMMAND HANDLER ==========
+        if text == "/adjust" or text.startswith("/adjust@"):
+            self.handle_adjust_menu(chat_id)
+            return
+        # ========== END ADJUSTMENT COMMAND HANDLER ==========
+        
+        # ========== ADD ADJUSTMENT AMOUNT HANDLER ==========
+        # Handle amount input for adjustments
+        if chat_id in self.pending_adjustments and self.pending_adjustments[chat_id].get('step') == 'awaiting_amount':
+            try:
+                amount_text = text.strip()
+                amount = float(re.sub(r'[^\d\.]', '', amount_text))
+                adj_type = self.pending_adjustments[chat_id]['type']
+                
+                # Save the adjustment (you'll need to implement the database part)
+                success, message = self.save_adjustment(chat_id, adj_type, amount)
+                
+                if success:
+                    type_names = {
+                        'income': "Total Income",
+                        'savings': "Total Savings",
+                        'debt': "Outstanding Debt",
+                        'balance': "Current Balance"
+                    }
+                    
+                    if self.get_user_language(chat_id) == 'uk':
+                        response = f"✅ *Налаштування успішне!*\n\n📊 **{type_names[adj_type]}**\nСума: `{amount:,.2f}₴`\n\nВаші фінансові звіти тепер включатимуть це налаштування."
+                    else:
+                        response = f"✅ *Adjustment Successful!*\n\n📊 **{type_names[adj_type]}**\nAmount: `{amount:,.2f}₴`\n\nYour financial reports will now include this adjustment."
+                    
+                    self.send_message(chat_id, response, parse_mode='Markdown', reply_markup=self.get_main_menu(chat_id))
+                else:
+                    self.send_message(chat_id, f"❌ {message}")
+                
+                # Clear adjustment state
+                if chat_id in self.pending_adjustments:
+                    del self.pending_adjustments[chat_id]
+                
+                return
+                    
+            except ValueError:
+                user_lang = self.get_user_language(chat_id)
+                if user_lang == 'uk':
+                    error_msg = "❌ Неправильна сума. Будь ласка, введіть валідне число.\nНаприклад: `70000` або `1500.50`"
+                else:
+                    error_msg = "❌ Invalid amount. Please send a valid number.\nExample: `70000` or `1500.50`"
+                
+                self.send_message(chat_id, error_msg, parse_mode='Markdown')
+                return
+            except Exception as e:
+                print(f"Error processing adjustment: {e}")
+                self.send_message(chat_id, "❌ Сталася помилка. Спробуйте ще раз.")
+                return
+        # ========== END ADJUSTMENT AMOUNT HANDLER ==========
         
         print(f"📨 Processing message from {chat_id} ({chat_type}): '{text}'")
 
@@ -3547,6 +4175,61 @@ This will help me provide better financial recommendations!"""
         
         # Answer the callback query first
         self.answer_callback(query["id"])
+
+        # ========== ADD ADJUSTMENT CALLBACK HANDLERS HERE ==========
+        if data == "adjust_menu":
+            self.handle_adjust_menu(chat_id)
+            return
+            
+        elif data.startswith("adjust_"):
+            # User selected an adjustment type
+            adj_type = data.replace("adjust_", "")
+            
+            # Store the adjustment type in user's pending adjustments
+            if chat_id not in self.pending_adjustments:
+                self.pending_adjustments[chat_id] = {}
+            
+            self.pending_adjustments[chat_id]['type'] = adj_type
+            self.pending_adjustments[chat_id]['step'] = 'awaiting_amount'
+            
+            # Ask for amount
+            type_names = {
+                'income': "Total Income",
+                'savings': "Total Savings", 
+                'debt': "Outstanding Debt",
+                'balance': "Current Balance"
+            }
+            
+            if self.get_user_language(chat_id) == 'uk':
+                message = f"""⚖️ *Налаштування {type_names[adj_type]}*
+
+    Будь ласка, введіть суму для {type_names[adj_type].lower()}:
+    Наприклад: `70000` або `1500.50`
+
+    *Примітка:* Це встановлює базову суму, а не створює транзакцію."""
+            else:
+                message = f"""⚖️ *Adjust {type_names[adj_type]}*
+
+    Please send the amount for {type_names[adj_type].lower()}:
+    Example: `70000` or `1500.50`
+
+    *Note:* This sets the baseline amount, not a transaction."""
+            
+            # Edit the current message
+            self.edit_message(chat_id, message_id, message)
+            return
+        
+        elif data == "view_adjustments":
+            self.show_current_adjustments(chat_id, message_id)
+            return
+            
+        elif data == "view_history":
+            self.show_adjustment_history(chat_id, message_id)
+            return
+            
+        elif data == "back_to_adjust_menu":
+            self.handle_adjust_menu(chat_id)
+            return
 
         # ONBOARDING HANDLERS
         if data.startswith("onboard_lang_"):
