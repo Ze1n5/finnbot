@@ -2218,11 +2218,11 @@ def serve_mini_app():
     let transactionsLoading = false;
     let hasMoreTransactions = true;
 
-                    // ========== SUMMARY PAGE VARIABLES ==========
-        let currentMonthFilter = 'last30';
-        let availableMonthsData = [];
+    // ========== SUMMARY PAGE VARIABLES ==========
+    let currentMonthFilter = 'last30';
+    let availableMonthsData = [];
 
-        // Navigation functionality
+    // Navigation functionality
         function setupNavigation() {
             const navButtons = document.querySelectorAll('.nav-button');
             const pages = document.querySelectorAll('.page');
@@ -2255,10 +2255,13 @@ def serve_mini_app():
                         if (user_id) {
                             console.log('🚀 Loading category summary for user:', user_id);
                             try {
-                                // First setup the filter (it will check if it already exists)
+                                // FIRST: Load monthly data to populate the filter
+                                await loadMonthlyData(user_id);
+                                
+                                // SECOND: Setup the filter with the loaded data
                                 setupMonthFilter(user_id);
                                 
-                                // Then load the summary data
+                                // THIRD: Load the summary data
                                 await loadCategorySummary(user_id);
                                 
                             } catch (error) {
@@ -2281,13 +2284,13 @@ def serve_mini_app():
         }
 
         // ========== SUMMARY PAGE FUNCTIONS ==========
-        // Load category summary data
+                // Load category summary data
         async function loadCategorySummary(user_id) {
             try {
                 console.log('🔍 Loading category summary for user:', user_id);
                 
-                // First, load monthly data for filter
-                await loadMonthlyData(user_id);
+                // Don't load monthly data here - it's already loaded in setupNavigation
+                // await loadMonthlyData(user_id);
                 
                 // Then load categories and transactions
                 const categoriesResponse = await fetch(`/api/user-categories?user_id=${user_id}`);
@@ -2339,6 +2342,7 @@ def serve_mini_app():
                 }
                 
                 console.log(`📊 ${dateRange} data:`, filteredTransactions.length, 'transactions');
+                console.log('Available months for filter:', availableMonthsData.length);
                 
                 // Render the summary
                 renderCategorySummary(filteredTransactions, categories, dateRange);
@@ -2784,14 +2788,19 @@ def serve_mini_app():
             }
         }
 
-        // Load monthly data
+                // Load monthly data
         async function loadMonthlyData(user_id) {
             try {
+                console.log('📅 Loading monthly data for user:', user_id);
                 const monthlyResponse = await fetch(`/api/monthly-report?user_id=${user_id}`);
                 if (monthlyResponse.ok) {
                     const monthlyData = await monthlyResponse.json();
                     availableMonthsData = monthlyData.monthly_data || [];
                     console.log('📅 Loaded monthly data:', availableMonthsData.length, 'months');
+                    console.log('Month names:', availableMonthsData.map(m => m.month_display));
+                } else {
+                    console.error('Failed to load monthly data:', monthlyResponse.status);
+                    availableMonthsData = [];
                 }
             } catch (e) {
                 console.log('Could not load monthly data:', e);
